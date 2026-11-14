@@ -4363,6 +4363,7 @@ async fn cmd_beacon(profile: &str, action: crate::BeaconAction) -> Result<(), CF
 fn find_aistudio_script() -> Option<std::path::PathBuf> {
     const NAME: &str = "dastyab-aistudio.py";
 
+    // An explicit override always wins: it is the documented escape hatch.
     if let Some(p) = std::env::var_os("DASTYAB_AISTUDIO") {
         let p = std::path::PathBuf::from(p);
         if p.is_file() {
@@ -4390,6 +4391,14 @@ fn find_aistudio_script() -> Option<std::path::PathBuf> {
         candidates.push(cwd.join("scripts").join(NAME));
     }
 
+    // A staged copy (written by a previous run) is only trustworthy if it
+    // matches the script compiled into *this* binary; an upgraded binary must
+    // never keep executing the old helper. `materialise` rewrites on mismatch.
+    if let Some(staged) = dastyab_core::ops::aistudio::materialise() {
+        return Some(staged);
+    }
+
+    // Fall back to a copy the user keeps themselves (checkout or custom dir).
     candidates.into_iter().find(|p| p.is_file())
 }
 
@@ -4431,10 +4440,28 @@ fn cmd_aistudio(action: &str) -> Result<(), CFError> {
     }
 
     if !out.status.success() {
+        // The helper already printed the specific reason to stderr (no pool,
+        // no xray core, node dead at the far end). Repeat the most useful line
+        // so the failure survives being read from the error alone, instead of
+        // replacing it with a generic "check the tunnel".
+        let detail = String::from_utf8_lossy(&out.stderr);
+        let reason = detail
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let reason = reason.trim_start_matches("[aistudio] ").to_string();
         return Err(CFError::new(
-            "Aistudio returned an error",
-            format!("exit code {:?}", out.status.code()),
-            "Check the tunnel / server pool status.",
+            "Aistudio failed",
+            if reason.is_empty() {
+                format!("exit code {:?}", out.status.code())
+            } else {
+                reason
+            },
+            "Run `dastyab aistudio verify` to rebuild the server pool, or set \
+             DASTYAB_XRAY=/path/to/xray if no core is installed.",
         ));
     }
     Ok(())

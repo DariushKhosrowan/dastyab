@@ -17,21 +17,69 @@ USAGE:
   dastyab-aistudio.py verify   -> just check which server works + your clean IP
   dastyab-aistudio.py stop     -> stop the tunnel
 """
-import json, os, subprocess, sys, time, socket, glob, random, signal
+import json, os, re, subprocess, sys, time, socket, glob, random, signal
 
 HOME = os.path.expanduser("~")
 POOL = os.path.join(HOME, ".dastyab/profiles/default/fresh_vless.json")
-XRAY = "/tmp/xraybin/xray"
 SOCK = 10850
 PIDFILE = "/tmp/dastyab_aistudio.pid"
 AISTUDIO_URL = "https://aistudio.google.com/"
 
 def find_xray():
-    for cand in ["/tmp/xraybin/xray", "/opt/v2rayN/bin/xray/xray",
-                 "/opt/nekoray/nekoray_core", "/opt/nekoray/nekobox_core"]:
-        if os.path.exists(cand):
-            return cand
-    raise SystemExit("xray not found")
+    """Locate an xray-compatible core.
+
+    Search order: an explicit override, the binary's own helper dir, anything
+    on PATH, then the known third-party install locations. The old code used a
+    single /tmp path, which is wiped on reboot, so `start` died with a
+    traceback on a fresh boot even when xray was installed.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    cands = [
+        os.environ.get("DASTYAB_XRAY", ""),
+        os.path.join(here, "xray"),
+        os.path.join(HOME, ".dastyab/bin/xray"),
+        "/usr/local/bin/xray", "/usr/bin/xray", "/opt/xray/xray",
+        "/tmp/xraybin/xray",
+        "/opt/v2rayN/bin/xray/xray",
+        "/opt/nekoray/nekoray_core", "/opt/nekoray/nekobox_core",
+    ]
+    for c in cands:
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    for name in ("xray", "v2ray"):
+        for d in os.environ.get("PATH", "").split(os.pathsep):
+            p = os.path.join(d, name) if d else ""
+            if p and os.path.isfile(p) and os.access(p, os.X_OK):
+                return p
+    raise SystemExit(
+        "[aistudio] No xray core found. Install xray and put it on PATH, or set "
+        "DASTYAB_XRAY=/path/to/xray"
+    )
+
+_XRAY_VERSION = None
+
+def xray_supports_vision():
+    """True if the resolved core is xray >= 1.7 (vision/XTLS support).
+
+    Unknown cores (nekoray wrappers, v2ray) report False: sending them a
+    `flow` field makes them reject the entire config, and a plain VLESS TCP
+    connection still works without it.
+    """
+    global _XRAY_VERSION
+    if _XRAY_VERSION is None:
+        _XRAY_VERSION = ""
+        try:
+            out = subprocess.run([find_xray(), "version"],
+                                 capture_output=True, text=True, timeout=10).stdout
+            m = re.search(r"Xray\s+(\d+)\.(\d+)", out)
+            if m:
+                _XRAY_VERSION = f"{m.group(1)}.{m.group(2)}"
+        except (SystemExit, OSError, subprocess.SubprocessError):
+            _XRAY_VERSION = ""
+    if not _XRAY_VERSION:
+        return False
+    major, minor = (int(x) for x in _XRAY_VERSION.split("."))
+    return (major, minor) >= (1, 7)
 
 def build_cfg(server):
     q = server.get('q', {})
@@ -40,8 +88,18 @@ def build_cfg(server):
     sec = q.get('security','none'); net = q.get('type','tcp')
     out = {"protocol":"vless","settings":{"vnext":[{"address":addr,"port":port,
             "users":[{"id":uuid,"encryption":"none"}]}]}}
-    if q.get('flow'):
-        out['settings']['vnext'][0]['users'][0]['flow'] = q['flow']
+    # `flow` (xtls-rprx-vision) is only valid over TLS/REALITY and only on
+    # xray >= 1.7. Older cores reject the whole config with
+    # "flow doesn't support xtls-rprx-vision in this version", which used to
+    # surface as an opaque exit code. Drop it when it cannot work.
+    flow = q.get('flow')
+    if flow:
+        if sec not in ('tls', 'reality'):
+            flow = None
+        elif not xray_supports_vision():
+            flow = None
+    if flow:
+        out['settings']['vnext'][0]['users'][0]['flow'] = flow
     ss = {}
     if sec == 'reality':
         ss.update(security="reality",
@@ -90,33 +148,93 @@ def start(server_index=0):
         print(f"[aistudio] Opening AI Studio through the existing tunnel...")
         launch_browser()
         return False, None
-    pool = json.load(open(POOL))
+    # Read the pool defensively: a missing or corrupt file is the normal
+    # first-run state, not a crash. The guard must come before the load, or a
+    # user who has never run `verify` gets a Python traceback instead of the
+    # one line telling them what to do.
+    try:
+        with open(POOL) as fh:
+            pool = json.load(fh)
+    except FileNotFoundError:
+        raise SystemExit(
+            "[aistudio] No server pool yet. Run: dastyab aistudio verify"
+        )
+    except (json.JSONDecodeError, OSError) as e:
+        raise SystemExit(f"[aistudio] Server pool is unreadable ({e}). Run: dastyab aistudio verify")
     if not pool:
-        raise SystemExit("No working servers saved. Run 'verify' first.")
+        raise SystemExit(
+            "[aistudio] Server pool is empty. Run: dastyab aistudio verify"
+        )
     srv = pool[server_index % len(pool)]
     cfg = build_cfg(srv)
     cfgpath = "/tmp/dastyab_aistudio.json"
     open(cfgpath,"w").write(json.dumps(cfg))
-    proc = subprocess.Popen([XRAY,"run","-c",cfgpath],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    xray = find_xray()
+    try:
+        proc = subprocess.Popen([xray,"run","-c",cfgpath],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as e:
+        raise SystemExit(f"[aistudio] Cannot launch {xray}: {e}")
     open(PIDFILE,"w").write(str(proc.pid))
     open("/tmp/dastyab_aistudio_idx","w").write(str(server_index % len(pool)))
-    # wait for port
-    for _ in range(20):
-        s=socket.socket()
+    # Wait for the SOCKS port to accept. This must actually report failure:
+    # the old loop broke out on success but never checked, so a core that
+    # printed a banner and exited immediately (nekoray_core does exactly that)
+    # was reported as "Tunnel started" while nothing was listening.
+    up = False
+    for _ in range(25):
+        if proc.poll() is not None:
+            break  # core exited; no point waiting
         try:
-            s.connect(("127.0.0.1",SOCK)); s.close(); break
+            s = socket.socket()
+            s.settimeout(0.5)
+            s.connect(("127.0.0.1", SOCK))
+            s.close()
+            up = True
+            break
         except Exception:
-            time.sleep(0.3); s.close()
+            time.sleep(0.3)
+            s.close()
+    if not up:
+        rc = proc.poll()
+        proc.kill()
+        try:
+            os.remove(PIDFILE)
+        except OSError:
+            pass
+        detail = (
+            f"{xray} exited immediately (code {rc}) — it does not accept "
+            f"`run -c <config>`; that is a nekoray wrapper, not an xray core"
+            if rc is not None
+            else f"{xray} never opened 127.0.0.1:{SOCK}"
+        )
+        raise SystemExit(
+            f"[aistudio] Tunnel failed to start: {detail}.\n"
+            f"[aistudio] Set DASTYAB_XRAY=/path/to/xray (a real xray core)."
+        )
     print(f"[aistudio] Tunnel started via {srv['addr']}:{srv['port']} (pid {proc.pid})")
     print(f"[aistudio] Local SOCKS5 proxy: 127.0.0.1:{SOCK}")
-    print(f"[aistudio] Your clean egress IP:")
-    subprocess.run(["curl","-s","--max-time","15","--socks5-hostname",
-                    f"127.0.0.1:{SOCK}","https://api.ipify.org"])
-    print()
+
+    # A listening SOCKS port only proves the local core is up. Traffic must
+    # actually reach the far side, or the user gets a browser that silently
+    # fails every request. Verify egress and say so plainly when it is broken.
+    egress = probe_egress(timeout=20)
+    if egress:
+        print(f"[aistudio] Clean egress IP: {egress}")
+    else:
+        print(
+            "[aistudio] WARNING: the proxy is up but no traffic is getting "
+            "through — this node looks dead at the far end.",
+            file=sys.stderr,
+        )
+        print(
+            f"[aistudio] Try another node: dastyab aistudio stop && "
+            f"dastyab aistudio verify, or re-run verify to rebuild the pool.",
+            file=sys.stderr,
+        )
     print(f"[aistudio] Opening AI Studio through the tunnel...")
     launch_browser()
-    return True, server_index % len(pool)
+    return bool(egress), server_index % len(pool)
 
 def probe_egress(timeout=12):
     """Return current egress IP via tunnel, or None if tunnel dead."""
@@ -231,7 +349,10 @@ if __name__=="__main__":
     cmd = sys.argv[1] if len(sys.argv)>1 else "start"
     if cmd=="start":
         idx = int(sys.argv[2]) if len(sys.argv)>2 else 0
-        start(idx)
+        ok, _ = start(idx)
+        # Exit non-zero when egress never came up, so the CLI (and any script
+        # wrapping it) can tell a working tunnel from a listening-but-dead one.
+        sys.exit(0 if ok else 3)
     elif cmd=="stop":
         stop()
     elif cmd=="verify":

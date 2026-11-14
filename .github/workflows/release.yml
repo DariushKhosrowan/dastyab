@@ -85,6 +85,11 @@ jobs:
           for bin in dastyab dastyab-tui dastyab-gui; do
             cp "target/release/${bin}${EXT}" "dist/${bin}-${BASE}${EXT}"
           done
+          # Ship the helper scripts, so `dastyab aistudio` works from a bare
+          # binary download: the CLI looks for them beside the executable.
+          cp dastyab-aistudio.py dist/ 2>/dev/null || true
+          cp dastyab-aistudio-cleanip.py dist/ 2>/dev/null || true
+          cp dastyab-aistudio.sh dist/ 2>/dev/null || true
           if [ "${{ matrix.deb }}" = "true" ]; then
             deb_file=$(ls target/debian/*_${{ matrix.arch }}.deb 2>/dev/null | head -n1)
             if [ -z "$deb_file" ]; then

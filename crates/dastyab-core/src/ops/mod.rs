@@ -1,6 +1,7 @@
 //! `ops` layer.
 
 pub mod airgap;
+pub mod aistudio;
 pub mod backup;
 pub mod backup_autosync;
 pub mod i18n;

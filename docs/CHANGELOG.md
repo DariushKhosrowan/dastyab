@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.1.6 — 2026-11-14
+
+`dastyab aistudio` is fixed end to end. Five separate defects were stacked
+on top of each other, which is why the earlier "path fix" still left the
+command broken.
+
+### Fixed
+- **The bridge script is now inside the binary.** It was a loose file that
+  simply does not exist on an installed system, so the command could only
+  ever fail. It is embedded, written to `~/.dastyab/bin/` on first use, and
+  rewritten whenever the binary's copy differs — an upgrade never runs a
+  stale helper.
+- **Empty or missing server pool** no longer raises a Python traceback. The
+  guard now runs before the load and tells you to run `aistudio verify`.
+- **xray is resolved properly**: `$DASTYAB_XRAY`, then the helper dir,
+  `~/.dastyab/bin/`, common install paths, then `PATH`. It used to be pinned
+  to `/tmp/xraybin/xray`, which is wiped on reboot.
+- **`start` verifies the tunnel actually came up.** It used to print
+  "Tunnel started" unconditionally, even when the core exited instantly or
+  the far side was dead.
+- **`xtls-rprx-vision` is only sent when it can work** (TLS/REALITY over
+  xray >= 1.7). Older cores reject the whole config with "flow doesn't
+  support xtls-rprx-vision in this version".
+- **Failures now say why.** A dead node, a missing core and an empty pool
+  each produce their own message, and `start` exits non-zero instead of
+  reporting success.
+
 ## v0.1.5 — 2026-11-14
 
 ### Fixed
