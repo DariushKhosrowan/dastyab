@@ -591,6 +591,13 @@ pub fn profile_exists(id: &str) -> bool {
     if id.is_empty() {
         return false;
     }
+    // `default` is the reserved fallback profile. It is materialized lazily
+    // on first use, so a fresh install has no directory for it yet — but it
+    // still names a real profile (loads empty, saves back), and commands like
+    // `backup create` legitimately export it before anything was written.
+    if id == "default" {
+        return true;
+    }
     profiles_dir().join(id).join("profile.json").is_file()
 }
 

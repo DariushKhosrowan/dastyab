@@ -624,7 +624,7 @@ enum Command {
         queries: String,
     },
     /// Serve the healthy node pool as a local v2rayN subscription feed
-    /// (loopback HTTP). Point v2rayN at http://127.0.0.1:<port>/subscription
+    /// (loopback HTTP). Point v2rayN at http://127.0.0.1:\<port\>/subscription
     /// for an always-fresh base64 feed of verified-healthy configs with no
     /// manual Telegram hunting (doctrine: never stop, never stale).
     Subscribe {
@@ -654,7 +654,7 @@ enum Command {
         action: String,
         /// Ordered engine chain, first layer first, comma-separated using the
         /// engine ids: psiphon, tor, v2rayn, lantern, shadowsocks, hysteria2,
-        /// tuic, mihomo, singbox, ssr, dastyab, or custom:<id> for a
+        /// tuic, mihomo, singbox, ssr, dastyab, or custom:\<id\> for a
         /// registered custom layer. e.g. `--chain lantern,tor,v2rayn`.
         /// Required for `plan`.
         #[arg(long, default_value = "")]
@@ -854,7 +854,7 @@ pub enum DnsTunnelAction {
     Status,
     /// Deploy the Worker-hosted DNS tunnel (no VPS) with the profile's token.
     Worker {
-        /// Explicit worker name (default: auto dyb-tun-<hex>).
+        /// Explicit worker name (default: auto dyb-tun-\<hex\>).
         #[arg(long)]
         worker_name: Option<String>,
         /// Cloudflare worker compatibility date.

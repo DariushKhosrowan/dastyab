@@ -517,7 +517,7 @@ impl Client {
     }
 
     /// Deploy a worker with KV namespace bindings in its metadata. This is the
-    /// same upload as [`deploy_script`] but sets `bindings` (e.g. a
+    /// same upload as [`Self::deploy_script`] but sets `bindings` (e.g. a
     /// `kv_namespace` binding the bundle reads as `env.DYB_CARRIER_SNAPSHOT`).
     /// `crons` are scheduled-trigger cron strings embedded as
     /// `triggers.crons` (used for the worker self-ping keep-alive). Empty

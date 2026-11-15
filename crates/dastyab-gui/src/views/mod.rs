@@ -1,7 +1,7 @@
 //! View implementations for the DastYab GUI.
 //!
 //! Each view is a panel rendered by the app shell. They read from the app's
-//! [`GuiState`] cache and drive store mutations through the async bridge,
+//! [`GuiState`](crate::state::GuiState) cache and drive store mutations through the async bridge,
 //! reusing the dialog helpers.
 //!
 //! This module also hosts the shared palette constants and the small,

@@ -70,7 +70,7 @@ pub struct GeneratedConfigsLedger {
     pub records: Vec<GeneratedConfigRecord>,
 }
 
-/// Search filters for [`search_configs`]. All present filters are AND-ed.
+/// Search filters for [`GeneratedConfigsLedger::search`]. All present filters are AND-ed.
 #[derive(Debug, Clone, Default)]
 pub struct ConfigQuery {
     pub fmt: Option<ExportFormat>,

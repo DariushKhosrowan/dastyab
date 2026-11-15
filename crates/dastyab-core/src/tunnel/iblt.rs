@@ -210,7 +210,7 @@ impl Iblt {
         out
     }
 
-    /// Deserialize from bytes produced by [`encode`].
+    /// Deserialize from bytes produced by [`Self::encode`].
     pub fn decode_bytes(data: &[u8]) -> Option<Self> {
         if !data.len().is_multiple_of(20) {
             return None;

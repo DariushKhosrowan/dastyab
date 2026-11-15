@@ -7,7 +7,7 @@
 //! - [`CarrierSnapshot`] — a versioned, signed (SHA-256) list of carrier
 //!   endpoints. Canonical JSON body + integrity hex.
 //! - [`CarrierPool`] — atomic on-disk store (`path + ".tmp"` → fsync → rename
-//!   → fsync parent), with verified reads and a pure offline [`select`].
+//!   → fsync parent), with verified reads and a pure offline [`CarrierPool::select`].
 //!
 //! Storage contract:
 //! - JSON body is canonical (field order fixed by [`CarrierSnapshot::canonical_bytes`]).

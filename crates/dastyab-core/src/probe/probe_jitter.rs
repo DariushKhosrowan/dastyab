@@ -144,8 +144,8 @@ pub fn randomize_ws_request(rng: &mut impl Rng, base_req: &[u8]) -> Vec<u8> {
 ///
 /// NOTE: rustls does not let us reorder *extensions* or inject GREASE
 /// (requires uTLS-style custom ClientHello). It DOES let us choose cipher
-/// suite order and key-exchange group order via a custom [`CryptoProvider`],
-/// and ALPN via [`ClientConfig::alpn_protocols`]. That is the variation we
+/// suite order and key-exchange group order via a custom [`CryptoProvider`](rustls::crypto::CryptoProvider),
+/// and ALPN via [`ClientConfig::alpn_protocols`](rustls::ClientConfig::alpn_protocols). That is the variation we
 /// apply here — enough to break a static signature, without pulling in a new
 /// crate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -254,7 +254,7 @@ fn order_kx_groups(
     ordered
 }
 
-/// Build a custom [`rustls::CryptoProvider`] for the given browser profile.
+/// Build a custom [`CryptoProvider`](rustls::crypto::CryptoProvider) for the given browser profile.
 /// Takes the default aws-lc-rs provider and reorders its cipher suites and
 /// key-exchange groups to match the profile — the cheap, valid way to vary
 /// the ClientHello without new crates.

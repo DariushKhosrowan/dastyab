@@ -7,7 +7,7 @@
 //! is the pure, testable seam for that execution:
 //!
 //! - [`TunnelOpener`] — an abstraction over "try this endpoint now". The real
-//!   opener dispatches on [`CarrierKind`] to the existing probe/connect code;
+//!   opener dispatches on [`CarrierKind`](crate::egress::carrier_pool::CarrierKind) to the existing probe/connect code;
 //!   tests inject a scripted opener. `open` is a *pure attempt* that returns
 //!   a result; it does NOT bind the active tunnel — the caller binds the
 //!   winner. This is required for parallel execution (multiple `open` calls

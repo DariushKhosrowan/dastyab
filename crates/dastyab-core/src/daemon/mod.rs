@@ -609,7 +609,7 @@ pub trait CycleRunner: Send + Sync {
 ///
 /// This is the load-bearing implementation of the
 /// `BlackoutAction::RefreshViaWorkerTunnel` arm: it opens the profile's offline
-/// carrier pool, builds a [`CarrierRefresher`] from the profile's worker-tunnel
+/// carrier pool, builds a [`CarrierRefresher`](crate::egress::carrier_refresh::CarrierRefresher) from the profile's worker-tunnel
 /// config, and pulls + merges the latest snapshot. Logs the outcome.
 ///
 /// `worker_url`/`shared_secret` come from the profile's `TunnelClientConfig`.
@@ -680,7 +680,7 @@ pub fn daemon_refresh_carriers(
 /// tunnel with a configured URL + secret, in which case it pulls the latest
 /// carrier snapshot from the KV relay and merges it into the offline pool — so
 /// reselection during a total blackout sees the freshest endpoints. The actual
-/// HTTP runs on its own OS thread (see [`CarrierRefresher`]), so this is safe
+/// HTTP runs on its own OS thread (see [`CarrierRefresher`](crate::egress::carrier_refresh::CarrierRefresher)), so this is safe
 /// to call from the async daemon tick.
 pub fn refresh_carriers_via_worker_tunnel(
     profile: &str,
@@ -1068,7 +1068,7 @@ pub fn query_worker_self_ping(profile: &str, log: &mut dyn FnMut(&str)) -> Optio
 /// promotes pending → current. On any failure the current secret stays active
 /// and the pending one is retained for a retry (or cleared when stale).
 ///
-/// Callers must gate with [`secret::rotation_eligible`] (e.g. only when the
+/// Callers must gate with [`rotation_eligible`](crate::egress::worker_tunnel::secret::rotation_eligible) (e.g. only when the
 /// network is up) — this function does not re-check net state.
 pub async fn rotate_worker_secret(
     cf: &crate::cf::Client,

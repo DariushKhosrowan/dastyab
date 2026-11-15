@@ -3,7 +3,7 @@
 //! The classic ladder descends Direct → DoH → DoT → DNS-tunnel but does not
 //! *know* it is in blackout — it keeps burning cycles probing dead direct paths
 //! instead of fast-failing to the worker bootstrap and rotating carriers from
-//! the offline [`CarrierPool`](crate::egress::carrier_pool::CarrierPool).
+//! the offline [`CarrierPool`].
 //!
 //! This module is a **pure, socket-free** controller: [`BlackoutController::next`]
 //! consumes [`BlackoutInputs`] (probe booleans + pool counts) and returns the one
