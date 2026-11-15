@@ -390,17 +390,22 @@ mod tests {
         assert_ne!(h, sha256_bytes(b"vless://abd"));
     }
 
-    fn test_mem_dir() -> std::path::PathBuf {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static CTR: AtomicU64 = AtomicU64::new(0);
-        let n = CTR.fetch_add(1, Ordering::Relaxed);
-        std::env::temp_dir().join(format!("dyb_gencfg_{}_{n}", crate::store::now_ts()))
+    /// Isolated mem dir that removes itself when the test ends.
+    ///
+    /// Returning a bare PathBuf leaked one `dyb_gencfg_*` directory into
+    /// /tmp per test run (462 of them had piled up). A TempDir guard deletes
+    /// the tree on drop, including on a failing assertion's unwind.
+    fn test_mem_dir() -> (tempfile::TempDir, std::path::PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("dastyab");
+        (tmp, path)
     }
 
     #[test]
     fn save_and_load_roundtrips_via_guarded_ledger() {
         // Use the in-memory mem dir override so we don't touch the real home.
-        crate::store::set_mem_dir_override(test_mem_dir());
+        let (_tmp, mem) = test_mem_dir();
+        crate::store::set_mem_dir_override(mem);
         let id = crate::store::profiles::create_profile("g", "gen").unwrap();
         let mut ledger = GeneratedConfigsLedger::default();
         let (f, s, c) = rec(
@@ -420,7 +425,8 @@ mod tests {
 
     #[test]
     fn saved_ledger_grows_without_tripping_guard() {
-        crate::store::set_mem_dir_override(test_mem_dir());
+        let (_tmp, mem) = test_mem_dir();
+        crate::store::set_mem_dir_override(mem);
         let id = crate::store::profiles::create_profile("g2", "gen").unwrap();
         let mut l = GeneratedConfigsLedger::default();
         let (f, s, c) = rec(ExportFormat::V2rayN, ConfigSource::V2rayN, "{}");
@@ -435,7 +441,8 @@ mod tests {
 
     #[test]
     fn record_profile_configs_renders_all_formats_into_ledger() {
-        crate::store::set_mem_dir_override(test_mem_dir());
+        let (_tmp, mem) = test_mem_dir();
+        crate::store::set_mem_dir_override(mem);
         let id = crate::store::profiles::create_profile("g3", "gen").unwrap();
         let prof = crate::artifact::vless::VlessProfile {
             uuid: "12345678-1234-1234-1234-123456789abc".into(),
@@ -479,7 +486,8 @@ mod tests {
 
     #[test]
     fn update_content_recomputes_hash_and_preserves_identity() {
-        crate::store::set_mem_dir_override(test_mem_dir());
+        let (_tmp, mem) = test_mem_dir();
+        crate::store::set_mem_dir_override(mem);
         let id = crate::store::profiles::create_profile("g4", "gen").unwrap();
         let mut ledger = GeneratedConfigsLedger::default();
         let (f, s, c) = rec(
@@ -506,7 +514,8 @@ mod tests {
 
     #[test]
     fn update_label_trim_and_clear() {
-        crate::store::set_mem_dir_override(test_mem_dir());
+        let (_tmp, mem) = test_mem_dir();
+        crate::store::set_mem_dir_override(mem);
         let id = crate::store::profiles::create_profile("g5", "gen").unwrap();
         let mut ledger = GeneratedConfigsLedger::default();
         let (f, s, c) = rec(ExportFormat::SingBox, ConfigSource::WorkerVless, "{}");
@@ -524,7 +533,8 @@ mod tests {
 
     #[test]
     fn delete_config_removes_only_matching_record() {
-        crate::store::set_mem_dir_override(test_mem_dir());
+        let (_tmp, mem) = test_mem_dir();
+        crate::store::set_mem_dir_override(mem);
         let id = crate::store::profiles::create_profile("g6", "gen").unwrap();
         let mut ledger = GeneratedConfigsLedger::default();
         let (f1, s1, c1) = rec(ExportFormat::ShareLink, ConfigSource::ShareLink, "a");

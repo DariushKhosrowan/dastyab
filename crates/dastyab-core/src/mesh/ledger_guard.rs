@@ -289,14 +289,15 @@ pub fn doctor_check_ledger_integrity(profile_dir: &Path) -> Vec<CheckResult> {
 mod tests {
     use super::*;
 
-    fn tmp_home() -> PathBuf {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static CTR: AtomicU64 = AtomicU64::new(0);
-        let n = CTR.fetch_add(1, Ordering::Relaxed);
-        let d =
-            std::env::temp_dir().join(format!("dyb_ledger_guard_{}_{n}", crate::store::now_ts()));
-        std::fs::create_dir_all(&d).unwrap();
-        d
+    /// Isolated dir that removes itself when the test ends.
+    ///
+    /// This used to build a `dyb_ledger_guard_*` path under /tmp and never
+    /// remove it, leaking one directory per test run. The TempDir guard
+    /// deletes the tree on drop, including on a failing assertion's unwind.
+    fn tmp_home() -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = tmp.path().to_path_buf();
+        (tmp, d)
     }
 
     #[test]
@@ -323,7 +324,7 @@ mod tests {
 
     #[test]
     fn write_ledger_guarded_updates_high_water_on_growth() {
-        let dir = tmp_home();
+        let (_tmp, dir) = tmp_home();
         let now = 1000;
         write_ledger_guarded::<u64>(&dir, LedgerKind::History, &[1, 2, 3], now).unwrap();
         // Seed a ledger file then grow to 5.
@@ -334,7 +335,7 @@ mod tests {
 
     #[test]
     fn write_ledger_guarded_creates_high_water_on_first_write() {
-        let dir = tmp_home();
+        let (_tmp, dir) = tmp_home();
         write_ledger_guarded::<u64>(&dir, LedgerKind::TokenHistory, &[9], 500).unwrap();
         let mark = read_high_water(&dir, LedgerKind::TokenHistory).unwrap();
         assert_eq!(mark.count, 1);
@@ -343,7 +344,7 @@ mod tests {
 
     #[test]
     fn write_ledger_guarded_refuses_shrink_and_does_not_touch_file() {
-        let dir = tmp_home();
+        let (_tmp, dir) = tmp_home();
         write_ledger_guarded::<u64>(&dir, LedgerKind::History, &[1, 2, 3, 4], 100).unwrap();
         let before = std::fs::read(dir.join("history.json")).unwrap();
         let err = write_ledger_guarded::<u64>(&dir, LedgerKind::History, &[1], 101).unwrap_err();
@@ -354,7 +355,7 @@ mod tests {
 
     #[test]
     fn doctor_flags_shrunk_ledger_as_fail() {
-        let dir = tmp_home();
+        let (_tmp, dir) = tmp_home();
         write_ledger_guarded::<u64>(&dir, LedgerKind::History, &[1, 2, 3, 4], 100).unwrap();
         // Out-of-band shrink: rewrite the file directly, bypassing the guard,
         // leaving the high-water mark at 4.
@@ -369,7 +370,7 @@ mod tests {
 
     #[test]
     fn doctor_flags_missing_file_with_high_water_as_warn() {
-        let dir = tmp_home();
+        let (_tmp, dir) = tmp_home();
         write_ledger_guarded::<u64>(&dir, LedgerKind::TokenHistory, &[1, 2], 100).unwrap();
         std::fs::remove_file(dir.join("token_history.json")).unwrap();
         let results = doctor_check_ledger_integrity(&dir);
@@ -382,7 +383,7 @@ mod tests {
 
     #[test]
     fn rebase_moves_mark_down() {
-        let dir = tmp_home();
+        let (_tmp, dir) = tmp_home();
         write_ledger_guarded::<u64>(&dir, LedgerKind::CleanIps, &[1, 2, 3], 100).unwrap();
         // Legitimate removal rebases the mark so doctor stays green.
         rebase_high_water(&dir, LedgerKind::CleanIps, 0, 200).unwrap();
