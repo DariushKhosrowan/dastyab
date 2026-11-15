@@ -169,12 +169,18 @@ state dir behind, which supplied the "it's corrupted" symptoms.
 - **Rename debris:** old `khvarenah` binary removed from PATH; `~/.khvarenah`
   archived. (If you want the old state preserved elsewhere, it is in the
   archive noted below.)
-- **Server pool:** 6 entries, built 02:53; live `verify` after the fix
-  shows **0/6 reachable** — the batch expired during the day (normal for
-  free-channel cards). Rebuild with fresh cards:
-  `dastyab aistudio build-pool <uris.txt>`. Before the fix, `start` bound
-  only `pool[0]`; now it walks the pool, so a fresh pool keeps working as
-  entries die.
+- **Server pool:** rebuilt and healthy — 3/3 reachable at last verify
+  (`82.39.171.12` → egress `91.239.157.84`, `15.204.97.197`, `139.162.27.96`).
+  The old 6-entry batch from 02:53 had expired (0/6). The rebuild used
+  `dastyab harvest` (392 fresh nodes) + `build-pool` on the 258 harvested
+  vless URIs. Confirmed end to end: tunnel egress `91.239.157.84` vs the
+  real IP `163.123.193.6`, and a second `start` now exits 0 instead of
+  `exit code Some(3)`.
+- **Note on the node store:** only ~1 in 500 entries is a plain remote
+  vless endpoint. Most are `ss`/`trojan`/`vmess` (unsupported by the bridge)
+  or Cloudflare-worker style with a `127.0.0.1:40443` placeholder and the
+  real domain in `host=`. `build-pool` needs real `host:port` addresses, so
+  harvest output must be filtered for those (it was, for this rebuild).
 - **Xray core:** healthy — `Xray 26.11.9` at `~/.dastyab/bin/xray`.
 - **CI:** the pushed `ci.yml` runs fmt + clippy + cargo test + pytest for
   the bridge on every push/PR.
