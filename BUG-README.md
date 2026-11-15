@@ -241,6 +241,25 @@ released. The fix plan below is complete.
 | `aistudio verify` / `start` / `stop` / `watch` | 3/3 servers, live egress |
 | `test_fresh_vless.py` no-arg run | pool unchanged (no-clobber guard) |
 
+### Published
+
+- Release: <https://github.com/DastYab/dastyab/releases/tag/v0.1.7>
+  (published 2026-11-15 by the tag-triggered workflow).
+- 19 assets: `dastyab` / `dastyab-tui` / `dastyab-gui` for linux-amd64,
+  linux-arm64, macos-arm64, windows-amd64 (plus the Windows portable zip),
+  `.deb` for both Linux arches, the three aistudio helper scripts, and
+  `SHA256SUMS.txt`.
+- Verified after publication: downloaded `dastyab-linux-amd64` runs and
+  reports `dastyab 0.1.7`; its SHA-256 matches `SHA256SUMS.txt`; the `.deb`
+  is a valid `dastyab-cli 0.1.7-1 amd64` package; `/releases/latest`
+  redirects to `v0.1.7`; and `scripts/install.sh` installs it end to end
+  with the checksum check passing.
+- CI on `main` is green for the first time (the four prior runs all failed
+  on the pytest no-clobber assertion, now fixed): 1093 core tests, 4 path
+  regressions, 37 GUI tests, 2 doctests, and `pytest` 21 passed / 3 skipped
+  (the skips are the core-dependent tests, which skip cleanly when no xray
+  is installed).
+
 **Command coverage limit.** Commands that require a real Cloudflare
 deployment, a VPS, or a live zone (`deploy`, `scan`, `zones`, `dns`,
 `routes`, `dns-tunnel`, `up`, `doctor` action paths) were exercised at the
