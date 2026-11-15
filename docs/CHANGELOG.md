@@ -39,6 +39,25 @@ script with the old one on every run. Details: `BUG-README.md`.
 - **`BUG-README.md`** — root-cause write-up and living state document for
   this bug.
 
+### Also fixed in this release (full-workspace test pass)
+
+- **`profile-delete` / `profile-rename` / `profile-export` no longer act on a
+  typo.** `profile_dir()` falls back to `default` for unknown ids — right for
+  reads, dangerous for named mutations: `profile-delete typo` deleted the
+  *default* profile (tokens included) while reporting success, and
+  `profile-rename work w2` rewrote `default` under the phantom id `work`.
+  All three now require a real profile id and name the ones that exist;
+  `default` is reserved and always valid. Regression tests cover both paths.
+- **The TUI no longer panics when stdin is not a tty.** Under cron, CI or a
+  pipe it dumped `failed to initialize terminal: Os { code: 6 }`; it now
+  explains that it needs a terminal and exits 1.
+- **Rustdoc is warning-free workspace-wide:** 12 unresolved intra-doc links,
+  1 redundant explicit target and 3 unclosed HTML tags in CLI help.
+- **Test hygiene:** `test_ensure_daemon_installed_writes_unit_once` now holds
+  the shared env lock before swapping the process-global `HOME` (it raced the
+  onboarding tests), and `test_mem_dir` / `tmp_home` return self-deleting
+  `TempDir` guards instead of leaking a `/tmp` directory per run.
+
 ## v0.1.6 — 2026-11-14
 
 `dastyab aistudio` is fixed end to end. Five separate defects were stacked

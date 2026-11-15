@@ -4,7 +4,7 @@
 where the fix stands right now. Update the *Current state* section whenever
 something changes.
 
-**Last updated:** 2026-11-15 (investigation session)
+**Last updated:** 2026-11-15 (release session — v0.1.7 shipped)
 
 ---
 
@@ -195,7 +195,59 @@ state dir behind, which supplied the "it's corrupted" symptoms.
 
 ---
 
-## Remaining fix plan (in order)
+## Release session — 2026-11-15 (v0.1.7 shipped)
+
+**Status: closed.** The full workspace was tested end to end and v0.1.7 was
+released. The fix plan below is complete.
+
+### What the release session changed
+
+- **Profile typo-guard (security).** `profile_dir()` falls back to `default`
+  for unknown ids — correct for reads, dangerous for named mutations.
+  `profile-rename work w2` rewrote the *default* profile and persisted it
+  under the phantom id `work`; `profile-delete typo` deleted the default
+  directory (tokens included) while reporting success for the typo'd id.
+  `delete_profile`, `rename_profile` and `export_profile` now require a real
+  profile id first, and the error names the profiles that do exist.
+  `default` is the reserved lazily-materialized profile and always passes.
+  Two regression tests cover both directions.
+- **TUI no longer panics without a tty.** `ratatui::init()` aborted with a raw
+  `Os { code: 6 }` backtrace under cron, CI, or a pipe. It now prints a
+  one-line explanation and exits 1.
+- **Rustdoc is warning-free workspace-wide.** 12 unresolved intra-doc links,
+  1 redundant explicit target and 3 unclosed HTML tags in CLI help were fixed.
+- **Two flaky tests fixed.** `test_ensure_daemon_installed_writes_unit_once`
+  mutated the process-global `HOME` without the shared env lock, so the
+  parallel onboarding tests intermittently read a swapped-out home; and two
+  test helpers (`test_mem_dir`, `tmp_home`) leaked one `/tmp` directory per
+  run (462 had accumulated) — both now return self-deleting `TempDir` guards.
+
+### Test results (2026-11-15)
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --all --check` | pass |
+| `cargo clippy --workspace --all-targets -- -D warnings` | pass |
+| `cargo doc --no-deps --workspace` | 0 warnings |
+| `cargo build --release --workspace` | pass (cli, tui, gui) |
+| `cargo test --workspace` | 1149 passed, 0 failed, 1 ignored |
+| `python3 -m pytest tests/ -q` | 24 passed |
+| `scripts/verify.sh` | PASS=6 FAIL=0 |
+| 74 subcommands `--help` | all exit 0 |
+| Profile lifecycle + typo guards | pass (default survives every typo) |
+| TUI: piped stdin / real pty | clean exit 1 + message / renders |
+| GUI under Xvfb | alive 15s, no crash (software GL) |
+| Daemon start → status → stop | pass in isolated HOME |
+| `aistudio verify` / `start` / `stop` / `watch` | 3/3 servers, live egress |
+| `test_fresh_vless.py` no-arg run | pool unchanged (no-clobber guard) |
+
+**Command coverage limit.** Commands that require a real Cloudflare
+deployment, a VPS, or a live zone (`deploy`, `scan`, `zones`, `dns`,
+`routes`, `dns-tunnel`, `up`, `doctor` action paths) were exercised at the
+argument-validation and error-path level only; they were not run against a
+live Cloudflare account during this session.
+
+## Fix plan (complete — kept for history)
 
 1. Apply the `arg` forwarding fix in `cmd_aistudio` (`commands.rs`).
 2. Fix formatting: `cargo fmt --all` (multilayer.rs:168).
