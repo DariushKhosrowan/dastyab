@@ -780,6 +780,10 @@ mod tests {
 
     #[test]
     fn test_ensure_daemon_installed_writes_unit_once() {
+        // HOME is process-global: while this test swaps it, the parallel
+        // onboarding tests resolve their systemd-unit path against it. Take
+        // the same lock so env-mutating tests never overlap.
+        let _guard = env_lock().lock().unwrap();
         use std::sync::atomic::{AtomicU64, Ordering};
         static N: AtomicU64 = AtomicU64::new(0);
         let n = N.fetch_add(1, Ordering::SeqCst);
