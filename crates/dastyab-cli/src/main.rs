@@ -454,9 +454,14 @@ enum Command {
     ///   dastyab aistudio watch     # self-healing watchdog (background)
     ///   dastyab aistudio stop      # stop the tunnel
     ///   dastyab aistudio verify    # show pool + live egress IP
+    ///   dastyab aistudio build-pool <uris.txt>   # rebuild the pool
     Aistudio {
         #[arg()]
         action: String,
+        /// Action argument: pool index for `start`, seconds for `watch`,
+        /// or the URI file for `build-pool`.
+        #[arg()]
+        arg: Option<String>,
     },
     /// Apply / teardown the doctrine A+D platform network rules (anti-loop
     /// fwmark routing + TCP MSS clamp). Use `--dry-run` to preview commands.

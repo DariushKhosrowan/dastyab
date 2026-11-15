@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.1.7 — 2026-11-15
+
+`dastyab aistudio` failed for real users on installed binaries even though
+the fix existed — a version-skew trap. The installed v0.1.6 embedded the old
+bridge script, and its materialise step kept overwriting the staged fixed
+script with the old one on every run. Details: `BUG-README.md`.
+
+### Fixed
+- **`start` now walks the whole pool** instead of binding only `pool[0]`.
+  One dead node no longer fails the command while healthy nodes sit behind
+  it; dead entries are skipped and reported.
+- **"Tunnel already running" is no longer a failure.** The path that reopens
+  AI Studio through an existing tunnel now reports success instead of
+  exiting 3 (`exit code Some(3)`).
+- **The CLI forwards the action argument to the bridge** (pool index for
+  `start`, seconds for `watch`, URI file for `build-pool`). It was accepted
+  and then dropped, so `dastyab aistudio build-pool uris.txt` always failed
+  with "build-pool needs a file".
+- **`verify` reports live state**, not the stored snapshot: every node is
+  probed and the printed egress is what is true now.
+- **`build-pool` can no longer clobber a working pool with an empty one**,
+  and no longer imports from a hardcoded `/tmp` path.
+- **A failed egress probe no longer leaves xray holding the SOCKS port**: the
+  core is torn down before the next node is tried.
+- **nekoray wrappers are rejected as cores** (`nekoray_core` answers `version`
+  and exits 0 without serving traffic — it produced "the proxy is up but no
+  traffic is getting through").
+- **xray resolution in `multilayer`** matches the bridge: `$DASTYAB_XRAY`
+  first, then the helper dir, standard locations, PATH — `/tmp/xraybin/xray`
+  demoted to last (it is wiped on reboot). Directories and non-executable
+  files are no longer accepted as cores.
+
+### Added
+- **`tests/test_aistudio.py`** — pytest suite covering the bridge
+  regressions (nekoray selection, pool[0]-only binding, empty-pool clobber,
+  stale-egress reporting), wired into CI.
+- **`BUG-README.md`** — root-cause write-up and living state document for
+  this bug.
+
 ## v0.1.6 — 2026-11-14
 
 `dastyab aistudio` is fixed end to end. Five separate defects were stacked

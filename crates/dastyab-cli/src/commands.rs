@@ -211,7 +211,7 @@ pub async fn run(
         Command::Journal { action } => cmd_journal(&profile, action),
         Command::Autonomy { action } => cmd_autonomy(&profile, action).await,
         Command::Onboard { action } => cmd_onboard(&profile, action),
-        Command::Aistudio { action } => cmd_aistudio(&action),
+        Command::Aistudio { action, arg } => cmd_aistudio(&action, arg.as_deref()),
         Command::Platform {
             action,
             dry_run,
@@ -4402,7 +4402,7 @@ fn find_aistudio_script() -> Option<std::path::PathBuf> {
     candidates.into_iter().find(|p| p.is_file())
 }
 
-fn cmd_aistudio(action: &str) -> Result<(), CFError> {
+fn cmd_aistudio(action: &str, arg: Option<&str>) -> Result<(), CFError> {
     // Delegate to the verified, self-healing Python bridge (project-local).
     // The Python tool owns the xray tunnel + watchdog; this is a thin wrapper.
     let script = find_aistudio_script().ok_or_else(|| {
@@ -4426,6 +4426,13 @@ fn cmd_aistudio(action: &str) -> Result<(), CFError> {
 
     let mut cmd = std::process::Command::new("python3");
     cmd.arg(&script).arg(&action);
+    // Forward the action argument (pool index for `start`, seconds for
+    // `watch`, the URI file for `build-pool`). Dropping it here made
+    // `dastyab aistudio build-pool uris.txt` fail with "build-pool needs
+    // a file" even though the user supplied one.
+    if let Some(a) = arg {
+        cmd.arg(a);
+    }
     let out = cmd.output().map_err(|e| {
         CFError::new(
             "Aistudio launch failed",

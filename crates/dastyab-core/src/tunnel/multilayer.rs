@@ -17,7 +17,7 @@
 //! This module is purely additive: it complements the `fallback_ladder`
 //! (transport tiers) with the *user's own endpoint* layer and an egress probe.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -142,16 +142,78 @@ impl AiAccessReport {
 }
 
 /// Discovery for the local xray binary (mirrors the python helper's list).
+///
+/// Order matters, and it is not arbitrary: `$DASTYAB_XRAY` is the documented
+/// escape hatch, then the helper dir the app stages into, then the standard
+/// install locations. `/tmp/xraybin/xray` is kept last and only for backward
+/// compatibility — it is wiped on reboot, so treating it as the primary
+/// location made every probe fail on a fresh boot with a core installed.
+///
+/// The nekoray entries are deliberately *not* listed: `nekoray_core` answers
+/// `version` and accepts `run -c` but exits without serving traffic, and
+/// `nekobox_core` is sing-box with a different CLI. Selecting either produces
+/// "no traffic is getting through" instead of "no core found".
 pub fn find_xray_binary() -> Option<PathBuf> {
-    [
-        "/tmp/xraybin/xray",
-        "/opt/v2rayN/bin/xray/xray",
-        "/opt/nekoray/nekoray_core",
-        "/opt/nekoray/nekobox_core",
-    ]
-    .iter()
-    .map(PathBuf::from)
-    .find(|p| p.exists())
+    if let Some(p) = std::env::var_os("DASTYAB_XRAY") {
+        let p = PathBuf::from(p);
+        if is_executable_file(&p) {
+            return Some(p);
+        }
+    }
+
+    let mut cands: Vec<PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            cands.push(dir.join("xray"));
+        }
+    }
+    if let Some(home) = crate::store::home_dir() {
+        cands.push(
+            home.join(crate::store::MEM_DIR_NAME)
+                .join("bin")
+                .join("xray"),
+        );
+    }
+    cands.push(PathBuf::from("/usr/local/bin/xray"));
+    cands.push(PathBuf::from("/usr/bin/xray"));
+    cands.push(PathBuf::from("/opt/xray/xray"));
+    cands.push(PathBuf::from("/opt/v2rayN/bin/xray/xray"));
+    cands.push(PathBuf::from("/tmp/xraybin/xray"));
+
+    if let Some(found) = cands.into_iter().find(|p| is_executable_file(p)) {
+        return Some(found);
+    }
+
+    // Last resort: anything named `xray`/`v2ray` on PATH.
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        for name in ["xray", "v2ray"] {
+            let cand = dir.join(name);
+            if is_executable_file(&cand) {
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
+/// True for a path that exists and is an executable file (not a directory).
+fn is_executable_file(p: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(p) else {
+        return false;
+    };
+    if !meta.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 /// The local SOCKS5 port the xray proxy listens on for probes.
@@ -186,7 +248,7 @@ pub async fn probe_ai_access_cfg(cfg: &FinalServerConfig) -> Result<AiAccessRepo
         CFError::new(
             "multilayer",
             "xray binary not found",
-            "Install xray (v2rayN bundle) or place the binary at /tmp/xraybin/xray.",
+            "Install xray and put it on PATH, or set DASTYAB_XRAY=/path/to/xray.",
         )
     })?;
 
@@ -382,7 +444,7 @@ pub async fn probe_gemini_api_cfg(
         CFError::new(
             "multilayer",
             "xray binary not found",
-            "Install xray (v2rayN bundle) or place the binary at /tmp/xraybin/xray.",
+            "Install xray and put it on PATH, or set DASTYAB_XRAY=/path/to/xray.",
         )
     })?;
 
@@ -531,7 +593,7 @@ pub fn launch_xray(
         CFError::new(
             "multilayer",
             "xray binary not found",
-            "Install xray (v2rayN bundle) or place the binary at /tmp/xraybin/xray.",
+            "Install xray and put it on PATH, or set DASTYAB_XRAY=/path/to/xray.",
         )
     })?;
     // Write a config with the requested socks port.
@@ -701,5 +763,49 @@ mod tests {
         let s = p.xray_client_json().unwrap();
         assert!(s.contains("\"socks\""));
         assert!(s.contains("\"vless\""));
+    }
+
+    /// The resolver must prefer a real core over the reboot-wiped /tmp path.
+    /// Regression: `/tmp/xraybin/xray` was the *first* candidate, so a machine
+    /// with xray properly installed still reported "xray binary not found"
+    /// after every reboot.
+    #[test]
+    fn find_xray_binary_prefers_env_override() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = dir.path().join("my-xray");
+        std::fs::write(&fake, b"#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        std::env::set_var("DASTYAB_XRAY", &fake);
+        let got = find_xray_binary();
+        std::env::remove_var("DASTYAB_XRAY");
+        assert_eq!(got.as_deref(), Some(fake.as_path()));
+    }
+
+    /// A directory and a missing path must both be rejected: the old resolver
+    /// used `p.exists()`, which accepted a directory named `xray`.
+    #[test]
+    fn is_executable_file_rejects_directories_and_missing_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_executable_file(dir.path()));
+        assert!(!is_executable_file(&dir.path().join("nope")));
+    }
+
+    /// A non-executable file is not a core either (e.g. an unpacked tarball
+    /// with permissions lost). Selecting it produced an opaque spawn error.
+    #[cfg(unix)]
+    #[test]
+    fn is_executable_file_rejects_non_executable_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("xray");
+        std::fs::write(&f, b"data").unwrap();
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(!is_executable_file(&f));
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(is_executable_file(&f));
     }
 }

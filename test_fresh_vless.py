@@ -2,9 +2,33 @@
 """Parse fresh v2rayN share URIs into xray client configs and verify egress."""
 import json, re, subprocess, sys, time, os, urllib.parse, socket, signal, random
 
-XRAY = "/tmp/xraybin/xray"
+# Resolved at runtime, never a fixed path: the old hardcoded
+# "/tmp/xraybin/xray" is wiped on reboot, so this tool failed on every fresh
+# boot even with a core installed. $DASTYAB_XRAY and the standard locations
+# are honoured, matching `dastyab aistudio`.
+def _find_xray():
+    cands = [os.environ.get("DASTYAB_XRAY", ""),
+             os.path.expanduser("~/.dastyab/bin/xray"),
+             os.path.join(os.path.dirname(os.path.abspath(__file__)), "xray"),
+             "/usr/local/bin/xray", "/usr/bin/xray", "/opt/xray/xray"]
+    for c in cands:
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        p = os.path.join(d, "xray") if d else ""
+        if p and os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    raise SystemExit("no xray core found; set DASTYAB_XRAY=/path/to/xray")
+
+XRAY = None  # resolved lazily by find_xray()
 SOCK = 10850
 SERVERS_FILE = os.path.expanduser("~/.dastyab/profiles/default/fresh_vless.json")
+
+def find_xray():
+    global XRAY
+    if XRAY is None:
+        XRAY = _find_xray()
+    return XRAY
 
 def parse_vless(line):
     line = line.split('#')[0]
@@ -69,7 +93,7 @@ def test(server, wait=3, probe_timeout=15):
     open(cfgpath,"w").write(json.dumps(cfg))
     proc=None
     try:
-        proc = subprocess.Popen([XRAY,"run","-c",cfgpath],
+        proc = subprocess.Popen([find_xray(),"run","-c",cfgpath],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(wait)
         ip = probe(SOCK, probe_timeout)
@@ -115,12 +139,16 @@ def main():
         if len(working)>=6: break
     if working:
         os.makedirs(os.path.dirname(SERVERS_FILE), exist_ok=True)
-        json.dump(working, open(SERVERS_FILE,"w"), indent=1)
+        tmp = SERVERS_FILE + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump(working, fh, indent=1)
+        os.replace(tmp, SERVERS_FILE)
         print(f"\nSaved {len(working)} working servers to {SERVERS_FILE}")
         for w in working:
             print(f"  {w['addr']}:{w['port']} -> {w['egress']}")
     else:
-        print("\nNo working server found in this batch.")
+        # Never clobber a usable pool because one channel's cards expired.
+        print(f"\nNo working server found; leaving {SERVERS_FILE} unchanged.")
 
 if __name__=="__main__":
     main()

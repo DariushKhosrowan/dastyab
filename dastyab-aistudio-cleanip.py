@@ -17,12 +17,42 @@ Usage:
 """
 import json, glob, os, re, signal, subprocess, sys, time, socket, argparse
 
-XRAY = "/tmp/xraybin/xray"
+XRAY = None  # resolved at run time by find_xray(); was pinned to /tmp
 PROFILE_DIR = os.path.expanduser("~/.config/nekoray/config/profiles")
 STUDIO = "https://aistudio.google.com/"
 API = "https://generativelanguage.googleapis.com/v1beta/models"
 IPIFY = "https://api.ipify.org"
 SOCK = 10850
+
+def find_xray():
+    """Locate an xray core at run time.
+
+    This used to be the constant `/tmp/xraybin/xray`, which is wiped on every
+    reboot — so the tool failed on a fresh boot even with a core installed,
+    exactly like `dastyab aistudio` did before v0.1.5. $DASTYAB_XRAY and the
+    standard locations are honoured here too, so one override fixes both.
+    """
+    global XRAY
+    if XRAY and os.path.isfile(XRAY) and os.access(XRAY, os.X_OK):
+        return XRAY
+    cands = [os.environ.get("DASTYAB_XRAY", ""),
+             os.path.expanduser("~/.dastyab/bin/xray"),
+             os.path.join(os.path.dirname(os.path.abspath(__file__)), "xray"),
+             "/usr/local/bin/xray", "/usr/bin/xray", "/opt/xray/xray"]
+    for c in cands:
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            XRAY = c
+            return XRAY
+    for name in ("xray", "v2ray"):
+        for d in os.environ.get("PATH", "").split(os.pathsep):
+            p = os.path.join(d, name) if d else ""
+            if p and os.path.isfile(p) and os.access(p, os.X_OK):
+                XRAY = p
+                return XRAY
+    raise SystemExit(
+        "[cleanip] No xray core found. Install xray and put it on PATH, or set "
+        "DASTYAB_XRAY=/path/to/xray"
+    )
 
 def load_profiles():
     out = []
@@ -154,7 +184,7 @@ def start_proxy(server):
     cfgpath = "/tmp/aistudio-cleanip.json"
     with open(cfgpath,"w") as f: json.dump(cfg,f)
     pidf = "/tmp/aistudio-cleanip.pid"
-    proc = subprocess.Popen([XRAY,"run","-c",cfgpath],
+    proc = subprocess.Popen([find_xray(),"run","-c",cfgpath],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # daemonize isn't needed; keep proc. Write pid file.
     open(pidf,"w").write(str(proc.pid))
