@@ -25,6 +25,17 @@ const TEXT: Color = Color::Rgb(235, 228, 200);
 fn main() -> std::io::Result<()> {
     let _ = migrate_legacy();
 
+    // `ratatui::init()` panics with a raw backtrace ("failed to initialize
+    // terminal: Os { code: 6 ... }") when stdin is not a terminal, which is
+    // what happens under cron, in CI, or when output is piped. A dashboard
+    // that needs a tty should say so and exit non-zero, not dump a panic.
+    use std::io::IsTerminal as _;
+    if !std::io::stdin().is_terminal() {
+        eprintln!("dastyab-tui: this is an interactive terminal dashboard and needs a tty.");
+        eprintln!("Run it directly in your terminal, or use the CLI (`dastyab`) instead.");
+        std::process::exit(1);
+    }
+
     let mut terminal = ratatui::init();
     let res = run_app(&mut terminal);
     ratatui::restore();

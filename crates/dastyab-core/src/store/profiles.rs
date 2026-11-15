@@ -551,6 +551,11 @@ pub fn save_profile(p: &Profile) -> Result<(), CFError> {
 }
 
 /// Delete a profile directory (never the `default` profile).
+///
+/// The id must name a profile that exists. Without that check `profile_dir`
+/// redirects a typo to the `default` directory, so `profile-delete typoXYZ`
+/// deleted the user's default profile (tokens included) while reporting
+/// success for the id that was passed in.
 pub fn delete_profile(id: &str) -> Result<(), CFError> {
     if id == "default" {
         return Err(CFError::new(
@@ -559,6 +564,7 @@ pub fn delete_profile(id: &str) -> Result<(), CFError> {
             "Create a new profile, then delete the old one.",
         ));
     }
+    require_profile(id)?;
     let dir = profile_dir(id);
     if dir.exists() {
         fs::remove_dir_all(&dir).map_err(|e| {
@@ -572,8 +578,56 @@ pub fn delete_profile(id: &str) -> Result<(), CFError> {
     Ok(())
 }
 
+/// True when `id` names a profile that actually exists on disk.
+///
+/// `profile_dir` deliberately falls back to `default` so that an unset or
+/// legacy profile id keeps working. That fallback is correct for reads on the
+/// hot path, but it is dangerous for any operation the user names explicitly:
+/// `profile-rename work w2` or `profile-delete typo` would then silently act
+/// on the `default` profile instead, and `save_profile` would persist that
+/// profile under the phantom id taken from the argument. Destructive and
+/// identity-changing commands must call this first.
+pub fn profile_exists(id: &str) -> bool {
+    if id.is_empty() {
+        return false;
+    }
+    profiles_dir().join(id).join("profile.json").is_file()
+}
+
+/// Reject an id that does not name a real profile, before touching disk.
+///
+/// The error names the profiles that do exist, because the usual cause is
+/// passing a profile *name* (`work`) where an *id* (`74bea9c2aed6`) is
+/// expected.
+fn require_profile(id: &str) -> Result<(), CFError> {
+    if profile_exists(id) {
+        return Ok(());
+    }
+    let known: Vec<String> = list_profiles()
+        .into_iter()
+        .map(|m| format!("{} ({})", m.name, m.id))
+        .collect();
+    let hint = if known.is_empty() {
+        "No profiles exist yet; create one with `dastyab profile-create <name>`.".to_string()
+    } else {
+        format!(
+            "Existing profiles: {}. Profile id is the hex id, not the name.",
+            known.join(", ")
+        )
+    };
+    Err(CFError::new(
+        "Unknown profile",
+        format!("No profile with id '{id}'."),
+        hint,
+    ))
+}
+
 /// Rename a profile (updates its metadata only).
+///
+/// Refuses an unknown id instead of letting `profile_dir`'s fallback rewrite
+/// the default profile.
 pub fn rename_profile(id: &str, new_name: &str) -> Result<(), CFError> {
+    require_profile(id)?;
     let mut p = load_profile(id);
     p.meta.name = new_name.trim().to_string();
     save_profile(&p)
@@ -581,6 +635,7 @@ pub fn rename_profile(id: &str, new_name: &str) -> Result<(), CFError> {
 
 /// Export a profile as a JSON blob (for backup / sharing).
 pub fn export_profile(id: &str) -> Result<serde_json::Value, CFError> {
+    require_profile(id)?;
     let p = load_profile(id);
     serde_json::to_value(&p).map_err(|e| {
         CFError::new(
@@ -2404,6 +2459,87 @@ mod tests {
             );
             // Missing file → None (no panic, no empty default misread).
             assert!(load_last_light_sweep("no-such-profile").is_none());
+        });
+    }
+
+    /// `profile_dir` falls back to `default` for unknown ids. That is fine for
+    /// reads, but it silently redirected *named* mutations onto the default
+    /// profile: `profile-rename work w2` renamed `default` and persisted it
+    /// under the phantom id `work`, and `profile-delete typo` deleted the
+    /// default directory outright while reporting success.
+    #[test]
+    fn rename_rejects_unknown_id_instead_of_rewriting_default() {
+        with_home(|| {
+            let id = create_profile("work", "keep me").unwrap();
+            let before = load_profile("default").meta.clone();
+
+            let err = rename_profile("no-such-id", "HACKED").unwrap_err();
+            assert!(err.to_string().contains("Unknown profile"), "got: {err}");
+
+            // The default profile is untouched.
+            let after = load_profile("default").meta.clone();
+            assert_eq!(before.id, after.id);
+            assert_eq!(before.name, after.name);
+
+            // And no phantom directory was created from the bogus id.
+            assert!(!profiles_dir().join("no-such-id").exists());
+
+            // Renaming a real id still works.
+            rename_profile(&id, "renamed").unwrap();
+            assert_eq!(load_profile(&id).meta.name, "renamed");
+        });
+    }
+
+    /// A typo must never delete the default profile.
+    #[test]
+    fn delete_rejects_unknown_id_instead_of_removing_default() {
+        with_home(|| {
+            let id = create_profile("real", "").unwrap();
+            let default_dir = profiles_dir().join("default");
+            // The default profile is created lazily on first use, so seed it.
+            std::fs::create_dir_all(&default_dir).unwrap();
+            std::fs::write(
+                default_dir.join("profile.json"),
+                br#"{"id":"default","name":"Default","created_at":"","description":""}"#,
+            )
+            .unwrap();
+            assert!(default_dir.join("profile.json").is_file());
+
+            let err = delete_profile("typo-xyz").unwrap_err();
+            assert!(err.to_string().contains("Unknown profile"), "got: {err}");
+            assert!(
+                default_dir.exists(),
+                "default profile must survive a typo'd delete"
+            );
+
+            // A real id is still deletable, and `default` stays protected.
+            delete_profile(&id).unwrap();
+            assert!(!profiles_dir().join(&id).exists());
+            assert!(delete_profile("default").is_err());
+        });
+    }
+
+    /// Exporting a bogus id must fail rather than dump the default profile.
+    #[test]
+    fn export_rejects_unknown_id() {
+        with_home(|| {
+            let id = create_profile("exp", "d").unwrap();
+            assert!(export_profile("nope").is_err());
+            assert!(export_profile(&id).is_ok());
+        });
+    }
+
+    /// `profile_exists` must not be fooled by the `default` fallback.
+    #[test]
+    fn profile_exists_is_exact() {
+        with_home(|| {
+            let id = create_profile("p1", "").unwrap();
+            assert!(profile_exists(&id));
+            assert!(!profile_exists("nope"));
+            assert!(!profile_exists(""));
+            // A directory without profile.json is not a profile.
+            std::fs::create_dir_all(profiles_dir().join("empty-dir")).unwrap();
+            assert!(!profile_exists("empty-dir"));
         });
     }
 }
