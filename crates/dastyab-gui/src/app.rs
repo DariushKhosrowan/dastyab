@@ -4786,12 +4786,15 @@ mod tests {
 
             // Also confirm the learned IP appears among seed endpoints once a
             // verified endpoint record exists (the autopilot ledger feed).
+            // Use a timestamp within the 7-day lookback window of
+            // `load_seed_endpoints` so the entry is never rejected as stale.
+            let now_ts = chrono::Utc::now().to_rfc3339();
             let endpoint = serde_json::json!([{
                 "ip": "104.16.1.1",
                 "port": 443,
                 "verified": true,
-                "ts": "2026-11-09T00:00:00Z",
-                "last_checked": "2026-11-09T00:00:00Z"
+                "ts": now_ts,
+                "last_checked": now_ts
             }]);
             let dir = dastyab_core::store::profiles::profile_dir(pid);
             std::fs::create_dir_all(dir.join("autopilot")).unwrap();
@@ -4810,12 +4813,15 @@ mod tests {
             dastyab_core::cf::ips::learn_clean_ip(pid, "104.16.1.1").unwrap();
             dastyab_core::store::profiles::remember_clean_ip(pid, "104.16.1.1").unwrap();
             // A verified endpoint record (autopilot ledger feed).
+            // Use a timestamp within the 7-day lookback window of
+            // `load_seed_endpoints` so the entry is never rejected as stale.
+            let now_ts = chrono::Utc::now().to_rfc3339();
             let endpoint = serde_json::json!([{
                 "ip": "172.64.0.5",
                 "port": 443,
                 "verified": true,
-                "ts": "2026-11-09T00:00:00Z",
-                "last_checked": "2026-11-09T00:00:00Z"
+                "ts": now_ts,
+                "last_checked": now_ts
             }]);
             let dir = dastyab_core::store::profiles::profile_dir(pid);
             std::fs::create_dir_all(dir.join("autopilot")).unwrap();
