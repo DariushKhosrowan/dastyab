@@ -43,7 +43,7 @@ jobs:
           yes | /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
           /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393"
           
-      - name: Cache Gradle wrapper properties
+      - name: Cache Gradle
         uses: actions/cache@v4
         with:
           path: |
@@ -51,26 +51,44 @@ jobs:
             ~/.gradle/wrapper
           key: gradd-${{ runner.os }}-${{ hashFiles('gradle-wrapper.properties') }}
           
-      - name: Download and setup Gradle Wrapper
+      - name: Setup Gradle Wrapper
         run: |
-          # If gradlew doesn't exist or is broken, download Gradle
-          if [ ! -f "/home/runner/work/dastyab/dastyab/android/gradlew" ] || ! ./android/gradlew --version 2>/dev/null | head -1; then
-            cd /home/runner/work/dastyab/dastyab/android
-            # Download Gradle using mirrored URL or fallback
-            GRADLE_URL="https://services.gradle.org/distributions/gradle-8.5-all.zip"
-            curl -sL -o /tmp/gradle.zip "$GRADLE_URL" 2>/dev/null && \
-            unzip -q /tmp/gradle.zip -d .gradle/wrapper/dists/ && \
-            rm /tmp/gradle.zip && \
-            echo "Gradle downloaded successfully" || {
-              echo "Gradle download failed, trying alternative..."
-              ls /home/runner/android-sdk/***/gradle* 2>/dev/null || true
-            }
+          # Check if gradlew exists and is executable
+          if [ -x "android/gradlew" ]; then
+            echo "Gradle wrapper already present"
+          else
+            # Download Gradle distribution and create wrapper
+            cd android
+            GRADLE_VERSION="8.5"
+            DIST_URL="https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-all.zip"
+            
+            # Try to download Gradle
+            if curl -fsSL -o "gradle.zip" "$DIST_URL" 2>/dev/null; then
+              mkdir -p .gradle/wrapper/dists/gradle-${GRADLE_VERSION}-all
+              unzip -q gradle.zip -d .gradle/wrapper/dists/gradle-${GRADLE_VERSION}-all/
+              rm -f gradle.zip
+              echo "Gradle $GRADLE_VERSION downloaded"
+            else
+              echo "Warning: Could not download Gradle, checking for existing..."
+              ls .gradle/wrapper/dists/ 2>/dev/null || echo "No Gradle distribution found"
+            fi
           fi
+          
+      - name: Make gradlew executable
+        run: |
+          chmod +x android/gradlew 2>/dev/null || true
           
       - name: Assemble Debug APK
         run: |
-          chmod +x android/gradlew
-          ./android/gradlew :app:assembleDebug --no-daemon
+          # Navigate to android directory and run gradle
+          cd android
+          if [ -x "./gradlew" ]; then
+            ./gradlew :app:assembleDebug --no-daemon
+          else
+            echo "ERROR: gradlew not found or not executable"
+            ls -la ./gradlew 2>/dev/null || echo "gradlew not present"
+            exit 1
+          fi
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
