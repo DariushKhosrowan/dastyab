@@ -13,7 +13,7 @@ env:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       
@@ -43,13 +43,33 @@ jobs:
           yes | /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
           /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393"
           
-      - name: Cache Gradle
+      - name: Cache Gradle wrapper properties
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradd-${{ runner.os }}-${{ hashFiles('gradle-wrapper.properties') }}
+          
+      - name: Download and setup Gradle Wrapper
+        run: |
+          # Try to download Gradle distribution
+          chmod +x /home/runner/work/dastyab/dastyab/android/app/gradlew 2>/dev/null || true
+          
+          # If gradlew doesn't exist or is broken, download Gradle
+          if [ ! -f "/home/runner/work/dastyab/dastyab/android/gradlew" ] || ! ./android/app/gradlew --version 2>/dev/null | head -1; then
+            cd /home/runner/work/dastyab/dastyab/android
+            # Download Gradle using mirrored URL or fallback
+            GRADLE_URL="https://services.gradle.org/distributions/gradle-8.5-all.zip"
+            curl -sL -o /tmp/gradle.zip "$GRADLE_URL" 2>/dev/null && \
+            unzip -q /tmp/gradle.zip -d .gradle/wrapper/dists/ && \
+            rm /tmp/gradle.zip && \
+            echo "Gradle downloaded successfully" || {
+              echo "Gradle download failed, trying alternative..."
+              # Try using the Android SDK's existing Gradle if available
+              ls /home/runner/android-sdk/***/gradle* 2>/dev/null || true
+            }
+          fi
           
       - name: Assemble Debug APK
         run: |
