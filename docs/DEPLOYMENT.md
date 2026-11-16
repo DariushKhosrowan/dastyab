@@ -41,13 +41,33 @@ cargo build --release --target x86_64-pc-windows-msvc -p dastyab-cli
 
 ARM targets follow the same pattern.
 
+### Android
+
+The core + CLI are pure Rust (rustls TLS, no C dependencies, no build
+scripts), so they cross-compile to Android cleanly. The only extra piece is
+the Android NDK `clang`, which serves as the cross-linker (API 33+):
+
+```bash
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+
+# ANDROID_NDK_ROOT must point to an installed NDK (e.g. r30)
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android33-clang"
+cargo build --release --target aarch64-linux-android -p dastyab-cli
+# -> target/aarch64-linux-android/release/dastyab
+```
+
+The GitHub Release workflow (`.github/workflows/release.yml`) builds all four
+Android ABIs (`aarch64`, `armv7`, `x86_64`, `i686`) and attaches
+`dastyab-android-<arch>` to every release, alongside the other platforms.
+
 ## Releasing
 
 1. Bump `version` in the workspace `Cargo.toml`.
 2. Update `docs/CHANGELOG.md`.
 3. Tag and push: `git tag vX.Y.Z && git push --tags`.
-4. The CI workflow builds release binaries and attaches them to a GitHub
-   release (see `.github/workflows/`).
+4. The CI workflow builds release binaries for Linux, Windows, macOS and
+   Android and attaches them all to a GitHub Release
+   (see `.github/workflows/`).
 
 ## Self-update
 

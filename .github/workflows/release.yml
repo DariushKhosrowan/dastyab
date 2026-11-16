@@ -111,9 +111,79 @@ jobs:
           path: dist/**
           if-no-files-found: error
 
+  build-android:
+    name: build-android-${{ matrix.arch }}
+    # Cross-compile the `dastyab` CLI for Android. The workspace is pure Rust
+    # (rustls TLS, no C deps, no build scripts), so only the Android NDK clang
+    # is needed as the cross-linker. Artifacts are picked up by the `release`
+    # job below and attached to the GitHub Release alongside the other builds.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+            arch: aarch64
+          - target: armv7-linux-androideabi
+            arch: armv7
+          - target: x86_64-linux-android
+            arch: x86_64
+          - target: i686-linux-android
+            arch: i686
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust + Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Android NDK (r30)
+        run: |
+          NDK_VERSION=r30
+          NDK_ZIP="android-ndk-${NDK_VERSION}-linux.zip"
+          curl -fsSL -o "/tmp/${NDK_ZIP}" "https://dl.google.com/android/repository/${NDK_ZIP}"
+          unzip -q -d /tmp "/tmp/${NDK_ZIP}"
+          echo "ANDROID_NDK_ROOT=/tmp/android-ndk-${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "/tmp/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - name: Build dastyab CLI for Android
+        shell: bash
+        env:
+          ANDROID_NDK_ROOT: /tmp/android-ndk-r30
+        run: |
+          set -euo pipefail
+          TARGET="${{ matrix.target }}"
+          case "$TARGET" in
+            aarch64-linux-android)   NDK_TRIPLE="aarch64-linux-android"   ;;
+            armv7-linux-androideabi) NDK_TRIPLE="armv7a-linux-androideabi" ;;
+            x86_64-linux-android)    NDK_TRIPLE="x86_64-linux-android"    ;;
+            i686-linux-android)      NDK_TRIPLE="i686-linux-android"      ;;
+            *) echo "ERROR: unknown Android target '$TARGET'" >&2; exit 1 ;;
+          esac
+          LINKER="/tmp/android-ndk-r30/toolchains/llvm/prebuilt/linux-x86_64/bin/${NDK_TRIPLE}33-clang"
+          [ -x "$LINKER" ] || { echo "ERROR: NDK clang linker not found: $LINKER" >&2; exit 1; }
+          # Cargo reads CARGO_TARGET_<TRIPLE_UPPER_UNDERSCORE>_LINKER
+          ENV_VAR="CARGO_TARGET_$(printf '%s' "$TARGET" | tr '[:lower:]-' '[:upper:]_')_LINKER"
+          export "$ENV_VAR"="$LINKER"
+
+          cargo build --release --target "$TARGET" -p dastyab-cli
+
+          mkdir -p dist
+          cp "target/${TARGET}/release/dastyab" "dist/dastyab-android-${{ matrix.arch }}"
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dastyab-release-android-${{ matrix.arch }}
+          path: dist/dastyab-android-${{ matrix.arch }}
+          if-no-files-found: error
+
   release:
     name: Create GitHub release
-    needs: build
+    needs:
+      - build
+      - build-android
     runs-on: ubuntu-latest
     steps:
       - name: Download all release assets

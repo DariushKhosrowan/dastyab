@@ -61,7 +61,7 @@ tested, and ready to extend.
 | **Safety** | No null pointers, no data races, no buffer overflows. Memory-safe by construction. |
 | **Speed** | Clean-IP scanning and analytics are fast enough to feel instant. |
 | **Correctness** | Strong types + serde models for every Cloudflare object. |
-| **Distribution** | Easy cross-compile to Linux / macOS / Windows / ARM. |
+| **Distribution** | Easy cross-compile to Linux / macOS / Windows / ARM / Android. |
 
 ---
 
