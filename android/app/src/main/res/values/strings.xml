@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Dastyab</string>
+    <string name="status_checking">Checking binary…</string>
+    <string name="status_downloading">Downloading dastyab binary…</string>
+    <string name="status_ready">Ready — tap a button, or type args and press Run</string>
+    <string name="status_binary_not_ready">Binary not ready</string>
+    <string name="status_error">Error</string>
+    <string name="hint_args">Args (e.g. verify, scan, token-list, accounts, deploy)</string>
+    <string name="btn_run">Run</string>
+    <string name="btn_clear">Clear output</string>
+    <string name="lbl_prefix">\$ dastyab</string>
+</resources>
