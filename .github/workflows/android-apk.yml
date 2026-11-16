@@ -53,11 +53,8 @@ jobs:
           
       - name: Download and setup Gradle Wrapper
         run: |
-          # Try to download Gradle distribution
-          chmod +x /home/runner/work/dastyab/dastyab/android/app/gradlew 2>/dev/null || true
-          
           # If gradlew doesn't exist or is broken, download Gradle
-          if [ ! -f "/home/runner/work/dastyab/dastyab/android/gradlew" ] || ! ./android/app/gradlew --version 2>/dev/null | head -1; then
+          if [ ! -f "/home/runner/work/dastyab/dastyab/android/gradlew" ] || ! ./android/gradlew --version 2>/dev/null | head -1; then
             cd /home/runner/work/dastyab/dastyab/android
             # Download Gradle using mirrored URL or fallback
             GRADLE_URL="https://services.gradle.org/distributions/gradle-8.5-all.zip"
@@ -66,15 +63,14 @@ jobs:
             rm /tmp/gradle.zip && \
             echo "Gradle downloaded successfully" || {
               echo "Gradle download failed, trying alternative..."
-              # Try using the Android SDK's existing Gradle if available
               ls /home/runner/android-sdk/***/gradle* 2>/dev/null || true
             }
           fi
           
       - name: Assemble Debug APK
         run: |
-          chmod +x android/app/gradlew
-          ./android/app/gradlew :app:assembleDebug --no-daemon
+          chmod +x android/gradlew
+          ./android/gradlew :app:assembleDebug --no-daemon
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
