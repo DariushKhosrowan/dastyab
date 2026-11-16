@@ -2,15 +2,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.dastyab.app">
 
-    <!-- dastyab makes outbound HTTPS to Cloudflare / Google; INTERNET is a normal permission. -->
+    <!-- dastyab makes outbound HTTPS to GitHub Releases; INTERNET is a normal permission. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="false"
+        android:fullBackupContent="false"
         android:icon="@android:drawable/ic_dialog_info"
         android:roundIcon="@android:drawable/ic_dialog_info"
         android:label="Dastyab"
         android:theme="@android:style/Theme.Material.Light.DarkActionBar"
+        android:hardwareAccelerated="true"
         android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
@@ -22,6 +24,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".LogViewerActivity"
+            android:exported="false"
+            android:label="View Logs"
+            android:theme="@android:style/Theme.Material.Light.DarkActionBar" />
     </application>
 
 </manifest>

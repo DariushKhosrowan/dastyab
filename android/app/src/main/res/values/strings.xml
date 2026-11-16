@@ -2,11 +2,25 @@
     <string name="app_name">Dastyab</string>
     <string name="status_checking">Checking binary…</string>
     <string name="status_downloading">Downloading dastyab binary…</string>
+    <string name="status_retrying">Retrying in %d seconds…</string>
     <string name="status_ready">Ready — tap a button, or type args and press Run</string>
     <string name="status_binary_not_ready">Binary not ready</string>
     <string name="status_error">Error</string>
+    <string name="error_no_network">No internet connection — check Wi-Fi / mobile data</string>
+    <string name="error_low_storage">Insufficient storage space — free up space and retry</string>
+    <string name="error_download_failed">Download failed: %s</string>
+    <string name="status_cancelled">Cancelled</string>
+    <string name="error_args_too_long">Arguments too long — maximum 4096 characters</string>
+    <string name="error_invalid_args">Invalid characters in arguments</string>
+    <string name="error_unsafe_args">Arguments contain unsafe path separators</string>
+    <string name="btn_cancel">Cancel</string>
     <string name="hint_args">Args (e.g. verify, scan, token-list, accounts, deploy)</string>
     <string name="btn_run">Run</string>
     <string name="btn_clear">Clear output</string>
+    <string name="btn_retry">Retry download</string>
+    <string name="btn_view_logs">View logs</string>
     <string name="lbl_prefix">\$ dastyab</string>
+    <string name="btn_refresh_logs">Refresh log list</string>
+    <string name="log_files">Log files (tap to view)</string>
+    <string name="no_logs_available">No log files available yet</string>
 </resources>

@@ -1,5 +1,7 @@
 package com.dastyab.app
 
+import android.content.Context
+import android.os.Build
 import android.util.Log
 import java.io.File
 import java.io.FileWriter
@@ -19,16 +21,45 @@ object DastyabLogger {
     private var minFileLevel: LogLevel = LogLevel.DEBUG
     private val tagLevels = mutableMapOf<String, LogLevel>()
     private var logDir: File? = null
+    private var context: Context? = null
+    private var sessionId: String = UUID.randomUUID().toString().substring(0, 8)
     private val lock = ReentrantLock()
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US)
 
-    fun init(filesDir: File) {
+    private var appVersion: String? = null
+    private var deviceModel: String? = null
+    private var sdkInt: Int? = null
+    private var abi: String? = null
+
+    fun init(filesDir: File, ctx: Context? = null) {
         lock.lock()
         try {
+            context = ctx
             logDir = File(filesDir, LOG_DIR_NAME)
-            if (!logDir!!.exists()) { logDir!!.mkdirs() }
-            d("DastyabLogger", "Logger initialized. Log dir: %s", logDir!!.absolutePath)
-        } finally { lock.unlock() }
+            if (!logDir!!.exists()) {
+                if (!logDir!!.mkdirs()) {
+                    Log.w("DastyabLogger", "Could not create log dir: ${logDir!!.absolutePath}")
+                }
+            }
+            captureDeviceInfo(ctx)
+            appVersion = ctx?.packageName?.let {
+                try {
+                    ctx.packageManager.getPackageInfo(it, 0).versionName
+                } catch (_: Exception) { null }
+            }
+
+            i("DastyabLogger",
+                "Logger initialized — session=%s, dir=%s, model=%s, sdk=%s, abi=%s, appVersion=%s",
+                sessionId, logDir!!.absolutePath, deviceModel, sdkInt, abi, appVersion)
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    private fun captureDeviceInfo(ctx: Context?) {
+        deviceModel = Build.MODEL
+        sdkInt = Build.VERSION.SDK_INT
+        abi = Build.SUPPORTED_ABIS.firstOrNull() ?: Build.CPU_ABI
     }
 
     fun setMinFileLevel(level: LogLevel) {
@@ -55,17 +86,49 @@ object DastyabLogger {
         log(LogLevel.ERROR, tag, formatted)
     }
 
-    private enum class LogLevel(val priority: Int, val logcat: Int) {
-        VERBOSE(0, Log.VERBOSE), DEBUG(1, Log.DEBUG), INFO(2, Log.INFO),
-        WARN(3, Log.WARN), ERROR(4, Log.ERROR), ASSERT(5, Log.ASSERT);
+    fun w(tag: String, throwable: Throwable, message: String, vararg args: Any?) {
+        val formatted = format(message, args) + "\n" + Log.getStackTraceString(throwable)
+        log(LogLevel.WARN, tag, formatted)
+    }
+
+    fun getSessionId(): String = sessionId
+    fun getLogDir(): File? = logDir
+
+    fun getLogFiles(): List<File> {
+        val dir = logDir ?: return emptyList()
+        return dir.listFiles { f ->
+            f.name.startsWith(LOG_FILE_BASE) && f.name.endsWith(LOG_FILE_EXT)
+        }?.sortedByDescending { it.lastModified() }?.toList() ?: emptyList()
+    }
+
+    fun getLatestLog(): String? {
+        val files = getLogFiles()
+        return if (files.isEmpty()) null else files[0].readText()
     }
 
     private fun log(level: LogLevel, tag: String, message: String) {
         if (level.priority < levelForTag(tag).priority) return
-        val timestamp = dateFormat.format(Date())
+        val now = Date()
+        val timestamp = dateFormat.format(now)
         val thread = Thread.currentThread().name
-        val line = "[%s] [%s] [%s] %s %s".format(timestamp, thread, tag, level.name, message)
+
+        val entry = LogEntry(
+            timestampMs = now.time,
+            timestampIso = timestamp,
+            thread = thread,
+            tag = tag,
+            level = level.name,
+            message = message,
+            appVersion = appVersion,
+            deviceModel = deviceModel,
+            sdkInt = sdkInt,
+            abi = abi,
+            sessionId = sessionId
+        )
+        val line = entry.toLogLine()
+
         try { Log.println(level.logcat, tag, message) } catch (_: Exception) {}
+
         lock.lock()
         try { writeToFile(line) } finally { lock.unlock() }
     }
@@ -81,15 +144,33 @@ object DastyabLogger {
     }
 
     private fun currentLogFile(dir: File): File {
-        val files = dir.listFiles { f -> f.name.startsWith(LOG_FILE_BASE) && f.name.endsWith(LOG_FILE_EXT) }
-            ?: return File(dir, "$LOG_FILE_BASE$LOG_FILE_EXT")
+        val files = dir.listFiles { f ->
+            f.name.startsWith(LOG_FILE_BASE) && f.name.endsWith(LOG_FILE_EXT)
+        } ?: return File(dir, "$LOG_FILE_BASE$LOG_FILE_EXT")
+
         val sorted = files.sortedByDescending { it.lastModified() }
         return if (sorted.isEmpty() || sorted[0].length() >= MAX_LOG_FILE_SIZE) {
-            File(dir, "$LOG_FILE_BASE${files.size}$LOG_FILE_EXT")
-        } else { sorted[0] }
+            val nextIndex = files.size
+            File(dir, "$LOG_FILE_BASE$nextIndex$LOG_FILE_EXT")
+        } else {
+            sorted[0]
+        }
     }
 
     private fun format(template: String, args: Array<out Any?>): String {
-        return try { java.text.MessageFormat.format(template, args) } catch (_: Exception) { template }
+        return try {
+            java.text.MessageFormat.format(template, args)
+        } catch (_: Exception) {
+            template
+        }
+    }
+
+    private enum class LogLevel(val priority: Int, val logcat: Int) {
+        VERBOSE(0, Log.VERBOSE),
+        DEBUG(1, Log.DEBUG),
+        INFO(2, Log.INFO),
+        WARN(3, Log.WARN),
+        ERROR(4, Log.ERROR),
+        ASSERT(5, Log.ASSERT);
     }
 }
