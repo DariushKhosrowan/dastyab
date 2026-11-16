@@ -51,19 +51,14 @@ jobs:
             ~/.gradle/wrapper
           key: gradd-${{ runner.os }}-${{ hashFiles('gradle-wrapper.properties') }}
           
-      - name: Verify gradlew exists
-        run: |
-          ls -la /home/runner/work/$(github.run_id)/dastyab/gradlew 2>/dev/null || echo "gradlew not found at repo root"
-          find /home/runner/work -name "gradlew" -maxdepth 4 2>/dev/null | head -5
-          
       - name: Assemble Debug APK
         run: |
-          chmod +x gradlew
-          ./gradlew :app:assembleDebug --no-daemon
+          chmod +x android/app/gradlew
+          ./android/app/gradlew :app:assembleDebug --no-daemon
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
