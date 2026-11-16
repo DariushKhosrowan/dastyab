@@ -49,8 +49,12 @@ object DastyabLogger {
             }
 
             i("DastyabLogger",
-                "Logger initialized — session=%s, dir=%s, model=%s, sdk=%s, abi=%s, appVersion=%s",
-                sessionId, logDir!!.absolutePath, deviceModel, sdkInt, abi, appVersion)
+                "Logger initialized — session=" + sessionId +
+                    ", dir=" + logDir!!.absolutePath +
+                    ", model=" + deviceModel +
+                    ", sdk=" + sdkInt +
+                    ", abi=" + abi +
+                    ", appVersion=" + appVersion)
         } finally {
             lock.unlock()
         }
@@ -59,7 +63,9 @@ object DastyabLogger {
     private fun captureDeviceInfo(ctx: Context?) {
         deviceModel = Build.MODEL
         sdkInt = Build.VERSION.SDK_INT
-        abi = Build.SUPPORTED_ABIS.firstOrNull() ?: Build.CPU_ABI
+        abi = try {
+            Build.SUPPORTED_ABIS?.firstOrNull() ?: Build.CPU_ABI
+        } catch (_: Throwable) { null }
     }
 
     fun setMinFileLevel(level: LogLevel) {
@@ -72,6 +78,15 @@ object DastyabLogger {
         try { tagLevels[tag] = level } finally { lock.unlock() }
     }
 
+    /** Reset min file level and per-tag levels to defaults (DEBUG / none). */
+    fun resetLevels() {
+        lock.lock()
+        try {
+            minFileLevel = LogLevel.DEBUG
+            tagLevels.clear()
+        } finally { lock.unlock() }
+    }
+
     private fun levelForTag(tag: String): LogLevel = tagLevels[tag] ?: minFileLevel
 
     fun v(tag: String, message: String, vararg args: Any?) = log(LogLevel.VERBOSE, tag, format(message, args))
@@ -82,13 +97,21 @@ object DastyabLogger {
     fun wtf(tag: String, message: String, vararg args: Any?) = log(LogLevel.ASSERT, tag, format(message, args))
 
     fun e(tag: String, throwable: Throwable, message: String, vararg args: Any?) {
-        val formatted = format(message, args) + "\n" + Log.getStackTraceString(throwable)
+        val formatted = format(message, args) + "\n" + formatThrowable(throwable)
         log(LogLevel.ERROR, tag, formatted)
     }
 
     fun w(tag: String, throwable: Throwable, message: String, vararg args: Any?) {
-        val formatted = format(message, args) + "\n" + Log.getStackTraceString(throwable)
+        val formatted = format(message, args) + "\n" + formatThrowable(throwable)
         log(LogLevel.WARN, tag, formatted)
+    }
+
+    /** Render a throwable's stack trace without depending on android.util.Log
+     *  (which is unavailable in plain-JVM unit tests). */
+    private fun formatThrowable(t: Throwable): String = try {
+        t.stackTraceToString()
+    } catch (_: Throwable) {
+        t.toString()
     }
 
     fun getSessionId(): String = sessionId

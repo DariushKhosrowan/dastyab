@@ -330,3 +330,44 @@ This is the discovery+selection layer; a relay *transport* that forwards
 traffic through the candidate remains the follow-up (tracked in ROADMAP).
 6 unit tests.
 
+
+## 31. `ops/flow.rs` — embedded Google Flow bridge
+Companion to `ops/aistudio.rs`, for the `flow.google.com` region gate.
+`FLOW_PY` embeds the stdlib-only `dastyab-flow.py` helper via
+`include_str!`, and `materialise()` stages it under `~/.dastyab/bin/`,
+rewriting whenever the embedded text differs so an upgraded binary never
+runs a stale copy. `$DASTYAB_FLOW` overrides the staged path.
+
+The helper itself (not Rust) owns the runtime logic, because it is the
+part that must be debuggable and re-runnable without a rebuild. Its layer
+ladder: **L0** node supply (own ranked pool + aistudio pool + nekoray
+profiles + harvested `nodes.json`, deduped by `addr:port`); **L1** a
+proven xray config builder (reality/tls/ws/xhrpc/vision, with `flow`
+dropped when the core or transport cannot honour it); **L2** an optional
+two-hop chain via `sockopt.dialerProxy` so the local network only sees
+the entry while Google only sees the exit egress; **L3** the country gate
+against Google's official Flow rollout list (151 codes, embedded from
+`support.google.com/flow/answer/16353544`); **L4** live reachability of
+flow.google.com **and** accounts.google.com plus an app-shell check
+(`AiSandboxAngularFrontend`), because the region decision happens in
+signed-in backend RPCs and a bare HTTP 200 is not proof; **L5** IP
+quality from ip-api's `proxy`/`hosting` flags feeding the ranking; **L6**
+a dedicated Chrome profile pinned to the local SOCKS5 proxy so only Flow
+traffic rides the tunnel; **L7** a watchdog that re-probes and rotates.
+
+**Browser proof (`prove`).** The region gate is *not* in the page HTML —
+the app shell loads for every IP, and the rejection is decided by Flow's
+own backend call and then rendered client-side. So `prove` drives a
+headless Chromium through the tunnel and inspects the rendered DOM for
+the rejection markers (`unsupported-country-title`, "not available in
+your country yet"); the same check runs inside `probe_gates`, which is
+why a route is only reported usable when a browser actually gets the app.
+Verified both ways on Chrome 148: `/unsupported-country` yields the
+markers, `/` yields none.
+
+Exposed as `dastyab flow {start|next|stop|status|verify|best|prove|watch|
+build-pool|countries}`, with `--hops 1|2`, `--country XX` and
+`--try N`. Uses SOCKS port 10860 so it can run alongside the aistudio
+tunnel (10850). 4 unit tests in Rust (including a test that the embedded
+country list still matches Google's document) and 44 offline tests in
+`tests/test_flow.py`.

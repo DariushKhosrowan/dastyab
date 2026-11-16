@@ -14,7 +14,7 @@ class BinaryUtilsTest {
 
     @Before
     fun setUp() {
-        tempDir = File(java.io.File.createTempFile("binary-test-", ".dir").apply { delete() })
+        tempDir = java.io.File.createTempFile("binary-test-", ".dir").apply { delete() }
         tempDir.mkdirs()
     }
 
@@ -26,11 +26,10 @@ class BinaryUtilsTest {
     @Test
     fun `valid ELF binary returns true`() {
         val elfFile = File(tempDir, "valid-elf")
-        writeBytes(elfFile, ELF_MAGIC + byteArrayOf(0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08))
-        // Make it "executable" — on a non-Android JVM canExecute() may return false
-        // depending on permissions; but our test just checks the logic path.
-        assertTrue(elfFile.exists())
-        assertTrue(elfFile.length() > 4096)
+        // Pad to > 4096 bytes so it passes the min-size check.
+        writeBytes(elfFile, ELF_MAGIC + ByteArray(4096, { it.toByte() }))
+        elfFile.setExecutable(true)
+        assertTrue(BinaryUtils.isValidElfBinary(elfFile))
     }
 
     @Test

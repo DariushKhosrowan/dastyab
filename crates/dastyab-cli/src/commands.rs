@@ -212,6 +212,13 @@ pub async fn run(
         Command::Autonomy { action } => cmd_autonomy(&profile, action).await,
         Command::Onboard { action } => cmd_onboard(&profile, action),
         Command::Aistudio { action, arg } => cmd_aistudio(&action, arg.as_deref()),
+        Command::Flow {
+            action,
+            arg,
+            hops,
+            country,
+            try_n,
+        } => cmd_flow(&action, arg.as_deref(), hops, country.as_deref(), try_n),
         Command::Platform {
             action,
             dry_run,
@@ -4469,6 +4476,151 @@ fn cmd_aistudio(action: &str, arg: Option<&str>) -> Result<(), CFError> {
             },
             "Run `dastyab aistudio verify` to rebuild the server pool, or set \
              DASTYAB_XRAY=/path/to/xray if no core is installed.",
+        ));
+    }
+    Ok(())
+}
+
+/// Locate the Flow bridge script, mirroring `find_aistudio_script`:
+/// `$DASTYAB_FLOW` wins, then the staged (embedded) copy, then the
+/// well-known on-disk locations. An upgraded binary never keeps running
+/// a stale staged script — `materialise` rewrites it on mismatch.
+fn find_flow_script() -> Option<std::path::PathBuf> {
+    const NAME: &str = "dastyab-flow.py";
+
+    // An explicit override always wins: it is the documented escape hatch.
+    if let Some(p) = std::env::var_os("DASTYAB_FLOW") {
+        let p = std::path::PathBuf::from(p);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join(NAME));
+            if let Some(prefix) = dir.parent() {
+                candidates.push(prefix.join("share").join("dastyab").join(NAME));
+            }
+        }
+    }
+
+    if let Some(home) = dastyab_core::store::home_dir() {
+        candidates.push(home.join(".dastyab").join("bin").join(NAME));
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join(NAME));
+        candidates.push(cwd.join("scripts").join(NAME));
+    }
+
+    // A staged copy (written by a previous run) is only trustworthy if it
+    // matches the script compiled into *this* binary; an upgraded binary
+    // must never keep executing the old helper. `materialise` rewrites
+    // on mismatch.
+    if let Some(staged) = dastyab_core::ops::flow::materialise() {
+        return Some(staged);
+    }
+
+    // Fall back to a copy the user keeps themselves (checkout or custom dir).
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+/// `dastyab flow ...` — thin wrapper over the Python bridge, mirroring
+/// `cmd_aistudio`. The helper owns the tunnel, gates and watchdog; the
+/// CLI adds arg normalisation, `--hops`/`--country` forwarding, and
+/// faithful error propagation (the helper's own last stderr line names
+/// the real cause, so it is preserved verbatim).
+fn cmd_flow(
+    action: &str,
+    arg: Option<&str>,
+    hops: Option<u8>,
+    country: Option<&str>,
+    try_n: Option<u32>,
+) -> Result<(), CFError> {
+    let script = find_flow_script().ok_or_else(|| {
+        CFError::new(
+            "Flow bridge not found",
+            "Could not locate dastyab-flow.py".to_string(),
+            "Set DASTYAB_FLOW=/path/to/dastyab-flow.py, or run from the \
+             project checkout, or copy the script into ~/.dastyab/bin/."
+                .to_string(),
+        )
+    })?;
+    let action = action.trim().to_lowercase();
+
+    // Normalize natural spellings (mirrors cmd_aistudio).
+    let action = match action.as_str() {
+        "start" | "on" | "up" | "open" => "start".to_string(),
+        "stop" | "off" | "down" => "stop".to_string(),
+        "watch" | "watchdog" | "guard" => "watch".to_string(),
+        "status" | "verify" | "best" | "next" | "build-pool" | "countries" => action,
+        other => other.to_string(),
+    };
+
+    let mut cmd = std::process::Command::new("python3");
+    cmd.arg(&script).arg(&action);
+    if let Some(a) = arg {
+        cmd.arg(a);
+    }
+    if action == "start" {
+        if let Some(h) = hops {
+            cmd.arg("--hops").arg(h.to_string());
+        }
+        if let Some(c) = country {
+            cmd.arg("--country").arg(c);
+        }
+    } else {
+        // verify / best also accept --country and --try.
+        if let Some(c) = country {
+            cmd.arg("--country").arg(c);
+        }
+        if action == "best" || action == "prove" {
+            if let Some(n) = try_n {
+                cmd.arg("--try").arg(n.to_string());
+            }
+        }
+    }
+
+    let out = cmd.output().map_err(|e| {
+        CFError::new(
+            "Flow launch failed",
+            format!("Could not run {}: {e}", script.display()),
+            "Make sure python3 and the dastyab-flow.py script exist.".to_string(),
+        )
+    })?;
+
+    print!("{}", String::from_utf8_lossy(&out.stdout));
+    if !out.stderr.is_empty() {
+        eprint!("{}", String::from_utf8_lossy(&out.stderr));
+    }
+
+    if !out.status.success() {
+        // The helper already printed the specific reason to stderr (no
+        // pool, no xray core, gate failure, every route dead). Preserve
+        // the most useful line instead of replacing it with a generic
+        // "check the tunnel".
+        let detail = String::from_utf8_lossy(&out.stderr);
+        let reason = detail
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let reason = reason.trim_start_matches("[flow] ").to_string();
+        return Err(CFError::new(
+            "Flow failed",
+            if reason.is_empty() {
+                format!("exit code {:?}", out.status.code())
+            } else {
+                reason
+            },
+            "Run `dastyab flow best --try 20` to re-scan and re-rank routes, \
+             or set DASTYAB_XRAY=/path/to/xray if no core is installed."
+                .to_string(),
         ));
     }
     Ok(())

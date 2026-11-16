@@ -170,6 +170,64 @@ dastyab-gui
 
 ---
 
+## Region-locked Google services
+
+Some Google products gate on the **egress IP**, not on your account: from an
+unsupported region they redirect you elsewhere and refuse to load. DastYab
+ships two independent helpers that put a *verified* foreign egress in front of
+the browser — each on its own SOCKS port, own pool, and own browser profile,
+so they can run at the same time.
+
+| Feature | Reaches | Gate it solves | Port |
+|---|---|---|---|
+| `dastyab aistudio` | AI Studio + Gemini API | "your region may not be supported" | 10850 |
+| `dastyab flow` | **flow.google.com** | `/unsupported-country` — "Flow is not available in your country yet." | 10860 |
+
+### `dastyab flow` — multi-layer Google Flow access
+
+```bash
+dastyab flow best       # scan all node sources, verify, rank, save the pool
+dastyab flow start      # bring up the verified egress + open Flow in Chrome
+dastyab flow status     # egress IP, country, and a live gate verdict
+dastyab flow prove      # PROVE it in a real browser (decisive check)
+dastyab flow next       # rotate to the next ranked route
+dastyab flow watch      # self-healing watchdog (re-probes, auto-rotates)
+dastyab flow stop
+
+dastyab flow start --hops 2 --country DE   # two-hop chain, German egress
+dastyab flow countries                     # Google's official Flow country list
+```
+
+It layers several independent improvements instead of trusting one node:
+
+- **Supply** — merges every node source (its own ranked pool, the
+  aistudio-verified pool, nekoray profiles, and the harvested `nodes.json`),
+  deduped by `addr:port`.
+- **Chain** — `--hops 2` routes *you → entry → exit → Google* via xray
+  `dialerProxy`, so your local network only ever sees the entry connection
+  while Google only sees the exit egress.
+- **Country gate** — the egress must be in Google's official Flow rollout list
+  (151 countries, embedded and unit-tested against the source document).
+- **Live proof** — flow.google.com *and* accounts.google.com must answer
+  through that exact egress, with the real Flow app shell. A bare HTTP 200 is
+  not accepted: the region decision happens in signed-in backend RPCs, so the
+  helper verifies the country and reachability rather than trusting a status
+  code.
+- **IP quality** — ranking prefers egress that ip-api does not flag as a
+  proxy/datacenter host, because Flow rejects many flagged IPs even inside
+  supported countries.
+- **Browser isolation** — a dedicated Chrome profile pinned to the tunnel, so
+  only Flow traffic leaves through it and your normal browser keeps your real
+  IP and logins.
+
+> **What it cannot fix:** the tunnel changes the IP, not the account. Flow
+> still needs a signed-in Google account (18+) with an AI Pro/Ultra plan, and
+> some features (e.g. Avatars in the EEA/UK/CH) are disabled by region
+> regardless. Reaching a region-restricted service this way may conflict with
+> Google's Terms of Service — that risk is yours to weigh.
+
+---
+
 ## Architecture at a glance
 
 ```
@@ -200,6 +258,9 @@ dastyab/
 │   │       ├── stealth.rs     # anti-bot pacing + worker humanization
 │   │       ├── geoip.rs       # country tagging
 │   │       ├── qr.rs          # QR matrix rendering
+│   │       ├── ops/aistudio.rs # embedded AI Studio bridge (region gate)
+│   │       ├── ops/flow.rs    # embedded Google Flow bridge (region gate)
+│   │       ├── tunnel/multilayer.rs # rescue-chain composition + egress probe
 │   │       └── error.rs       # structured CFError taxonomy
 │   ├── dastyab-cli/         # clap-based CLI (binary: dastyab)
 │   ├── dastyab-tui/         # ratatui dashboard (binary: dastyab-tui)
@@ -227,6 +288,7 @@ All state lives under `~/.dastyab/`:
 │       ├── accounts.json   # remembered Cloudflare accounts
 │       ├── history.json    # generated vless configs
 │       ├── cleanips.json   # scanned clean IPs
+│       ├── flow_pool.json  # ranked, gate-verified Flow egress routes
 │       └── config.json     # per-profile settings
 ├── backups/                # exported profile bundles
 └── legacy/                 # pre-0.1 flat files (one-time migration)

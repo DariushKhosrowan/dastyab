@@ -1,9 +1,12 @@
 package com.dastyab.app
 
+import io.mockk.mockk
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -13,7 +16,7 @@ class CrashHandlerTest {
 
     @Before
     fun setUp() {
-        tempDir = File(java.io.File.createTempFile("crash-test-", ".dir").apply { delete() })
+        tempDir = java.io.File.createTempFile("crash-test-", ".dir").apply { delete() }
         tempDir.mkdirs()
     }
 
@@ -22,37 +25,31 @@ class CrashHandlerTest {
         tempDir.deleteRecursively()
     }
 
+    /** A harmless mock Context — CrashHandler only passes it through to the logger. */
+    private fun mockCtx(): android.content.Context = mockk(relaxed = true)
+
     @Test
     fun `crash directory is created on install`() {
-        CrashHandler.install(
-            // We pass a mock-like context — CrashHandler only uses Context
-            // for DastyabLogger init, which we don't need here for this test.
-            // The crashDir is created from filesDir.
-            object : android.content.ContextWrapper(null!!) {},
-            tempDir
-        )
+        CrashHandler.install(mockCtx(), tempDir)
         val crashDir = File(tempDir, "crashes")
-        // Note: install() calls DastyabLogger.init which may log. The crash
-        // directory creation is the key behavior.
-        assertTrue(true) // If we got here without exception, install works
+        assertTrue(crashDir.exists(), "crashes dir should be created by install()")
+        assertTrue(crashDir.isDirectory)
     }
 
     @Test
     fun `getCrashFiles returns empty list when no crashes`() {
-        CrashHandler.install(
-            object : android.content.ContextWrapper(null!!) {},
-            tempDir
-        )
+        CrashHandler.install(mockCtx(), tempDir)
         val files = CrashHandler.getCrashFiles()
         assertNotNull(files)
         assertTrue(files.isEmpty())
     }
 
     @Test
-    fun `crash file is written when handleCrash is called`() {
-        // We can't easily trigger a real uncaught exception in a unit test,
-        // but we can verify handleCrash logic by checking the crash file
-        // format. This is more of an integration test.
-        assertTrue(true)
+    fun `uncaught exception handler is installed`() {
+        val before = Thread.getDefaultUncaughtExceptionHandler()
+        CrashHandler.install(mockCtx(), tempDir)
+        val after = Thread.getDefaultUncaughtExceptionHandler()
+        assertNotNull(after)
+        assertFalse(after === before, "default handler should be replaced by CrashHandler")
     }
 }

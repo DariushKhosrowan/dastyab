@@ -1,5 +1,64 @@
 # Changelog
 
+## Unreleased — Google Flow access (`dastyab flow`)
+
+New independent feature: reaching **flow.google.com** from a region where
+Google Flow answers by redirecting to `/unsupported-country` with "Flow is
+not available in your country yet." The tunnel fixes the *IP side* of that
+gate by finding an egress in a supported country and proving it live.
+
+### Added
+- **`dastyab flow`** (new subcommand + `dastyab-flow.py` helper), with ten
+  actions: `start`, `next`, `stop`, `status`, `verify`, `best`, **`prove`**,
+  `watch`, `build-pool`, `countries`.
+- **`prove` — decisive browser-level verification.** Found while testing:
+  the region rejection is *not* in the page HTML (the app shell loads for
+  every IP); Flow decides after its own backend call and renders the
+  rejection client-side, so no HTTP status check can see it. `prove` drives
+  a headless Chromium through the tunnel and scans the rendered DOM for the
+  rejection markers. Validated with both controls on Chrome 148:
+  `/unsupported-country` produces the markers, `/` produces none. The same
+  check now runs inside `probe_gates`, so "usable" means a browser loaded
+  the app — not merely that the host answered.
+- **Multi-layer egress selection.** L0 merges every node source (own ranked
+  pool, the aistudio-verified pool, nekoray profiles, harvested
+  `nodes.json`) and dedupes by `addr:port`. L1 builds proven xray configs.
+  L2 adds an optional **two-hop chain** (`sockopt.dialerProxy`) so the local
+  network only sees the entry node while Google only sees the exit egress.
+  L3 gates the egress country against Google's **official Flow rollout
+  list** (151 codes, embedded from support.google.com). L4 requires live
+  reachability of flow.google.com *and* accounts.google.com plus the real
+  app shell — a bare HTTP 200 is not treated as proof, because the region
+  decision happens in signed-in backend RPCs. L5 ranks by ip-api's
+  `proxy`/`hosting` flags. L6 pins a dedicated Chrome profile to the local
+  SOCKS5 proxy. L7 keeps it alive with a rotating watchdog.
+- **Verified live, not stored.** `status` and `verify` probe through the
+  tunnel and report what is true now; a stale `egress` field is never
+  presented as current. An egress whose country cannot be proven **fails**
+  the gate rather than passing by default.
+- **Pool safety.** A scan that finds nothing keeps the existing pool
+  instead of overwriting it with `[]`.
+- **Isolation from aistudio.** Dedicated SOCKS port 10860, own pid/config
+  files, own ranked pool (`flow_pool.json`), own browser profile — so both
+  tunnels can run at once.
+- Rust: `ops/flow.rs` embeds the helper with `materialise()` refresh
+  semantics and 4 unit tests (including one that fails if the embedded
+  country list drifts from Google's document). CLI: `Command::Flow` with
+  `--hops` and `--country`, wired through `find_flow_script`/`cmd_flow`.
+- Tests: 39 offline cases in `tests/test_flow.py` (country gate, geo-proof
+  requirement, one-hop vs two-hop topology, ranking order, pool safety);
+  docs in `docs/MODULES.md` §31.
+
+### Documented limitations
+- The tunnel only fixes the **IP-side** gate. Flow still requires a Google
+  account (18+) with an AI Pro/Ultra plan; purchasing credits is not
+  available in every region, and Avatars are unavailable in the EEA,
+  Switzerland and the UK regardless of tunnel.
+- Free public nodes are volatile — hence the live gate on every command and
+  the rotating watchdog.
+- Using a tunnel to reach a region-restricted service may conflict with
+  Google's Terms of Service; the account risk is the user's to accept.
+
 ## v0.1.7 — 2026-11-15
 
 `dastyab aistudio` failed for real users on installed binaries even though

@@ -209,7 +209,12 @@ jobs:
           mv /tmp/android-sdk/cmdline-tools/cmdline-tools /tmp/android-sdk/cmdline-tools/latest
           yes | /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null
           /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" >/dev/null
-          echo "ANDROID_HOME=/tmp/android-sdk" >> "$GITHUB_ENV"
+          # Clear ANDROID_HOME (set ANDROID_SDK_ROOT instead) so Gradle sees
+          # exactly one SDK path — mixing ANDROID_HOME=/tmp/android-sdk with
+          # the runner's ANDROID_SDK_ROOT makes AGP 8.x fail with
+          # "Several environment variables contain different paths to the SDK".
+          echo "ANDROID_HOME=" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=/tmp/android-sdk" >> "$GITHUB_ENV"
 
       - name: Build signed release APK
         run: |

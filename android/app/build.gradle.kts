@@ -64,6 +64,9 @@ android {
     }
 
     testOptions {
+        // JVM unit tests call android.util.Log and android.os.Build stubs;
+        // without this they throw "not mocked" and logger tests fail.
+        unitTests.isReturnDefaultValues = true
         unitTests.all { it.useJUnit() }
     }
 }

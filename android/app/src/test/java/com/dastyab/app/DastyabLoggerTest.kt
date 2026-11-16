@@ -14,14 +14,15 @@ class DastyabLoggerTest {
 
     @Before
     fun setUp() {
-        tempDir = File(java.io.File.createTempFile("dastyab-test-", ".dir").apply { delete() })
+        tempDir = java.io.File.createTempFile("dastyab-test-", ".dir").apply { delete() }
         tempDir.mkdirs()
         DastyabLogger.init(tempDir)
     }
 
     @After
     fun tearDown() {
-        // Clean up temp files
+        // Clean up temp files, and reset level state so tests are order-independent.
+        DastyabLogger.resetLevels()
         tempDir.deleteRecursively()
     }
 
@@ -57,7 +58,7 @@ class DastyabLoggerTest {
 
     @Test
     fun `min file level filters logs`() {
-        DastyabLogger.setMinFileLevel(LogLevel.ERROR)
+        DastyabLogger.setMinFileLevel(com.dastyab.app.DastyabLogger.LogLevel.ERROR)
         DastyabLogger.d("TestTag", "debug message should be filtered")
         DastyabLogger.i("TestTag", "info message should be filtered")
         DastyabLogger.w("TestTag", "warn message should be filtered")
@@ -72,8 +73,8 @@ class DastyabLoggerTest {
 
     @Test
     fun `tag level overrides min level`() {
-        DastyabLogger.setMinFileLevel(LogLevel.ERROR)
-        DastyabLogger.setTagLevel("SpecialTag", LogLevel.DEBUG)
+        DastyabLogger.setMinFileLevel(com.dastyab.app.DastyabLogger.LogLevel.ERROR)
+        DastyabLogger.setTagLevel("SpecialTag", com.dastyab.app.DastyabLogger.LogLevel.DEBUG)
         DastyabLogger.e("TestTag", "error on default tag appears")
         DastyabLogger.d("SpecialTag", "debug on special tag appears")
         val files = DastyabLogger.getLogFiles()
@@ -84,12 +85,14 @@ class DastyabLoggerTest {
 
     @Test
     fun `log files roll over when exceeding max size`() {
-        // Each log line is small; we can't easily trigger rotation in a unit test
-        // without writing MBs of data. Instead verify the rollover logic exists.
-        val filesBefore = DastyabLogger.getLogFiles().size
+        // Rollover only happens when a log file reaches MAX_LOG_FILE_SIZE (2 MB);
+        // normal writes append to the same file. Verify no spurious rollover:
+        val filesBefore = DastyabLogger.getLogFiles().map { it.name }.toSet()
         DastyabLogger.i("TestTag", "Log entry for rollover test")
-        val filesAfter = DastyabLogger.getLogFiles().size
-        assertEquals(filesBefore + 1, filesAfter)
+        val filesAfter = DastyabLogger.getLogFiles().map { it.name }.toSet()
+        assertEquals(filesBefore, filesAfter)
+        val content = DastyabLogger.getLogFiles()[0].readText()
+        assertTrue(content.contains("Log entry for rollover test"))
     }
 
     @Test

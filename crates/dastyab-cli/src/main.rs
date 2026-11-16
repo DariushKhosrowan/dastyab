@@ -463,6 +463,35 @@ enum Command {
         #[arg()]
         arg: Option<String>,
     },
+    /// Launch/stop the multi-layer Google Flow tunnel. Verifies a
+    /// supported-country egress (Google's official Flow list), optional
+    /// two-hop chaining, IP-quality ranking, and a dedicated pinned
+    /// browser — then keeps it alive with a watchdog.
+    ///
+    /// Simple usage:
+    ///   dastyab flow start           # tunnel + open Flow in Chrome
+    ///   dastyab flow status          # egress + gate verdict
+    ///   dastyab flow next            # rotate to the next ranked route
+    ///   dastyab flow stop            # stop the tool and the tunnel
+    ///   dastyab flow best            # scan wider, re-rank the pool
+    ///   dastyab flow watch           # self-healing watchdog
+    Flow {
+        #[arg()]
+        action: String,
+        /// Action argument: route index for `start`, seconds for `watch`,
+        /// or the URI file for `build-pool`.
+        #[arg()]
+        arg: Option<String>,
+        /// Hops for `start`: 1 = direct node, 2 = entry->exit chain.
+        #[arg(long)]
+        hops: Option<u8>,
+        /// Require this egress country (ISO code) for start/verify/best.
+        #[arg(long)]
+        country: Option<String>,
+        /// How many candidates `best` should test before giving up.
+        #[arg(long = "try", value_name = "N")]
+        try_n: Option<u32>,
+    },
     /// Apply / teardown the doctrine A+D platform network rules (anti-loop
     /// fwmark routing + TCP MSS clamp). Use `--dry-run` to preview commands.
     Platform {

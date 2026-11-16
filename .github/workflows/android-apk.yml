@@ -11,9 +11,6 @@ on:
       - 'android/**'
   workflow_dispatch:
 
-env:
-  ANDROID_HOME: /tmp/android-sdk
-
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -27,30 +24,68 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Android SDK (platform 34 + build-tools 34.0.0)
+      # Use the runner's preinstalled SDK at /usr/local/lib/android/sdk and
+      # clear ANDROID_HOME so Gradle sees exactly one SDK location (mixing
+      # ANDROID_HOME=/tmp/android-sdk with ANDROID_SDK_ROOT=/usr/local/lib/
+      # android/sdk made AGP 8.x abort with "Several environment variables
+      # contain different paths to the SDK").
+      - name: Ensure SDK components (platform 34 + build-tools 34.0.0)
+        env:
+          ANDROID_HOME: ""
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          mkdir -p /tmp/android-sdk/cmdline-tools
-          curl -fsSL -o /tmp/clt.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-          unzip -q -d /tmp/android-sdk/cmdline-tools /tmp/clt.zip
-          mv /tmp/android-sdk/cmdline-tools/cmdline-tools /tmp/android-sdk/cmdline-tools/latest
-          yes | /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null
-          /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" >/dev/null
+          SDK=/usr/local/lib/android/sdk
+          if [ ! -d "$SDK/platforms/android-34" ]; then
+            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools" >/dev/null
+          fi
 
-      - name: Build debug APK
+      - name: Build signed release APK
+        env:
+          ANDROID_HOME: ""
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew :app:assembleDebug --no-daemon
+          ./gradlew :app:assembleRelease --no-daemon
 
       - name: Verify APK structure and signature
+        env:
+          ANDROID_HOME: ""
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { ls android/app/build/outputs/apk/release/ >&2; exit 1; }
           unzip -t "$APK" > /dev/null || { echo "ERROR: corrupt APK zip" >&2; exit 1; }
-          java -jar /tmp/android-sdk/build-tools/34.0.0/lib/apksigner.jar verify --verbose "$APK"
+          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner verify --verbose "$APK"
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "release APK sha256: $SHA"
 
-      - name: Upload APK
+      - name: Copy APK with versioned name
+        run: |
+          VERSION=$(grep -o 'versionName = "[^"]*"' android/app/build.gradle.kts | cut -d'"' -f2)
+          cp android/app/build/outputs/apk/release/app-release.apk "DastYab-${VERSION}-android.apk"
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          name: dastyab-release-apk
+          path: DastYab-*-android.apk
+          retention-days: 90
+
+      # Attach the APK to the latest release (updating SHA256SUMS.txt with the
+      # APK checksum) so users can sideload straight from GitHub Releases.
+      - name: Attach APK to latest release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
+          gh release upload "$TAG" DastYab-*-android.apk --clobber
+          # Regenerate SHA256SUMS.txt including the APK and re-upload
+          gh release download "$TAG" --pattern 'SHA256SUMS.txt' --clobber || touch SHA256SUMS.txt
+          sha256sum DastYab-*-android.apk >> SHA256SUMS.txt
+          # keep only basenames in the sums file
+          sed -i 's|  .*/|  |' SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --clobber

@@ -4,110 +4,91 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.os.Build
-import io.mockk.mockk
+import android.telephony.TelephonyManager
 import io.mockk.every
+import io.mockk.mockk
 import org.junit.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+/**
+ * NetworkUtilsTest
+ *
+ * Note: on the plain JVM, Build.VERSION.SDK_INT defaults to 0, so
+ * NetworkUtils.isOnline() takes the pre-M (legacy getActiveNetworkInfo)
+ * branch. We therefore mock BOTH the legacy API and the modern API on the
+ * ConnectivityManager mock, so the test is valid regardless of which branch
+ * the runtime selects.
+ */
 class NetworkUtilsTest {
+
+    private fun mockContext(cm: ConnectivityManager): Context {
+        val context = mockk<Context>()
+        every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns cm
+        return context
+    }
+
+    private fun mockCm(
+        activeNetwork: Network? = null,
+        caps: NetworkCapabilities? = null,
+        legacyInfo: android.net.NetworkInfo? = null
+    ): ConnectivityManager {
+        val cm = mockk<ConnectivityManager>(relaxed = true)
+        every { cm.activeNetwork } returns activeNetwork
+        if (activeNetwork != null) {
+            every { cm.getNetworkCapabilities(activeNetwork) } returns caps
+        }
+        every { cm.activeNetworkInfo } returns legacyInfo
+        return cm
+    }
+
+    private fun connectedInfo(connected: Boolean): android.net.NetworkInfo {
+        val info = mockk<android.net.NetworkInfo>()
+        every { info.isConnected } returns connected
+        return info
+    }
+
+    private fun capsWith(vararg transports: Int): NetworkCapabilities {
+        val caps = mockk<NetworkCapabilities>()
+        every { caps.hasTransport(any()) } answers {
+            transports.contains(firstArg<Int>())
+        }
+        return caps
+    }
 
     @Test
     fun `isOnline returns true when Wi-Fi is available`() {
-        val context = mockk<Context>()
-        val cm = mockk<ConnectivityManager>()
-        val network = mockk<Network>()
-        val caps = mockk<NetworkCapabilities>()
-
-        every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns cm
-        every { cm.activeNetwork } returns network
-        every { cm.getNetworkCapabilities(network) } returns caps
-        every { caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) } returns true
-
-        // Need to set SDK_INT >= M for the new API path
-        // Since Build.VERSION.SDK_INT is final, we test via the code path
-        // by setting up mocks that match the M+ branch
-        val result = NetworkUtils.isOnline(context)
-        assertTrue(result)
+        val cm = mockCm(mockk<Network>(), capsWith(NetworkCapabilities.TRANSPORT_WIFI), connectedInfo(true))
+        assertTrue(NetworkUtils.isOnline(mockContext(cm)))
     }
 
     @Test
     fun `isOnline returns true when cellular is available`() {
-        val context = mockk<Context>()
-        val cm = mockk<ConnectivityManager>()
-        val network = mockk<Network>()
-        val caps = mockk<NetworkCapabilities>()
-
-        every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns cm
-        every { cm.activeNetwork } returns network
-        every { cm.getNetworkCapabilities(network) } returns caps
-        every { caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) } returns false
-        every { caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) } returns true
-
-        val result = NetworkUtils.isOnline(context)
-        assertTrue(result)
+        val cm = mockCm(mockk<Network>(), capsWith(NetworkCapabilities.TRANSPORT_CELLULAR), connectedInfo(true))
+        assertTrue(NetworkUtils.isOnline(mockContext(cm)))
     }
 
     @Test
     fun `isOnline returns true when ethernet is available`() {
-        val context = mockk<Context>()
-        val cm = mockk<ConnectivityManager>()
-        val network = mockk<Network>()
-        val caps = mockk<NetworkCapabilities>()
-
-        every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns cm
-        every { cm.activeNetwork } returns network
-        every { cm.getNetworkCapabilities(network) } returns caps
-        every { caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) } returns false
-        every { caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) } returns false
-        every { caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) } returns true
-
-        val result = NetworkUtils.isOnline(context)
-        assertTrue(result)
+        val cm = mockCm(mockk<Network>(), capsWith(NetworkCapabilities.TRANSPORT_ETHERNET), connectedInfo(true))
+        assertTrue(NetworkUtils.isOnline(mockContext(cm)))
     }
 
     @Test
     fun `isOnline returns false when no network`() {
-        val context = mockk<Context>()
-        val cm = mockk<ConnectivityManager>()
-
-        every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns cm
-        every { cm.activeNetwork } returns null
-
-        val result = NetworkUtils.isOnline(context)
-        assertFalse(result)
+        val cm = mockCm(activeNetwork = null, caps = null, legacyInfo = null)
+        assertFalse(NetworkUtils.isOnline(mockContext(cm)))
     }
 
     @Test
     fun `isOnline returns false when capabilities are null`() {
-        val context = mockk<Context>()
-        val cm = mockk<ConnectivityManager>()
-        val network = mockk<Network>()
-
-        every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns cm
-        every { cm.activeNetwork } returns network
-        every { cm.getNetworkCapabilities(network) } returns null
-
-        val result = NetworkUtils.isOnline(context)
-        assertFalse(result)
+        val cm = mockCm(mockk<Network>(), caps = null, legacyInfo = connectedInfo(false))
+        assertFalse(NetworkUtils.isOnline(mockContext(cm)))
     }
 
     @Test
     fun `isOnline returns false when no transport matches`() {
-        val context = mockk<Context>()
-        val cm = mockk<ConnectivityManager>()
-        val network = mockk<Network>()
-        val caps = mockk<NetworkCapabilities>()
-
-        every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns cm
-        every { cm.activeNetwork } returns network
-        every { cm.getNetworkCapabilities(network) } returns caps
-        every { caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) } returns false
-        every { caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) } returns false
-        every { caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) } returns false
-
-        val result = NetworkUtils.isOnline(context)
-        assertFalse(result)
+        val cm = mockCm(mockk<Network>(), capsWith(), connectedInfo(false))
+        assertFalse(NetworkUtils.isOnline(mockContext(cm)))
     }
 }
