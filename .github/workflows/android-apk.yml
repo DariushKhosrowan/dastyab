@@ -4,16 +4,15 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    
+  
 env:
   ANDROID_SDK_ROOT: /home/runner/android-sdk
   ANDROID_NDK_ROOT: /home/runner/android-sdk/ndk/25.1.8937393
-  PATH: /home/runner/android-sdk/cmdline-tools/latest/bin:/home/runner/android-sdk/platform-tools:/opt/gradle-8.2.0/bin:$PATH
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       
@@ -33,17 +32,25 @@ jobs:
           
       - name: Install NDK
         run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
           $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393"
           
-      - name: Set up Gradle
-        uses: gradle/actions-gradle8-x@v2
-        
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradd-${{ runner.os }}-${{ hashFiles('gradle-wrapper.properties') }}
+          
       - name: Assemble Debug APK
         run: |
-          ./gradlew :app:assembleDebug
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
