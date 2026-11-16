@@ -201,25 +201,26 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Android SDK (platform 34 + build-tools 34.0.0)
+      # Use the runner's preinstalled SDK (ANDROID_HOME/ANDROID_SDK_ROOT are
+      # already set and consistent) — do NOT override them. Setting
+      # ANDROID_HOME="" makes AGP guess a bogus SDK path (the android/ project
+      # dir) and abort with "different paths to the SDK".
+      - name: Ensure SDK components (platform 34 + build-tools 34.0.0)
         run: |
-          mkdir -p /tmp/android-sdk/cmdline-tools
-          curl -fsSL -o /tmp/clt.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-          unzip -q -d /tmp/android-sdk/cmdline-tools /tmp/clt.zip
-          mv /tmp/android-sdk/cmdline-tools/cmdline-tools /tmp/android-sdk/cmdline-tools/latest
-          yes | /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null
-          /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" >/dev/null
-          # Clear ANDROID_HOME (set ANDROID_SDK_ROOT instead) so Gradle sees
-          # exactly one SDK path — mixing ANDROID_HOME=/tmp/android-sdk with
-          # the runner's ANDROID_SDK_ROOT makes AGP 8.x fail with
-          # "Several environment variables contain different paths to the SDK".
-          echo "ANDROID_HOME=" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=/tmp/android-sdk" >> "$GITHUB_ENV"
+          SDK="$ANDROID_HOME"
+          echo "Using SDK: $SDK"
+          if [ ! -d "$SDK/platforms/android-34" ]; then
+            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools" >/dev/null
+          fi
 
       - name: Build signed release APK
         run: |
           cd android
           chmod +x gradlew
+          # Point Gradle at the SDK this job installed, via the canonical
+          # sdk.dir location file (env-only overrides confused AGP 8.x).
+          echo "sdk.dir=/tmp/android-sdk" > local.properties
           ./gradlew :app:assembleRelease --no-daemon
 
       - name: Re-sign with v1+v2+v3 schemes (installer compatibility)
