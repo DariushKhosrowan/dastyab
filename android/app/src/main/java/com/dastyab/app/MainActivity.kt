@@ -75,12 +75,15 @@ class MainActivity : Activity() {
     private lateinit var binary: File
 
     private var downloadAttempts = 0
-    private const val MAX_DOWNLOAD_ATTEMPTS = 3
-    private const val BASE_BACKOFF_MS = 2000L
-    private const val PROCESS_TIMEOUT_MS = 300_000L
-    private const val MAX_OUTPUT_CHARS = 50_000
-    private const val MAX_ARGS_LENGTH = 4096
-    private const val MIN_FREE_SPACE_BYTES = 50L * 1024 * 1024
+
+    companion object {
+        private const val MAX_DOWNLOAD_ATTEMPTS = 3
+        private const val BASE_BACKOFF_MS = 2000L
+        private const val PROCESS_TIMEOUT_MS = 300_000L
+        private const val MAX_OUTPUT_CHARS = 50_000
+        private const val MAX_ARGS_LENGTH = 4096
+        private const val MIN_FREE_SPACE_BYTES = 50L * 1024 * 1024
+    }
 
     private var bytesDownloaded = AtomicLong(0)
     private var bytesTotal = AtomicLong(0)
@@ -211,10 +214,10 @@ class MainActivity : Activity() {
     /** Decide whether the binary is ready, needs download, or is broken. */
     private fun evaluateBinaryState() {
         if (BinaryUtils.isValidElfBinary(binary)) {
-            if (!binary.canExecute) {
+            if (!binary.canExecute()) {
                 DastyabLogger.w("MainActivity", "Binary exists but not executable — repairing chmod")
                 binary.setExecutable(true, false)
-                if (!binary.canExecute) {
+                if (!binary.canExecute()) {
                     DastyabLogger.e("MainActivity", "Failed to make binary executable — re-downloading")
                     binary.delete()
                     startDownload()
@@ -277,7 +280,7 @@ class MainActivity : Activity() {
             evaluateBinaryState() // try to fix (re-download)
             return
         }
-        runCommand(s.splitWhitespace().toTypedArray())
+        runCommand(s.split(Regex("\\s+")).filter { it.isNotEmpty() }.toTypedArray())
     }
 
     /** Build the row of one-tap quick-action buttons. */
@@ -387,7 +390,7 @@ class MainActivity : Activity() {
         conn.setRequestProperty("User-Agent", "DastyabAndroid/1.0")
 
         val code = conn.responseCode
-        val contentLength = conn.headerField("Content-Length")
+        val contentLength = conn.getHeaderField("Content-Length")
         DastyabLogger.i("Download", "HTTP %d content-length=%s", code, contentLength)
 
         if (code != 200) {
@@ -409,7 +412,7 @@ class MainActivity : Activity() {
         val tempFile = File(filesDir, "dastyab.tmp")
         val rawOut = FileOutputStream(tempFile)
         val buf = ByteArray(8192)
-        var read = inStream.read(buf)
+        var read: Int = inStream.read(buf)
         var total = 0L
         while (read > 0) {
             if (downloadCancellation.get()) {
@@ -442,7 +445,7 @@ class MainActivity : Activity() {
             }
 
             // Update progress on UI thread (throttled every 64KB)
-            if (totalExpected > 0 && total % (64 * 1024) == 0) {
+            if (totalExpected > 0 && total % (64L * 1024L) == 0L) {
                 val pct = (total * 100 / totalExpected)
                 val progressCb = { progress.progress = pct.toInt() }
                 pendingHandlerCallbacks.add(progressCb)
@@ -478,7 +481,7 @@ class MainActivity : Activity() {
             tempFile.delete()
         }
         binary.setExecutable(true, false)
-        if (!binary.canExecute) {
+        if (!binary.canExecute()) {
             throw IOException("Binary is not executable after chmod")
         }
 
@@ -501,9 +504,10 @@ class MainActivity : Activity() {
         val output = FileOutputStream(dst)
         try {
             val buf = ByteArray(8192)
-            var read: Int
-            while ({ read = input.read(buf); read > 0 }()) {
+            var read: Int = input.read(buf)
+            while (read > 0) {
                 output.write(buf, 0, read)
+                read = input.read(buf)
             }
         } finally {
             input.close()
@@ -552,9 +556,9 @@ class MainActivity : Activity() {
 
                 // Read output with a timeout watchdog
                 val reader = BufferedReader(InputStreamReader(proc!!.inputStream))
-                var line: String?
+                var line: String? = reader.readLine()
                 val startTime = System.currentTimeMillis()
-                while ({ line = reader.readLine(); line != null }()) {
+                while (line != null) {
                     if (System.currentTimeMillis() - startTime > PROCESS_TIMEOUT_MS) {
                         throw IOException("Command timed out after %d ms".format(PROCESS_TIMEOUT_MS))
                     }
@@ -569,6 +573,7 @@ class MainActivity : Activity() {
                         pendingHandlerCallbacks.add(trimCb)
                         handler.post(trimCb)
                     }
+                    line = reader.readLine()
                 }
 
                 // Wait for process with timeout

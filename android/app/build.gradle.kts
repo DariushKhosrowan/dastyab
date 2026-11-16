@@ -15,18 +15,24 @@ android {
         versionName = "1.1.0"
     }
 
-    // Only build the ABIs that CI produces assets for, keeping the APK small.
-    ndk {
-        abiFilters.add("arm64-v8a")
-        abiFilters.add("armeabi-v7a")
-        abiFilters.add("x86_64")
-        abiFilters.add("x86")
+    // Pure-Kotlin app — no native code, so no NDK/abiFilters needed.
+
+    signingConfigs {
+        create("release") {
+            // Stable, in-repo signing config (project is public; key is a
+            // dedicated Dastyab release key, not shared with other apps).
+            storeFile = rootProject.file("dastyab-release.keystore")
+            storePassword = "dastyab-release"
+            keyAlias = "dastyab"
+            keyPassword = "dastyab-release"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -58,9 +64,7 @@ android {
     }
 
     testOptions {
-        unitTests {
-            includeAndroidResources = true
-        }
+        unitTests.all { it.useJUnit() }
     }
 }
 

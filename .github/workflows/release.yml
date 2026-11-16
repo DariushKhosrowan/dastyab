@@ -186,11 +186,65 @@ jobs:
           path: dist/dastyab-android-${{ matrix.arch }}
           if-no-files-found: error
 
+  build-apk:
+    name: build-apk (Android app)
+    # Builds the signed Kotlin launcher APK (downloads the dastyab-android-*
+    # CLI binary from the latest GitHub Release on first app launch).
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Android SDK (platform 34 + build-tools 34.0.0)
+        run: |
+          mkdir -p /tmp/android-sdk/cmdline-tools
+          curl -fsSL -o /tmp/clt.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -q -d /tmp/android-sdk/cmdline-tools /tmp/clt.zip
+          mv /tmp/android-sdk/cmdline-tools/cmdline-tools /tmp/android-sdk/cmdline-tools/latest
+          yes | /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null
+          /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" >/dev/null
+          echo "ANDROID_HOME=/tmp/android-sdk" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Re-sign with v1+v2+v3 schemes (installer compatibility)
+        run: |
+          mkdir -p dist
+          java -jar /tmp/android-sdk/build-tools/34.0.0/lib/apksigner.jar sign \
+            --ks android/dastyab-release.keystore --ks-key-alias dastyab \
+            --ks-pass pass:dastyab-release --key-pass pass:dastyab-release \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out dist/DastYab-android.apk \
+            android/app/build/outputs/apk/release/app-release.apk
+          java -jar /tmp/android-sdk/build-tools/34.0.0/lib/apksigner.jar verify \
+            --verbose dist/DastYab-android.apk | tee /tmp/verify.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/verify.txt || {
+            echo "ERROR: APK not v2-signed" >&2; exit 1; }
+          grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/verify.txt || {
+            echo "ERROR: APK not v3-signed" >&2; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dastyab-release-android-apk
+          path: dist/DastYab-android.apk
+          if-no-files-found: error
+
   release:
     name: Create GitHub release
     needs:
       - build
       - build-android
+      - build-apk
     runs-on: ubuntu-latest
     steps:
       - name: Download all release assets

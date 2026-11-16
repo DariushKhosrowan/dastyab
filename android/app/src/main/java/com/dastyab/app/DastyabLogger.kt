@@ -165,7 +165,7 @@ object DastyabLogger {
         }
     }
 
-    private enum class LogLevel(val priority: Int, val logcat: Int) {
+    enum class LogLevel(val priority: Int, val logcat: Int) {
         VERBOSE(0, Log.VERBOSE),
         DEBUG(1, Log.DEBUG),
         INFO(2, Log.INFO),

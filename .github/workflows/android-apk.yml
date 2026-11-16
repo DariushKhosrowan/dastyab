@@ -3,93 +3,51 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-apk.yml'
   pull_request:
+    paths:
+      - 'android/**'
   workflow_dispatch:
-    
+
 env:
-  ANDROID_SDK_ROOT: /home/runner/android-sdk
-  ANDROID_NDK_ROOT: /home/runner/android-sdk/ndk/25.1.8937393
+  ANDROID_HOME: /tmp/android-sdk
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-          
-      - name: Install Android SDK Command-line tools
+
+      - name: Install Android SDK (platform 34 + build-tools 34.0.0)
         run: |
-          mkdir -p /home/runner/android-sdk/cmdline-tools
-          curl -fsSL -o /tmp/cmdline-tools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-          unzip -q /tmp/cmdline-tools.zip -d /home/runner/android-sdk/cmdline-tools
-          mv /home/runner/android-sdk/cmdline-tools/cmdline-tools /home/runner/android-sdk/cmdline-tools/latest
-          
-      - name: Accept SDK licenses
+          mkdir -p /tmp/android-sdk/cmdline-tools
+          curl -fsSL -o /tmp/clt.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -q -d /tmp/android-sdk/cmdline-tools /tmp/clt.zip
+          mv /tmp/android-sdk/cmdline-tools/cmdline-tools /tmp/android-sdk/cmdline-tools/latest
+          yes | /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null
+          /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" >/dev/null
+
+      - name: Build debug APK
         run: |
-          yes | /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-          
-      - name: Install SDK platforms and build-tools
-        run: |
-          /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
-          
-      - name: Install NDK
-        run: |
-          yes | /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-          /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393"
-          
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradd-${{ runner.os }}-${{ hashFiles('gradle-wrapper.properties') }}
-          
-      - name: Setup Gradle Wrapper
-        run: |
-          # Check if gradlew exists and is executable
-          if [ -x "android/gradlew" ]; then
-            echo "Gradle wrapper already present"
-          else
-            # Download Gradle distribution and create wrapper
-            cd android
-            GRADLE_VERSION="8.5"
-            DIST_URL="https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-all.zip"
-            
-            # Try to download Gradle
-            if curl -fsSL -o "gradle.zip" "$DIST_URL" 2>/dev/null; then
-              mkdir -p .gradle/wrapper/dists/gradle-${GRADLE_VERSION}-all
-              unzip -q gradle.zip -d .gradle/wrapper/dists/gradle-${GRADLE_VERSION}-all/
-              rm -f gradle.zip
-              echo "Gradle $GRADLE_VERSION downloaded"
-            else
-              echo "Warning: Could not download Gradle, checking for existing..."
-              ls .gradle/wrapper/dists/ 2>/dev/null || echo "No Gradle distribution found"
-            fi
-          fi
-          
-      - name: Make gradlew executable
-        run: |
-          chmod +x android/gradlew 2>/dev/null || true
-          
-      - name: Assemble Debug APK
-        run: |
-          # Navigate to android directory and run gradle
           cd android
-          if [ -x "./gradlew" ]; then
-            ./gradlew :app:assembleDebug --no-daemon
-          else
-            echo "ERROR: gradlew not found or not executable"
-            ls -la ./gradlew 2>/dev/null || echo "gradlew not present"
-            exit 1
-          fi
-          
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Verify APK structure and signature
+        run: |
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          unzip -t "$APK" > /dev/null || { echo "ERROR: corrupt APK zip" >&2; exit 1; }
+          java -jar /tmp/android-sdk/build-tools/34.0.0/lib/apksigner.jar verify --verbose "$APK"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
