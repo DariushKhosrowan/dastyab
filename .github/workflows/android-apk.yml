@@ -4,7 +4,8 @@ on:
   push:
     branches: [ main ]
   pull_request:
-  
+  workflow_dispatch:
+    
 env:
   ANDROID_SDK_ROOT: /home/runner/android-sdk
   ANDROID_NDK_ROOT: /home/runner/android-sdk/ndk/25.1.8937393
