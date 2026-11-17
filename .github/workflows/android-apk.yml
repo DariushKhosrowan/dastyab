@@ -80,13 +80,18 @@ jobs:
         working-directory: android
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
+      - name: Enable emulator KVM access
+        run: |
+          sudo chmod a+rw /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+
       - name: Run instrumentation tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
-          profile: Pixel 2
+          disable-linux-hw-accel: false
           script: cd android && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
 
       - name: Build signed release APK
