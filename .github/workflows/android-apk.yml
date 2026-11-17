@@ -45,8 +45,19 @@ jobs:
       - name: Ensure Android SDK components
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-34" "platform-tools" "build-tools;34.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
+          SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
+          if [ -z "$SDK" ]; then
+            echo 'GitHub runner did not expose ANDROID_HOME or ANDROID_SDK_ROOT' >&2
+            exit 1
+          fi
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "sdkmanager not found under runner SDK: $SDK" >&2
+            find "$SDK/cmdline-tools" -maxdepth 3 -name sdkmanager -print 2>/dev/null || true
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-34" "platform-tools" "build-tools;34.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
 
       - name: Install Android NDK
         run: |
