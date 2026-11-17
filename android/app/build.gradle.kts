@@ -11,11 +11,19 @@ android {
         applicationId = "com.dastyab.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.4.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // Pure-Kotlin app — no native code, so no NDK/abiFilters needed.
+    // Package the CLI as an extracted native executable: Android 10+ denies
+    // exec() from writable app data for apps targeting API 29+.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/libdastyab.so"
+        }
+    }
 
     signingConfigs {
         create("release") {

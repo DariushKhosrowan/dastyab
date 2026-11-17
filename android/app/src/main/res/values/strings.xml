@@ -36,10 +36,10 @@
     <!-- About -->
     <string name="btn_about">About</string>
     <string name="about_title">About Dastyab</string>
-    <string name="about_description">Dastyab is a Rust-based CLI VPN tool. This Android app downloads the pre-built dastyab binary from GitHub Releases and provides a graphical launcher for its commands.</string>
+    <string name="about_description">Dastyab is a Rust-based CLI VPN tool. The Rust command engine is bundled inside this Android app and works without a startup download. Linux system services and external engines require separate Android integration.</string>
     <string name="about_version_label">Version</string>
     <string name="about_commands_header">Available Commands</string>
-    <string name="about_cmd_verify">verify — Verify the dastyab binary integrity</string>
+    <string name="about_cmd_verify">verify — Verify the active Cloudflare token</string>
     <string name="about_cmd_accounts">accounts — List and manage Cloudflare accounts</string>
     <string name="about_cmd_profiles">profiles — List and manage tunnel profiles</string>
     <string name="about_cmd_token_list">token-list — List authentication tokens</string>
@@ -69,7 +69,7 @@
     <string name="settings_clear_logs">Clear log files</string>
     <string name="settings_clear_crash_logs">Clear crash logs</string>
     <string name="settings_clear_history">Clear command history</string>
-    <string name="settings_force_redownload">Force re-download binary</string>
+    <string name="settings_force_redownload">Get app updates</string>
 
     <!-- Binary updater -->
     <string name="btn_update">Update</string>

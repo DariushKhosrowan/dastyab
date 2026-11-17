@@ -68,12 +68,7 @@ class SettingsActivity : Activity() {
         }
 
         // ── Auto-update toggle ──
-        cbAutoUpdate.isChecked = getPrefs().getBoolean(PREF_AUTO_UPDATE, true)
-        cbAutoUpdate.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
-            persistPref(PREF_AUTO_UPDATE, checked)
-            DastyabLogger.i("Settings", "Auto-update binary set to %s", checked)
-            setStatus(if (checked) "Auto-update enabled" else "Auto-update disabled")
-        }
+        cbAutoUpdate.visibility = View.GONE
 
         // ── Clear logs ──
         btnClearLogs.setOnClickListener {
@@ -102,11 +97,12 @@ class SettingsActivity : Activity() {
 
         // ── Force re-download binary ──
         btnForceRedownload.setOnClickListener {
-            val binary = File(filesDir, "dastyab")
-            if (binary.exists()) binary.delete()
-            DastyabLogger.i("Settings", "Binary deleted — will re-download on next start")
-            Toast.makeText(this, "Binary deleted — will re-download on app start", Toast.LENGTH_LONG).show()
-            setStatus("Binary deleted — restart app to re-download")
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://github.com/DastYab/dastyab/releases")))
+            } catch (_: android.content.ActivityNotFoundException) {
+                setStatus("Open github.com/DastYab/dastyab/releases in a browser to update the app.")
+            }
         }
 
         // ── About ──

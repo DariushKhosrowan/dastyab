@@ -13,16 +13,28 @@ import kotlin.test.assertTrue
 class CrashHandlerTest {
 
     private lateinit var tempDir: File
+    private var previousHandler: Thread.UncaughtExceptionHandler? = null
 
     @Before
     fun setUp() {
+        previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler(null)
         tempDir = java.io.File.createTempFile("crash-test-", ".dir").apply { delete() }
         tempDir.mkdirs()
     }
 
     @After
     fun tearDown() {
+        Thread.setDefaultUncaughtExceptionHandler(previousHandler)
         tempDir.deleteRecursively()
+    }
+
+    @Test
+    fun `reinstall does not chain handler to itself`() {
+        CrashHandler.install(mockCtx(), tempDir)
+        val first = Thread.getDefaultUncaughtExceptionHandler()
+        CrashHandler.install(mockCtx(), tempDir)
+        assertTrue(first === Thread.getDefaultUncaughtExceptionHandler())
     }
 
     /** A harmless mock Context — CrashHandler only passes it through to the logger. */

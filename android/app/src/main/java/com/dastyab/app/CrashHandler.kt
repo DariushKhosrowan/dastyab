@@ -30,20 +30,27 @@ object CrashHandler {
     private const val CRASH_FILE_EXT = ".log"
 
     private var originalHandler: Thread.UncaughtExceptionHandler? = null
-    private var context: Context? = null
+    private val handler = Thread.UncaughtExceptionHandler { thread, throwable ->
+        try {
+            try {
+                handleCrash(thread, throwable)
+            } catch (_: Throwable) {
+                // Crash reporting must never prevent Android's termination handler.
+            }
+        } finally {
+            originalHandler?.uncaughtException(thread, throwable)
+        }
+    }
     private var crashDir: File? = null
 
+    @Synchronized
     fun install(ctx: Context, filesDir: File) {
-        context = ctx
         crashDir = File(filesDir, CRASH_DIR_NAME)
         if (!crashDir!!.exists()) { crashDir!!.mkdirs() }
 
-        originalHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            handleCrash(thread, throwable)
-            // Fall through to the original handler so the app still crashes
-            // (Android expects unhandled exceptions to terminate the process).
-            originalHandler?.uncaughtException(thread, throwable)
+        if (Thread.getDefaultUncaughtExceptionHandler() !== handler) {
+            originalHandler = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler(handler)
         }
 
         DastyabLogger.i("CrashHandler", "Crash handler installed. Dir: %s", crashDir!!.absolutePath)
