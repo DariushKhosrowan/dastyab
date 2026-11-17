@@ -174,9 +174,15 @@ jobs:
           ENV_VAR="CARGO_TARGET_$(printf '%s' "$TARGET" | tr '[:lower:]-' '[:upper:]_')_LINKER"
           export "$ENV_VAR"="$LINKER"
           # ring's build.rs uses cc-rs, which probes CC_<target> for the C
-          # compiler. NDK 27 ships <triple><api>-clang wrappers, not the bare
-          # <rust-target>-clang names cc-rs guesses, so point CC directly.
-          export "CC_$(printf '%s' "$TARGET" | tr '[:lower:]-' '[:upper:]_')"="$LINKER"
+          # compiler. cc-rs expects the LOWERCASE target with dashes→underscores
+          # (e.g. CC_armv7_linux_androideabi), NOT uppercase like Cargo's
+          # CARGO_TARGET_*_LINKER. NDK 27 ships <triple><api>-clang wrappers,
+          # not the bare <rust-target>-clang names cc-rs guesses, so point CC
+          # directly. Also export AR_<target> for the NDK llvm-ar.
+          CC_VAR="CC_$(printf '%s' "$TARGET" | tr '-' '_')"
+          AR_TOOL="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          export "$CC_VAR"="$LINKER"
+          export "AR_$(printf '%s' "$TARGET" | tr '-' '_')"="$AR_TOOL"
 
           cargo build --release --target "$TARGET" -p dastyab-cli
 
