@@ -160,6 +160,16 @@ pub fn current_platform_asset(assets: &[ReleaseAsset]) -> Option<ReleaseAsset> {
     let exact = "dastyab-macos-x86_64";
     #[cfg(windows)]
     let exact = "dastyab-windows-amd64.exe";
+    // Android and any other target: no packaged self-update asset — the
+    // android APK launcher ships its own update path, so return None here
+    // and let callers treat it as "no self-update for this platform".
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "aarch64"),
+        target_os = "macos",
+        target_os = "windows"
+    )))]
+    let exact = "";
 
     // Exact match first.
     if let Some(a) = assets.iter().find(|a| a.name == exact) {
