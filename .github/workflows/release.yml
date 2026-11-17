@@ -236,23 +236,28 @@ jobs:
       - name: Re-sign with v1+v2+v3 schemes (installer compatibility)
         run: |
           mkdir -p dist
+          # Extract versionName for a versioned APK filename (matches the
+          # android-apk.yml workflow naming so releases don't get duplicates).
+          VERSION=$(grep -o 'versionName = "[^"]*"' android/app/build.gradle.kts | cut -d'"' -f2)
+          APK_NAME="DastYab-${VERSION}-android.apk"
           "$ANDROID_HOME/build-tools/34.0.0/apksigner" sign \
             --ks android/dastyab-release.keystore --ks-key-alias dastyab \
             --ks-pass pass:dastyab-release --key-pass pass:dastyab-release \
             --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
-            --out dist/DastYab-android.apk \
+            --out "dist/${APK_NAME}" \
             android/app/build/outputs/apk/release/app-release.apk
           "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify \
-            --verbose dist/DastYab-android.apk | tee /tmp/verify.txt
+            --verbose "dist/${APK_NAME}" | tee /tmp/verify.txt
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/verify.txt || {
             echo "ERROR: APK not v2-signed" >&2; exit 1; }
           grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/verify.txt || {
             echo "ERROR: APK not v3-signed" >&2; exit 1; }
+          echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
         with:
           name: dastyab-release-android-apk
-          path: dist/DastYab-android.apk
+          path: dist/DastYab-*-android.apk
           if-no-files-found: error
 
   release:

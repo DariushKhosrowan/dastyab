@@ -13,7 +13,7 @@ in Rust for speed, safety, and a single static binary.**
 | **Language** | Rust (edition 2021) |
 | **Workspace** | `dastyab-core` · `dastyab-cli` · `dastyab-tui` · `dastyab-gui` |
 | **License** | MIT |
-| **Latest release** | `v0.1.7` |
+| **Latest release** | `v0.1.8` |
 | **Rust version** | 1.99+ (stable) |
 | **Zero runtime deps (CLI)** | single static binary, no Python, no Node |
 
