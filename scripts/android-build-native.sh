@@ -60,12 +60,22 @@ for entry in "${TARGETS[@]}"; do
   # Catch accidental host binaries or a wrong target before Gradle packages it.
   file_output=$(file "$staged_bin")
   [[ "$file_output" == *"ELF"* ]] || { echo "Not an ELF executable: $staged_bin ($file_output)" >&2; exit 1; }
-  case "$abi" in
-    arm64-v8a)      [[ "$file_output" == *"ARM aarch64"* ]] || exit 1 ;;
-    armeabi-v7a)    [[ "$file_output" == *"ARM"* ]] || exit 1 ;;
-    x86_64)         [[ "$file_output" == *"x86-64"* ]] || exit 1 ;;
-    x86)            [[ "$file_output" == *"80386"* || "$file_output" == *"Intel 80386"* ]] || exit 1 ;;
-  esac
+  python3 - "$staged_bin" "$abi" <<'PY'
+import struct
+import sys
+from pathlib import Path
+
+path, abi = sys.argv[1:]
+header = Path(path).open('rb').read(20)
+expected = {'arm64-v8a': (2, 183), 'armeabi-v7a': (1, 40),
+            'x86_64': (2, 62), 'x86': (1, 3)}[abi]
+if len(header) != 20 or header[:4] != b'\x7fELF' or header[5] != 1:
+    raise SystemExit(f'{path}: expected little-endian ELF header')
+actual = (header[4], struct.unpack_from('<H', header, 18)[0])
+if actual != expected:
+    raise SystemExit(f'{path}: ELF class/machine {actual}, expected {expected} for {abi}')
+print(f'{path}: verified ELF class/machine {actual} for {abi}')
+PY
   echo "$file_output"
 done
 
