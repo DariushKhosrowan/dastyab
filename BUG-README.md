@@ -292,3 +292,26 @@ dastyab aistudio verify                            # probes every node live
 dastyab aistudio start                             # walks pool, skips dead nodes
 python3 -m pytest tests/test_aistudio.py -q        # regression suite green
 ```
+
+## 2026-11-17 — v0.1.8 Android cross-compile mystery (i686/armv7)
+
+Symptom: release.yml build-android-{i686,armv7} fail with cc-rs
+"failed to find tool i686-linux-android-clang" — but aarch64/x86_64 succeed
+with the IDENTICAL script (TARGET-derived CC_<target> exported).
+
+Verified locally: `tr '[:lower:]-' '[:upper:]_'` on the target string DOES
+produce CC_I686_LINUX_ANDROID / CC_ARMV7_LINUX_ANDROIDEABI. The failing logs
+show cc-rs probing CC_i686-linux-android and CC_i686_linux_android = None —
+so the export never took effect for those jobs, while the log of the SAME
+failing job does show the export line. No code-path difference found.
+
+Next steps to try (in order):
+1. Export CC for ALL targets unconditionally plus fallback CC=$LINKER,
+   AR_<target>=llvm-ar, and also export TARGET_CC.
+2. Use cargo config [target.<triple>] linker/cc in .cargo/config.toml
+   (written at CI time) instead of env vars.
+3. Split the two failing targets into their own matrix entries with
+   hand-written env var names (no shell substitution).
+Note: aarch64/x86_64 succeed with the same script — maybe GH runner env
+sanitization differs per job, or cache/freshness. Reproduce locally first:
+run the exact step with act or the NDK locally before the next tag.
