@@ -310,7 +310,10 @@ pub async fn ensure_singbox(pinned_version: &str) -> Result<PathBuf, CFError> {
     }
     std::fs::create_dir_all(bin.parent().unwrap())
         .map_err(|e| CFError::new("Storage error", format!("Cannot create bin dir: {e}"), ""))?;
-    #[cfg(target_os = "linux")]
+    // Linux amd64 is the only packaging we ship; Android/mac-arm/other hosts
+    // must supply the binary themselves — fall back to a clearly-labelled
+    // asset name so the failure message names the missing platform support.
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let asset = format!("sing-box-{pinned_version}-linux-amd64.tar.gz");
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     let asset = format!("sing-box-{pinned_version}-darwin-arm64.tar.gz");
@@ -318,6 +321,12 @@ pub async fn ensure_singbox(pinned_version: &str) -> Result<PathBuf, CFError> {
     let asset = format!("sing-box-{pinned_version}-darwin-amd64.tar.gz");
     #[cfg(target_os = "windows")]
     let asset = format!("sing-box-{pinned_version}-windows-amd64.zip");
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        target_os = "macos",
+        target_os = "windows"
+    )))]
+    let asset = format!("sing-box-{pinned_version}-UNSUPPORTED-PLATFORM.tar.gz");
     let url =
         format!("https://github.com/SagerNet/sing-box/releases/download/v{pinned_version}/{asset}");
     let resp = reqwest::get(&url).await.map_err(|e| {
