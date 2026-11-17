@@ -8,8 +8,8 @@
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
-        android:icon="@android:drawable/ic_dialog_info"
-        android:roundIcon="@android:drawable/ic_dialog_info"
+        android:icon="@drawable/ic_launcher_dastyab"
+        android:roundIcon="@drawable/ic_launcher_dastyab"
         android:label="Dastyab"
         android:theme="@android:style/Theme.Material.Light.DarkActionBar"
         android:hardwareAccelerated="true"

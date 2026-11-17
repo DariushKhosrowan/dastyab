@@ -92,7 +92,7 @@ pub async fn resolve(host: &str, endpoints: &[DotEndpoint]) -> Result<Vec<Ipv4Ad
 /// validate — an empty root store would fail every handshake with
 /// `UnknownIssuer`, silently killing this fallback rung.
 ///
-/// Uses the `aws_lc_rs` provider explicitly so this module does not depend on
+/// Uses the `ring` provider explicitly so this module does not depend on
 /// a process-level `CryptoProvider` having been installed (which only happens
 /// in `main` via `tls::install_provider`). That makes DoT robust to being
 /// embedded or called before app setup.
@@ -100,13 +100,11 @@ fn tls_config() -> rustls::ClientConfig {
     use std::sync::Arc;
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    rustls::ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .expect("default protocol versions should be compatible")
-    .with_root_certificates(roots)
-    .with_no_client_auth()
+    rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+        .with_safe_default_protocol_versions()
+        .expect("default protocol versions should be compatible")
+        .with_root_certificates(roots)
+        .with_no_client_auth()
 }
 
 /// Perform one DoT exchange against `ep`.

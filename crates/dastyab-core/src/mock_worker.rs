@@ -66,14 +66,12 @@ fn self_signed_der(sni: &str) -> Result<(Vec<u8>, Vec<u8>), CFError> {
 fn server_config(cert_der: Vec<u8>, key_der: Vec<u8>) -> Result<rustls::ServerConfig, CFError> {
     let cert = rustls::pki_types::CertificateDer::from(cert_der);
     let key = rustls::pki_types::PrivateKeyDer::Pkcs8(key_der.into());
-    rustls::ServerConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .map_err(|e| CFError::new("Mock worker", format!("tls builder: {e}"), ""))?
-    .with_no_client_auth()
-    .with_single_cert(vec![cert], key)
-    .map_err(|e| CFError::new("Mock worker", format!("tls cert: {e}"), ""))
+    rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+        .with_safe_default_protocol_versions()
+        .map_err(|e| CFError::new("Mock worker", format!("tls builder: {e}"), ""))?
+        .with_no_client_auth()
+        .with_single_cert(vec![cert], key)
+        .map_err(|e| CFError::new("Mock worker", format!("tls cert: {e}"), ""))
 }
 
 /// Run the mock worker forever (or until the listener errors). Each accepted

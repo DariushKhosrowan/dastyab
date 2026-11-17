@@ -1095,14 +1095,14 @@ mod tests {
         let cert_der = rustls::pki_types::CertificateDer::from(key.cert);
         let key_der = rustls::pki_types::PrivateKeyDer::Pkcs8(key.key_pair.serialize_der().into());
         let signing_key =
-            rustls::crypto::aws_lc_rs::sign::any_supported_type(&key_der).expect("signing key");
+            rustls::crypto::ring::sign::any_supported_type(&key_der).expect("signing key");
         let certified_key = Arc::new(rustls::sign::CertifiedKey::new(vec![cert_der], signing_key));
         let resolver = SniGateResolver {
             required: require_sni.map(|s| s.to_string()),
             certified_key,
         };
         let config = rustls::ServerConfig::builder_with_provider(Arc::new(
-            rustls::crypto::aws_lc_rs::default_provider(),
+            rustls::crypto::ring::default_provider(),
         ))
         .with_safe_default_protocol_versions()
         .unwrap()

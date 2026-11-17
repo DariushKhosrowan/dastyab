@@ -255,11 +255,11 @@ fn order_kx_groups(
 }
 
 /// Build a custom [`CryptoProvider`](rustls::crypto::CryptoProvider) for the given browser profile.
-/// Takes the default aws-lc-rs provider and reorders its cipher suites and
+/// Takes the default ring provider and reorders its cipher suites and
 /// key-exchange groups to match the profile — the cheap, valid way to vary
 /// the ClientHello without new crates.
 pub fn provider_for_profile(profile: ClientHelloProfile) -> rustls::crypto::CryptoProvider {
-    let base = rustls::crypto::aws_lc_rs::default_provider();
+    let base = rustls::crypto::ring::default_provider();
     rustls::crypto::CryptoProvider {
         cipher_suites: order_cipher_suites(base.cipher_suites, profile.cipher_order()),
         kx_groups: order_kx_groups(base.kx_groups, profile.kx_order()),

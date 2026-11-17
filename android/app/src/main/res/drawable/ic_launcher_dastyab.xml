@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DastYab launcher icon: indigo gradient rounded square, white "D"
+     fused with a hand/palm silhouette (dast = hand) and padlock accent. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Rounded-square gradient background -->
+    <path
+        android:pathData="M24,4 h60 a20,20 0 0 1 20,20 v60 a20,20 0 0 1 -20,20 h-60 a20,20 0 0 1 -20,-20 v-60 a20,20 0 0 1 20,-20 z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="0"
+                android:endX="108" android:endY="108"
+                android:startColor="#312E81"
+                android:endColor="#7C3AED" />
+        </aapt:attr>
+    </path>
+
+    <!-- Stylized "D" bowl (open on the right where the hand emerges) -->
+    <path
+        android:pathData="M34,30 h14 c16,0 26,10 26,24 c0,14 -10,24 -26,24 h-14 z
+                          M44,40 v28 h4 c10,0 16,-6 16,-14 c0,-8 -6,-14 -16,-14 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Palm / hand silhouette rising from the bottom of the D -->
+    <path
+        android:pathData="M58,44 c0,-3 2,-5 5,-5 c3,0 5,2 5,5 v10
+                          v-14 c0,-3 2,-5 5,-5 c3,0 5,2 5,5 v14
+                          v-18 c0,-3 2,-5 5,-5 c3,0 5,2 5,5 v20 c0,10 -6,16 -14,16 h-8 c-5,0 -8,-3 -8,-8 z"
+        android:fillColor="#C4B5FD" />
+
+    <!-- Padlock accent (small, top-right) -->
+    <path
+        android:pathData="M76,22 h12 v8 a6,3 0 0 1 -12,0 z M80,16 a4,4 0 0 1 8,0 h3 a7,7 0 0 0 -14,0 z"
+        android:fillColor="#FDE68A" />
+</vector>

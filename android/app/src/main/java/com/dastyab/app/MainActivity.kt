@@ -346,7 +346,7 @@ class MainActivity : Activity() {
 
         thread(isDaemon = true, name = "download-thread") {
             try {
-                performDownload(urlStr)
+                performDownload(urlStr, arch)
             } catch (e: Exception) {
                 if (downloadCancellation.get()) {
                     DastyabLogger.i("Download", "Download cancelled by user")
@@ -382,7 +382,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun performDownload(urlStr: String) {
+    private fun performDownload(urlStr: String, arch: String) {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.instanceFollowRedirects = true
         conn.connectTimeout = 30000
@@ -469,6 +469,13 @@ class MainActivity : Activity() {
         if (!BinaryUtils.isValidElfBinary(tempFile)) {
             tempFile.delete()
             throw IOException("Downloaded file is not a valid ELF binary")
+        }
+
+        // Verify SHA-256 against the pinned release digest (fail-open when
+        // no digest is pinned; ELF magic + HTTPS still apply).
+        if (!ChecksumUtils.verify(tempFile, arch)) {
+            tempFile.delete()
+            throw IOException("SHA-256 checksum mismatch for dastyab-android-$arch")
         }
 
         // Atomic replace

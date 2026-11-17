@@ -1520,7 +1520,7 @@ pub enum DaemonAction {
 #[tokio::main]
 async fn main() {
     // Install the process-level rustls provider before any network/TLS work
-    // (core uses aws-lc-rs; reqwest pulls ring too — explicit install avoids
+    // (core uses ring; reqwest pulls ring too — explicit install avoids
     // the "could not determine CryptoProvider" panic, e.g. on `drill`).
     dastyab_core::tls::install_tls_provider();
 
