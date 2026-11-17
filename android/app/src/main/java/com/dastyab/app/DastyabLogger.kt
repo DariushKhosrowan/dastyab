@@ -181,11 +181,8 @@ object DastyabLogger {
     }
 
     private fun format(template: String, args: Array<out Any?>): String {
-        return try {
-            java.text.MessageFormat.format(template, args)
-        } catch (_: Exception) {
-            template
-        }
+        return if (args.isEmpty()) template
+        else try { String.format(template, *args) } catch (_: Exception) { template }
     }
 
     enum class LogLevel(val priority: Int, val logcat: Int) {

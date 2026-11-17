@@ -19,8 +19,39 @@
     <string name="btn_clear">Clear output</string>
     <string name="btn_retry">Retry download</string>
     <string name="btn_view_logs">View logs</string>
-    <string name="lbl_prefix">\$ dastyab</string>
+    <string name="lbl_prefix">\u0024 dastyab</string>
     <string name="btn_refresh_logs">Refresh log list</string>
     <string name="log_files">Log files (tap to view)</string>
     <string name="no_logs_available">No log files available yet</string>
+
+    <!-- Version display -->
+    <string name="version_format">Dastyab v%1$s</string>
+
+    <!-- Copy / Share buttons -->
+    <string name="btn_copy">Copy</string>
+    <string name="btn_share">Share</string>
+    <string name="copied_to_clipboard">Copied</string>
+    <string name="share_title">Share output via…</string>
+
+    <!-- About -->
+    <string name="btn_about">About</string>
+    <string name="about_title">About Dastyab</string>
+    <string name="about_description">Dastyab is a Rust-based CLI VPN tool. This Android app downloads the pre-built dastyab binary from GitHub Releases and provides a graphical launcher for its commands.</string>
+    <string name="about_version_label">Version</string>
+    <string name="about_commands_header">Available Commands</string>
+    <string name="about_cmd_verify">verify — Verify the dastyab binary integrity</string>
+    <string name="about_cmd_accounts">accounts — List and manage Cloudflare accounts</string>
+    <string name="about_cmd_profiles">profiles — List and manage tunnel profiles</string>
+    <string name="about_cmd_token_list">token-list — List authentication tokens</string>
+    <string name="about_cmd_scan">scan — Scan for available tunnel endpoints</string>
+    <string name="about_cmd_deploy">deploy — Deploy a new tunnel configuration</string>
+    <string name="about_cmd_autopilot">autopilot — Run automated setup and deployment</string>
+    <string name="about_cmd_security">security — Run security checks and audits</string>
+    <string name="about_cmd_manifest_verify">manifest-verify — Verify deployment manifests</string>
+    <string name="about_cmd_update_check">update-check — Check for dastyab updates</string>
+    <string name="about_cmd_configs">configs — List and manage configuration files</string>
+    <string name="about_cmd_backup">backup — Create a backup of dastyab state</string>
+    <string name="about_cmd_zones">zones — List available Cloudflare zones</string>
+    <string name="about_cmd_routes">routes — List and manage tunnel routes</string>
+    <string name="about_cmd_history">history — Show command history</string>
 </resources>

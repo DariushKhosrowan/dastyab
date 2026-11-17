@@ -11,7 +11,7 @@
         android:icon="@drawable/ic_launcher_dastyab"
         android:roundIcon="@drawable/ic_launcher_dastyab"
         android:label="Dastyab"
-        android:theme="@android:style/Theme.Material.Light.DarkActionBar"
+        android:theme="@style/DastyabTheme"
         android:hardwareAccelerated="true"
         android:supportsRtl="true">
         <activity
@@ -28,7 +28,12 @@
             android:name=".LogViewerActivity"
             android:exported="false"
             android:label="View Logs"
-            android:theme="@android:style/Theme.Material.Light.DarkActionBar" />
+            android:theme="@style/DastyabTheme" />
+        <activity
+            android:name=".AboutActivity"
+            android:exported="false"
+            android:label="About"
+            android:theme="@style/DastyabTheme" />
     </application>
 
 </manifest>

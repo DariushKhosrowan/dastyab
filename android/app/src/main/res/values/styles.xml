@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="DastyabTheme" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">@color/colorPrimary</item>
+        <item name="android:colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">@color/colorBackground</item>
+        <item name="android:textColorPrimary">@color/colorTextPrimary</item>
+        <item name="android:textColorSecondary">@color/colorTextSecondary</item>
+    </style>
+
+    <style name="DastyabButton" parent="@android:style/Widget.Material.Button">
+        <item name="android:background">@color/colorButtonPrimary</item>
+        <item name="android:textColor">@color/colorButtonPrimaryText</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:layout_marginBottom">6dp</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="DastyabChip" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:background">@color/colorChipBg</item>
+        <item name="android:textColor">@color/colorChipText</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingTop">6dp</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:layout_marginEnd">4dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:minWidth">0dp</item>
+    </style>
+
+    <style name="DastyabAboutText" parent="@android:style/TextAppearance.Material.Body1">
+        <item name="android:textColor">@color/colorTextPrimary</item>
+        <item name="android:padding">8dp</item>
+    </style>
+
+    <style name="DastyabAboutHeader" parent="@android:style/TextAppearance.Material.Title">
+        <item name="android:textColor">@color/colorPrimary</item>
+        <item name="android:padding">8dp</item>
+    </style>
+</resources>

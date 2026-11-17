@@ -3,7 +3,18 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:padding="12dp"
+    android:background="@color/colorBackground">
+
+    <!-- Version display -->
+    <TextView
+        android:id="@+id/tvVersion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:textColor="@color/colorPrimary"
+        android:paddingBottom="4dp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/status"
@@ -15,7 +26,8 @@
 
     <HorizontalScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:paddingBottom="4dp">
         <LinearLayout
             android:id="@+id/quickButtons"
             android:layout_width="wrap_content"
@@ -37,21 +49,21 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/btn_run"
-        android:padding="10dp" />
+        style="@style/DastyabButton" />
 
     <Button
         android:id="@+id/btnClear"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/btn_clear"
-        android:padding="10dp" />
+        style="@style/DastyabButton" />
 
     <Button
         android:id="@+id/btnRetry"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/btn_retry"
-        android:padding="10dp"
+        style="@style/DastyabButton"
         android:visibility="gone" />
 
     <Button
@@ -59,7 +71,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/btn_cancel"
-        android:padding="10dp"
+        style="@style/DastyabButton"
         android:visibility="gone" />
 
     <Button
@@ -67,7 +79,40 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/btn_view_logs"
-        android:padding="10dp" />
+        style="@style/DastyabButton" />
+
+    <!-- Row of Copy / Share / About buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp">
+
+        <Button
+            android:id="@+id/btnCopy"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_copy"
+            style="@style/DastyabButton" />
+
+        <Button
+            android:id="@+id/btnShare"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_share"
+            style="@style/DastyabButton" />
+
+        <Button
+            android:id="@+id/btnAbout"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_about"
+            style="@style/DastyabButton" />
+    </LinearLayout>
 
     <ProgressBar
         android:id="@+id/progress"
@@ -88,7 +133,7 @@
             android:fontFamily="monospace"
             android:textAppearance="?android:attr/textAppearanceSmall"
             android:padding="8dp"
-            android:background="#f5f5f5" />
+            android:background="@color/colorOutputBg" />
     </ScrollView>
 
 </LinearLayout>

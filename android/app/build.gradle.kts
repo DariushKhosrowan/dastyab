@@ -11,8 +11,8 @@ android {
         applicationId = "com.dastyab.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
     }
 
     // Pure-Kotlin app — no native code, so no NDK/abiFilters needed.

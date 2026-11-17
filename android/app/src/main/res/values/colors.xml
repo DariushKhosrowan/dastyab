@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#312E81</color>
+    <color name="colorPrimaryDark">#1E1B4B</color>
+    <color name="colorAccent">#7C3AED</color>
+    <color name="colorBackground">#FAFAFA</color>
+    <color name="colorSurface">#FFFFFF</color>
+    <color name="colorTextPrimary">#1F1F1F</color>
+    <color name="colorTextSecondary">#6B6B6B</color>
+    <color name="colorChipBg">#E8EAF6</color>
+    <color name="colorChipText">#312E81</color>
+    <color name="colorOutputBg">#F5F5F5</color>
+    <color name="colorDivider">#E0E0E0</color>
+    <color name="colorButtonPrimary">#312E81</color>
+    <color name="colorButtonPrimaryText">#FFFFFF</color>
+    <color name="colorButtonSecondary">#7C3AED</color>
+    <color name="colorButtonSecondaryText">#FFFFFF</color>
+    <color name="colorStatusReady">#2E7D32</color>
+    <color name="colorStatusError">#C62828</color>
+    <color name="colorStatusWarning">#F57F17</color>
+</resources>

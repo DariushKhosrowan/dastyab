@@ -1,6 +1,9 @@
 package com.dastyab.app
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
@@ -13,6 +16,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
@@ -68,6 +72,10 @@ class MainActivity : Activity() {
     private lateinit var btnRetry: Button
     private lateinit var btnCancel: Button
     private lateinit var btnViewLogs: Button
+    private lateinit var btnCopy: Button
+    private lateinit var btnShare: Button
+    private lateinit var btnAbout: Button
+    private lateinit var tvVersion: TextView
     private lateinit var progress: ProgressBar
 
     private val handler = Handler(Looper.getMainLooper())
@@ -103,8 +111,21 @@ class MainActivity : Activity() {
         btnRun = findViewById(R.id.btnRun)
         btnClear = findViewById(R.id.btnClear)
         btnRetry = findViewById(R.id.btnRetry)
+        btnCancel = findViewById(R.id.btnCancel)
         btnViewLogs = findViewById(R.id.btnViewLogs)
+        btnCopy = findViewById(R.id.btnCopy)
+        btnShare = findViewById(R.id.btnShare)
+        btnAbout = findViewById(R.id.btnAbout)
+        tvVersion = findViewById(R.id.tvVersion)
         progress = findViewById(R.id.progress)
+
+        // Display app version
+        val versionName = try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown"
+        } catch (_: Exception) {
+            "unknown"
+        }
+        tvVersion.text = getString(R.string.version_format, versionName)
 
         binary = File(filesDir, "dastyab")
 
@@ -140,6 +161,36 @@ class MainActivity : Activity() {
             } catch (e: android.content.ActivityNotFoundException) {
                 DastyabLogger.e("MainActivity", e, "LogViewerActivity not found — is it registered in AndroidManifest.xml?")
                 postStatus("Error: log viewer not available")
+            }
+        }
+        btnCopy.setOnClickListener {
+            val text = output.text.toString()
+            if (text.isEmpty()) {
+                Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Dastyab output", text))
+            Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+            DastyabLogger.i("MainActivity", "Output copied to clipboard")
+        }
+        btnShare.setOnClickListener {
+            val text = output.text.toString()
+            if (text.isEmpty()) return@setOnClickListener
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            startActivity(Intent.createChooser(shareIntent, getString(R.string.share_title)))
+            DastyabLogger.i("MainActivity", "Share intent launched")
+        }
+        btnAbout.setOnClickListener {
+            DastyabLogger.i("MainActivity", "Opening AboutActivity")
+            try {
+                startActivity(Intent(this, AboutActivity::class.java))
+            } catch (e: android.content.ActivityNotFoundException) {
+                DastyabLogger.e("MainActivity", e, "AboutActivity not found — is it registered in AndroidManifest.xml?")
+                postStatus("Error: about not available")
             }
         }
 
@@ -292,10 +343,8 @@ class MainActivity : Activity() {
             "configs", "backup", "zones", "routes", "history"
         )
         for (c in cmds) {
-            val b = Button(this).apply {
+            val b = Button(this, null, 0, R.style.DastyabChip).apply {
                 text = c
-                setPadding(14, 6, 14, 6)
-                setAllCaps(false)
             }
             b.setOnClickListener {
                 argsInput.setText(c)
