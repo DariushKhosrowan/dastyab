@@ -108,4 +108,13 @@ object CrashHandler {
         return dir.listFiles { f -> f.name.startsWith(CRASH_FILE_BASE) && f.name.endsWith(CRASH_FILE_EXT) }
             ?.sortedByDescending { it.lastModified() }?.toList() ?: emptyList()
     }
+
+    /** Delete all crash files. @return number of files deleted. */
+    fun clearCrashFiles(): Int {
+        var deleted = 0
+        for (f in getCrashFiles()) {
+            if (f.delete()) deleted++
+        }
+        return deleted
+    }
 }

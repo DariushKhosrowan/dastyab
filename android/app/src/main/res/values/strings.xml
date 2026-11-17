@@ -54,4 +54,30 @@
     <string name="about_cmd_zones">zones — List available Cloudflare zones</string>
     <string name="about_cmd_routes">routes — List and manage tunnel routes</string>
     <string name="about_cmd_history">history — Show command history</string>
+
+    <!-- Command history -->
+    <string name="btn_history">History</string>
+    <string name="history_prompt">Recent commands</string>
+    <string name="history_dialog_title">Command History</string>
+    <string name="history_empty">No command history yet</string>
+
+    <!-- Settings -->
+    <string name="btn_settings">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_log_level">Minimum log file level</string>
+    <string name="settings_auto_update">Auto-update binary on app start</string>
+    <string name="settings_clear_logs">Clear log files</string>
+    <string name="settings_clear_crash_logs">Clear crash logs</string>
+    <string name="settings_clear_history">Clear command history</string>
+    <string name="settings_force_redownload">Force re-download binary</string>
+
+    <!-- Binary updater -->
+    <string name="btn_update">Update</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_up_to_date">Binary is up to date</string>
+    <string name="update_available_title">Update available</string>
+    <string name="update_available_msg">A newer dastyab binary is available on GitHub Releases. Download it now?</string>
+    <string name="update_download">Download</string>
+    <string name="update_later">Later</string>
+    <string name="update_unknown">Could not check for updates (no network or release unreachable)</string>
 </resources>

@@ -16,13 +16,29 @@
         android:paddingBottom="4dp"
         android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/status"
+    <!-- Status row: colored indicator dot + status text -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/status_checking"
-        android:textAppearance="?android:attr/textAppearanceSmall"
-        android:paddingBottom="6dp" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="6dp">
+
+        <View
+            android:id="@+id/statusDot"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_marginRight="8dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/status_dot_gray" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/status_checking"
+            android:textAppearance="?android:attr/textAppearanceSmall" />
+    </LinearLayout>
 
     <HorizontalScrollView
         android:layout_width="match_parent"
@@ -34,6 +50,41 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal" />
     </HorizontalScrollView>
+
+    <!-- Second row: profile-related quick actions -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="4dp">
+        <LinearLayout
+            android:id="@+id/quickButtonsProfiles"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+
+    <!-- History: spinner dropdown + full-history button -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="4dp">
+
+        <Spinner
+            android:id="@+id/historySpinner"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:prompt="@string/history_prompt" />
+
+        <Button
+            android:id="@+id/btnHistory"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_history"
+            style="@style/DastyabButton" />
+    </LinearLayout>
 
     <EditText
         android:id="@+id/argsInput"
@@ -111,6 +162,31 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/btn_about"
+            style="@style/DastyabButton" />
+    </LinearLayout>
+
+    <!-- Row of Settings / Update buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp">
+
+        <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_settings"
+            style="@style/DastyabButton" />
+
+        <Button
+            android:id="@+id/btnUpdate"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_update"
             style="@style/DastyabButton" />
     </LinearLayout>
 

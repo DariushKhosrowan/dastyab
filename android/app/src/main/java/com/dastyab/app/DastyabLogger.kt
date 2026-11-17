@@ -73,6 +73,11 @@ object DastyabLogger {
         try { minFileLevel = level } finally { lock.unlock() }
     }
 
+    fun getCurrentMinFileLevel(): LogLevel {
+        lock.lock()
+        try { return minFileLevel } finally { lock.unlock() }
+    }
+
     fun setTagLevel(tag: String, level: LogLevel) {
         lock.lock()
         try { tagLevels[tag] = level } finally { lock.unlock() }

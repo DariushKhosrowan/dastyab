@@ -1,16 +1,26 @@
 package com.dastyab.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.style.ClickableSpan
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -75,6 +85,11 @@ class MainActivity : Activity() {
     private lateinit var btnCopy: Button
     private lateinit var btnShare: Button
     private lateinit var btnAbout: Button
+    private lateinit var btnSettings: Button
+    private lateinit var btnUpdate: Button
+    private lateinit var btnHistory: Button
+    private lateinit var statusDot: View
+    private lateinit var historySpinner: android.widget.Spinner
     private lateinit var tvVersion: TextView
     private lateinit var progress: ProgressBar
 
@@ -83,6 +98,8 @@ class MainActivity : Activity() {
     private lateinit var binary: File
 
     private var downloadAttempts = 0
+    @Volatile
+    private var autoUpdatePending = false
 
     companion object {
         private const val MAX_DOWNLOAD_ATTEMPTS = 3
@@ -116,6 +133,11 @@ class MainActivity : Activity() {
         btnCopy = findViewById(R.id.btnCopy)
         btnShare = findViewById(R.id.btnShare)
         btnAbout = findViewById(R.id.btnAbout)
+        btnSettings = findViewById(R.id.btnSettings)
+        btnUpdate = findViewById(R.id.btnUpdate)
+        btnHistory = findViewById(R.id.btnHistory)
+        statusDot = findViewById(R.id.statusDot)
+        historySpinner = findViewById(R.id.historySpinner)
         tvVersion = findViewById(R.id.tvVersion)
         progress = findViewById(R.id.progress)
 
@@ -142,6 +164,8 @@ class MainActivity : Activity() {
 
         DastyabLogger.init(filesDir)
         CrashHandler.install(this, filesDir)
+        CommandHistory.init(filesDir)
+        applyPersistedSettings()
         DastyabLogger.i("MainActivity",
             "onCreate — binary=%s, exists=%s, abi=%s, attempt=%d",
             binary.absolutePath, binary.exists(),
@@ -149,6 +173,10 @@ class MainActivity : Activity() {
             downloadAttempts)
 
         buildQuickButtons()
+        buildProfileQuickButtons()
+        setupHistorySpinner()
+        setupHistoryButton()
+        setupSettingsAndUpdateButtons()
 
         btnRun.setOnClickListener { runTyped() }
         btnClear.setOnClickListener { output.setText("") }
@@ -276,10 +304,16 @@ class MainActivity : Activity() {
                 }
             }
             postStatus(getString(R.string.status_ready))
+            setStatusDot(DotState.GREEN)
             setRunEnabled(true)
             hideRetry()
             hideCancel()
             DastyabLogger.i("MainActivity", "Binary is valid and ready")
+            // Auto-update binary check on app start (if enabled in settings).
+            if (autoUpdatePending) {
+                autoUpdatePending = false
+                checkForBinaryUpdate(auto = true)
+            }
         } else if (binary.exists()) {
             // File exists but isn't a valid ELF — delete it and re-download.
             DastyabLogger.w("MainActivity",
@@ -331,7 +365,16 @@ class MainActivity : Activity() {
             evaluateBinaryState() // try to fix (re-download)
             return
         }
+        CommandHistory.add(s)
+        refreshHistorySpinner()
         runCommand(s.split(Regex("\\s+")).filter { it.isNotEmpty() }.toTypedArray())
+    }
+
+    /** Re-populate the history spinner (after a command runs). */
+    private fun refreshHistorySpinner() {
+        val cb = { setupHistorySpinner() }
+        pendingHandlerCallbacks.add(cb)
+        handler.post(cb)
     }
 
     /** Build the row of one-tap quick-action buttons. */
@@ -351,6 +394,176 @@ class MainActivity : Activity() {
                 runTyped()
             }
             container.addView(b)
+        }
+    }
+
+    /** Build the second row of profile-related quick-action buttons. */
+    private fun buildProfileQuickButtons() {
+        val container: LinearLayout = findViewById(R.id.quickButtonsProfiles)
+        val cmds = listOf(
+            "profile-create", "profile-switch", "profile-list", "token-add",
+            "token-remove", "backup-create", "backup-restore", "config-export",
+            "config-v2ray", "config-singbox", "config-clash"
+        )
+        for (c in cmds) {
+            val b = Button(this, null, 0, R.style.DastyabChip).apply {
+                text = c
+            }
+            b.setOnClickListener {
+                argsInput.setText(c)
+                runTyped()
+            }
+            container.addView(b)
+        }
+    }
+
+    /** Populate the history spinner from CommandHistory. */
+    private fun setupHistorySpinner() {
+        val cmds = CommandHistory.getCommands()
+        val items = mutableListOf(getString(R.string.history_prompt))
+        items.addAll(cmds)
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, items)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        historySpinner.adapter = adapter
+        historySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            private var selecting = false
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position == 0) return // prompt row
+                // Only react to genuine user selections.
+                if (selecting) { selecting = false; return }
+                selecting = true
+                val cmd = items[position]
+                argsInput.setText(cmd)
+                DastyabLogger.d("MainActivity", "History spinner selected: %s", cmd)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    /** History button — full history dialog; tapping an entry fills args. */
+    private fun setupHistoryButton() {
+        btnHistory.setOnClickListener {
+            val entries = CommandHistory.getAll()
+            if (entries.isEmpty()) {
+                Toast.makeText(this, getString(R.string.history_empty), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val items = entries.map { e ->
+                val date = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US)
+                    .format(java.util.Date(e.timestampMs))
+                "[$date] ${e.command}"
+            }.toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.history_dialog_title))
+                .setItems(items) { _, which ->
+                    argsInput.setText(entries[which].command)
+                }
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+        }
+    }
+
+    /** Settings + Update buttons. */
+    private fun setupSettingsAndUpdateButtons() {
+        btnSettings.setOnClickListener {
+            DastyabLogger.i("MainActivity", "Opening SettingsActivity")
+            try {
+                startActivity(Intent(this, SettingsActivity::class.java))
+            } catch (e: android.content.ActivityNotFoundException) {
+                DastyabLogger.e("MainActivity", e, "SettingsActivity not found")
+                postStatus("Error: settings not available")
+            }
+        }
+        btnUpdate.setOnClickListener { checkForBinaryUpdate(false) }
+    }
+
+    /**
+     * Check whether a newer binary is available (BinaryUpdater) and offer to
+     * re-download. When [auto] is true (auto-update on app start), show status
+     * only; otherwise show a dialog with a Download action.
+     */
+    private fun checkForBinaryUpdate(auto: Boolean) {
+        postStatus(getString(R.string.update_checking))
+        setStatusDot(DotState.GRAY)
+        thread(isDaemon = true, name = "update-check-thread") {
+            val result = BinaryUpdater.checkForUpdate(binary, assetArch())
+            handler.post {
+                when (result.status) {
+                    BinaryUpdater.UpdateStatus.UP_TO_DATE -> {
+                        postStatus(getString(R.string.update_up_to_date))
+                        setStatusDot(DotState.GREEN)
+                        if (!auto) {
+                            Toast.makeText(this, getString(R.string.update_up_to_date), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    BinaryUpdater.UpdateStatus.UPDATE_AVAILABLE -> {
+                        postStatus(result.message)
+                        setStatusDot(DotState.ORANGE)
+                        if (auto) {
+                            // Auto-update: download silently.
+                            postStatus("Auto-update: ${result.message}")
+                            startDownload()
+                        } else {
+                            AlertDialog.Builder(this)
+                                .setTitle(getString(R.string.update_available_title))
+                                .setMessage(getString(R.string.update_available_msg))
+                                .setPositiveButton(getString(R.string.update_download)) { _, _ ->
+                                    startDownload()
+                                }
+                                .setNegativeButton(getString(R.string.update_later), null)
+                                .show()
+                        }
+                    }
+                    BinaryUpdater.UpdateStatus.UNKNOWN -> {
+                        postStatus(getString(R.string.update_unknown))
+                        setStatusDot(DotState.GRAY)
+                        if (!auto) {
+                            Toast.makeText(this, getString(R.string.update_unknown), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Apply persisted settings (log level, auto-update) on app start. */
+    private fun applyPersistedSettings() {
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
+        val levelName = prefs.getString(SettingsActivity.PREF_LOG_LEVEL, null)
+        if (levelName != null) {
+            try {
+                DastyabLogger.setMinFileLevel(DastyabLogger.LogLevel.valueOf(levelName))
+            } catch (_: Throwable) { }
+        }
+        // Auto-update check runs after binary state is evaluated in onResume flow;
+        // do it once the binary is confirmed ready (see evaluateBinaryState).
+        if (prefs.getBoolean(SettingsActivity.PREF_AUTO_UPDATE, true)) {
+            autoUpdatePending = true
+        }
+    }
+
+    /** Status dot states for the status indicator. */
+    private enum class DotState { GREEN, ORANGE, RED, GRAY }
+
+    private fun setStatusDot(state: DotState) {
+        val cb = {
+            statusDot.background = when (state) {
+                DotState.GREEN -> getDrawableCompat(R.drawable.status_dot_green)
+                DotState.ORANGE -> getDrawableCompat(R.drawable.status_dot_orange)
+                DotState.RED -> getDrawableCompat(R.drawable.status_dot_red)
+                DotState.GRAY -> getDrawableCompat(R.drawable.status_dot_gray)
+            }
+        }
+        pendingHandlerCallbacks.add(cb)
+        handler.post(cb)
+    }
+
+    private fun getDrawableCompat(resId: Int): android.graphics.drawable.Drawable? {
+        return if (Build.VERSION.SDK_INT >= 21) {
+            getDrawable(resId)
+        } else {
+            @Suppress("DEPRECATION")
+            resources.getDrawable(resId)
         }
     }
     /** Cancel any in-flight download or running process. */
@@ -385,6 +598,7 @@ class MainActivity : Activity() {
 
         downloadAttempts++
         downloadCancellation.set(false)
+        setStatusDot(DotState.ORANGE)
         val arch = assetArch()
         val urlStr = "https://github.com/$repo/releases/latest/download/dastyab-android-$arch"
         DastyabLogger.i("Download", "Attempt %d/%d: arch=%s url=%s",
@@ -549,6 +763,7 @@ class MainActivity : Activity() {
             showProgress(false)
             hideCancel()
             postStatus(getString(R.string.status_ready))
+            setStatusDot(DotState.GREEN)
             setRunEnabled(true)
             hideRetry()
         }
@@ -649,7 +864,7 @@ class MainActivity : Activity() {
                 } else {
                     DastyabLogger.e("Run", e, "Command failed: dastyab %s", cmdLine)
                     postOutput("ERROR: ${e.message ?: e.toString()}\n")
-                    handler.post { postStatus(getString(R.string.status_error)) }
+                    handler.post { postStatus(getString(R.string.status_error)); setStatusDot(DotState.RED) }
                 }
             } finally {
                 runningProcess = null
@@ -665,10 +880,91 @@ class MainActivity : Activity() {
         DastyabLogger.d("MainActivity", "STATUS: %s", msg)
     }
     private fun postOutput(msg: String) {
-        val cb = { output.append(msg) }
+        val cb = { applyFormattedOutput(msg) }
         pendingHandlerCallbacks.add(cb)
         handler.post(cb)
         DastyabLogger.d("MainActivity", "OUTPUT: %s", msg.trimEnd().replace("\n", " | "))
+    }
+
+    /**
+     * Apply syntax highlighting to appended output text and add it to the
+     * output view (per-line coloring for ERROR/WARN/OK, clickable URLs,
+     * bold exit-code lines).
+     */
+    private fun applyFormattedOutput(msg: String) {
+        output.append(formatOutput(msg))
+    }
+
+    /**
+     * Build a Spannable for [text] with:
+     *  • lines starting with ERROR/error → red
+     *  • lines starting with WARN/warning → orange
+     *  • lines starting with OK/success → green
+     *  • lines containing http:// or https:// → clickable links
+     *  • exit-code lines ("--- exit code N ---") → bold
+     */
+    fun formatOutput(text: String): Spannable {
+        val sb = SpannableStringBuilder(text)
+        val linkMovementMethodInstance = android.text.method.LinkMovementMethod.getInstance()
+
+        var lineStart = 0
+        val lines = text.split("\n")
+        for (line in lines) {
+            val lineEnd = lineStart + line.length
+            val lower = line.trimStart().lowercase()
+
+            // Exit-code lines → bold
+            if (Regex("^---\\s*exit code\\s+-?\\d+\\s*---$", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(line.trim())) {
+                sb.setSpan(StyleSpan(Typeface.BOLD), lineStart, lineEnd,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // Level-based coloring
+            val color = when {
+                lower.startsWith("error") -> Color.rgb(0xC6, 0x28, 0x28)   // red
+                lower.startsWith("warn") || lower.startsWith("warning") ->
+                    Color.rgb(0xEF, 0x6C, 0x00)                            // orange
+                lower.startsWith("ok") || lower.startsWith("success") ->
+                    Color.rgb(0x2E, 0x7D, 0x32)                            // green
+                else -> null
+            }
+            if (color != null) {
+                sb.setSpan(ForegroundColorSpan(color), lineStart, lineEnd,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // Clickable URLs
+            val urlRegex = Regex("https?://[^\\s]+")
+            for (m in urlRegex.findAll(line)) {
+                val start = lineStart + m.range.first
+                val end = lineStart + m.range.last + 1
+                val url = m.value
+                sb.setSpan(object : ClickableSpan() {
+                    override fun onClick(widget: View) {
+                        try {
+                            startActivity(
+                                Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                        } catch (_: Exception) { }
+                    }
+                    override fun updateDrawState(ds: android.text.TextPaint) {
+                        super.updateDrawState(ds)
+                        ds.color = Color.rgb(0x1A, 0x55, 0xE0) // blue
+                        ds.isUnderlineText = true
+                    }
+                }, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            lineStart = lineEnd + 1 // +1 for the '\n' that was consumed by split
+        }
+
+        // Enable link clicks when the spannable contains URL spans.
+        if (text.contains("http://") || text.contains("https://")) {
+            val cb = { output.movementMethod = linkMovementMethodInstance }
+            pendingHandlerCallbacks.add(cb)
+            handler.post(cb)
+        }
+        return sb
     }
 
     private fun setRunEnabled(enabled: Boolean) {
