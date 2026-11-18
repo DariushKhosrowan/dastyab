@@ -86,7 +86,7 @@ jobs:
           test -r /dev/kvm && test -w /dev/kvm
 
       - name: Run instrumentation tests on emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
           arch: x86_64
@@ -116,7 +116,7 @@ jobs:
           VERSION=$(grep -o 'versionName = "[^"]*"' android/app/build.gradle.kts | cut -d'"' -f2)
           cp "$APK" "DastYab-${VERSION}-android.apk"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           name: dastyab-release-android-apk
           path: DastYab-*-android.apk
