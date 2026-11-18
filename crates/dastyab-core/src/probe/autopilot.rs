@@ -1332,13 +1332,37 @@ impl AutopilotEngine {
         interval: Duration,
         provider: Box<dyn EndpointProvider>,
     ) -> Self {
+        use crate::trust::account_state::{AccountState, AccountStateProbe};
+
+        struct OfflineAliveWorkerProbe;
+        impl WorkerHealthProbe for OfflineAliveWorkerProbe {
+            fn probe<'a>(
+                &'a self,
+                _worker_host: &'a str,
+                _timeout_s: u64,
+            ) -> Pin<Box<dyn Future<Output = WorkerHealth> + Send + 'a>> {
+                Box::pin(async move { WorkerHealth::Alive })
+            }
+        }
+
+        struct OfflineActiveAccountProbe;
+        impl AccountStateProbe for OfflineActiveAccountProbe {
+            fn probe<'a>(
+                &'a self,
+                _profile: &'a str,
+            ) -> Pin<Box<dyn Future<Output = AccountState> + Send + 'a>> {
+                Box::pin(async move { AccountState::Active })
+            }
+        }
+
         Self::with_components(
             profile_id,
             params,
             interval,
             provider,
-            Box::new(RealWorkerHealthProbe),
+            Box::new(OfflineAliveWorkerProbe),
         )
+        .with_account_probe(Box::new(OfflineActiveAccountProbe))
     }
 
     /// Test-only constructor: inject both a scripted provider and a scripted

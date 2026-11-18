@@ -158,14 +158,18 @@ if echo "$MANIFEST_TREE" | grep -qiE "testOnly.*=.*true|testOnly.*=\(type 0x12\)
 fi
 echo "  OK: Manifest flags verified."
 
-echo "[5/5] Verifying APK v1/v2/v3 signatures via apksigner..."
+echo "[5/5] Verifying APK signatures (v2 + v3 schemes for minSdk 24+)..."
 VERIFY_OUT=$("$APKSIGNER" verify --verbose --print-certs "$APK")
 echo "$VERIFY_OUT"
-for scheme in "v1 scheme" "v2 scheme" "v3 scheme"; do
-  echo "$VERIFY_OUT" | grep -q "Verified using ${scheme}.*: true" || {
+grep -qi "^Verifies" <<<"$VERIFY_OUT" || {
+  echo "FAIL: apksigner did not report overall 'Verifies' status" >&2
+  exit 1
+}
+for scheme in "v2 scheme" "v3 scheme"; do
+  grep -qi "Verified using ${scheme}.*: *true" <<<"$VERIFY_OUT" || {
     echo "FAIL: APK signature missing ${scheme} verification" >&2
     exit 1
   }
 done
 
-echo "✅ PASS: APK passed all installability, alignment, ABI, manifest, and v1/v2/v3 signature gates."
+echo "✅ PASS: APK passed all installability, alignment, ABI, manifest, and v2/v3 signature gates."
