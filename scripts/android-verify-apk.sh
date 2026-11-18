@@ -60,10 +60,11 @@ with zipfile.ZipFile(apk_path, "r") as zf:
                 f"FAIL: resources.arsc data offset ({data_offset}) is not 4-byte aligned"
             )
 
-    # Verify mipmap launcher icon presence (PNG fallback or adaptive v26 XML).
-    has_mipmap = any(n.startswith("res/mipmap") for n in names)
-    if not has_mipmap:
-        raise SystemExit("FAIL: No res/mipmap* launcher icons packaged in APK")
+    # Verify packaged resources exist (full res/mipmap* paths or AGP 8+ shortened res/* paths).
+    # In full mode, step [3/5] cross-checks every badging application-icon entry against the ZIP.
+    has_res = any(n.startswith("res/") for n in names)
+    if not has_res:
+        raise SystemExit("FAIL: No res/ resources packaged in APK")
 
     # Verify all 4 ABIs have valid little-endian ELF binaries and no misnamed executables.
     for n in names:
@@ -81,7 +82,7 @@ with zipfile.ZipFile(apk_path, "r") as zf:
         if actual != spec:
             raise SystemExit(f"FAIL: ABI mismatch in {entry}: got {actual}, expected {spec}")
 
-print("  OK: ZIP integrity, uncompressed 4-byte aligned resources.arsc, mipmap icons, and 4-ABI ELFs verified.")
+print("  OK: ZIP integrity, uncompressed 4-byte aligned resources.arsc, resources, and 4-ABI ELFs verified.")
 PY
 
 if $STATIC_ONLY; then
@@ -120,7 +121,7 @@ echo "[2/5] Checking zipalign (4-byte alignment)..."
 "$ZIPALIGN" -c -v 4 "$APK" >/dev/null
 echo "  OK: zipalign passed."
 
-echo "[3/5] Checking aapt2 PackageParser badging..."
+echo "[3/5] Checking aapt2 PackageParser badging & packaged launcher icons..."
 BADGING=$("$AAPT2" dump badging "$APK")
 echo "$BADGING" | grep -q "package: name='com.dastyab.app'" || {
   echo "FAIL: Unexpected package name in badging" >&2
@@ -130,11 +131,24 @@ echo "$BADGING" | grep -q "launchable-activity: name='com.dastyab.app.MainActivi
   echo "FAIL: Missing launchable-activity MainActivity" >&2
   exit 1
 }
-echo "$BADGING" | grep -q "application-icon" || {
-  echo "FAIL: Missing application-icon in badging" >&2
-  exit 1
-}
-echo "  OK: aapt2 badging passed."
+python3 - "$APK" "$BADGING" <<'PY'
+import re, sys, zipfile
+
+apk_path, badging = sys.argv[1], sys.argv[2]
+icons = re.findall(r"application-icon[^:]*:'([^']+)'", badging)
+if not icons:
+    raise SystemExit("FAIL: Missing application-icon in aapt2 badging")
+
+with zipfile.ZipFile(apk_path, "r") as zf:
+    names = set(zf.namelist())
+    for icon_path in icons:
+        if icon_path not in names:
+            raise SystemExit(f"FAIL: Launcher icon {icon_path} declared in badging is missing from APK")
+        if zf.getinfo(icon_path).file_size <= 0:
+            raise SystemExit(f"FAIL: Launcher icon {icon_path} in APK is empty")
+
+print(f"  OK: aapt2 badging & {len(icons)} packaged launcher icon entries verified.")
+PY
 
 echo "[4/5] Checking AndroidManifest flags (no testOnly, extractNativeLibs=true)..."
 MANIFEST_TREE=$("$AAPT2" dump xmltree "$APK" --file AndroidManifest.xml)
