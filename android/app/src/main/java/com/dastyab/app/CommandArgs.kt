@@ -32,7 +32,7 @@ object CommandArgs {
                     started = true
                 }
                 char.isWhitespace() -> {
-                    if (started) {
+                    if (quote == null && started) {
                         args.add(token.toString())
                         token.setLength(0)
                         started = false
