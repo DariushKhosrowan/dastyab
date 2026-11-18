@@ -513,7 +513,7 @@ class MainActivity : Activity() {
             }
             if (color != null) spans.setSpan(ForegroundColorSpan(color), offset, offset + line.length,
                 Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            if (Regex("^---\\s*exit code\\s+-?\\d+\s*---$", RegexOption.IGNORE_CASE).matches(line.trim())) {
+if (Regex(""""""^---\s*exit code\s+-?\d+\s*---$""""""", RegexOption.IGNORE_CASE).matches(line.trim())
                 spans.setSpan(StyleSpan(Typeface.BOLD), offset, offset + line.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             Regex("https?://[^\\s]+").findAll(line).forEach { match ->
