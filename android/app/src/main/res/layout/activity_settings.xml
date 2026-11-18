@@ -8,81 +8,121 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingBottom="24dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/settings_title"
-            android:textAppearance="?android:attr/textAppearanceLarge"
+            android:textSize="24sp"
             android:textStyle="bold"
-            android:textColor="@color/colorPrimary"
-            android:paddingBottom="12dp" />
+            android:textColor="@color/colorAccent"
+            android:paddingBottom="16dp" />
 
-        <!-- Log level -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/settings_log_level"
-            android:textAppearance="?android:attr/textAppearanceMedium"
-            android:paddingBottom="4dp" />
-
-        <Spinner
-            android:id="@+id/spinnerLogLevel"
+        <!-- Logging Card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingBottom="8dp" />
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
 
-        <!-- Auto-update toggle -->
-        <CheckBox
-            android:id="@+id/cbAutoUpdate"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/settings_auto_update"
-            android:paddingBottom="8dp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_log_level"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorTextPrimary"
+                android:paddingBottom="8dp" />
 
-        <Button
-            android:id="@+id/btnClearLogs"
+            <Spinner
+                android:id="@+id/spinnerLogLevel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <CheckBox
+                android:id="@+id/cbAutoUpdate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_auto_update"
+                android:textColor="@color/colorTextPrimary"
+                android:paddingTop="8dp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
+
+        <!-- Storage & Maintenance Card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/settings_clear_logs"
-            style="@style/DastyabButton" />
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
 
-        <Button
-            android:id="@+id/btnClearCrashLogs"
+            <Button
+                android:id="@+id/btnClearLogs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_clear_logs"
+                style="@style/DastyabButton"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/btnClearCrashLogs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_clear_crash_logs"
+                style="@style/DastyabButton"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/btnClearHistory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_clear_history"
+                style="@style/DastyabButton" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
+
+        <!-- Updates & Info Card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/settings_clear_crash_logs"
-            style="@style/DastyabButton" />
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
 
-        <Button
-            android:id="@+id/btnClearHistory"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/settings_clear_history"
-            style="@style/DastyabButton" />
+            <Button
+                android:id="@+id/btnForceRedownload"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_force_redownload"
+                style="@style/DastyabButtonPrimary"
+                android:layout_marginBottom="10dp" />
 
-        <Button
-            android:id="@+id/btnForceRedownload"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/settings_force_redownload"
-            style="@style/DastyabButton" />
-
-        <Button
-            android:id="@+id/btnSettingsAbout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/btn_about"
-            style="@style/DastyabButton" />
+            <Button
+                android:id="@+id/btnSettingsAbout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_about"
+                style="@style/DastyabButton" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/tvSettingsStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="?android:attr/textAppearanceSmall"
-            android:textColor="@color/colorTextSecondary"
-            android:paddingTop="8dp" />
+            android:textSize="13sp"
+            android:textColor="@color/colorChipText"
+            android:paddingTop="14dp"
+            android:paddingStart="4dp" />
 
     </LinearLayout>
 </ScrollView>

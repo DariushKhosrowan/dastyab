@@ -53,13 +53,13 @@ class MainActivity : Activity() {
     private lateinit var historySpinner: Spinner
     private lateinit var binary: File
 
-    // Simple action buttons (main screen)
-    private lateinit var btnSimpleAistudio: TextView
-    private lateinit var btnSimpleVerify: TextView
-    private lateinit var btnSimpleAccounts: TextView
-    private lateinit var btnSimpleProfiles: TextView
-    private lateinit var btnSimpleTokens: TextView
-    private lateinit var btnSimpleScan: TextView
+    // Simple action cards (main screen — entire card is clickable)
+    private lateinit var btnSimpleAistudio: View
+    private lateinit var btnSimpleVerify: View
+    private lateinit var btnSimpleAccounts: View
+    private lateinit var btnSimpleProfiles: View
+    private lateinit var btnSimpleTokens: View
+    private lateinit var btnSimpleScan: View
 
     // Advanced section toggle
     private lateinit var btnShowAdvanced: Button
@@ -506,9 +506,9 @@ class MainActivity : Activity() {
         for (line in text.split('\n')) {
             val lower = line.trimStart().lowercase()
             val color = when {
-                lower.startsWith("error") -> Color.rgb(0xC6, 0x28, 0x28)
-                lower.startsWith("warn") -> Color.rgb(0xEF, 0x6C, 0x00)
-                lower.startsWith("ok") || lower.startsWith("success") -> Color.rgb(0x2E, 0x7D, 0x32)
+                lower.startsWith("error") -> Color.rgb(0xF8, 0x71, 0x71)
+                lower.startsWith("warn") -> Color.rgb(0xFB, 0xBF, 0x24)
+                lower.startsWith("ok") || lower.startsWith("success") -> Color.rgb(0x4A, 0xDE, 0x80)
                 else -> null
             }
             if (color != null) spans.setSpan(

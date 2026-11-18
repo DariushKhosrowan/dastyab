@@ -8,138 +8,168 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingBottom="24dp">
 
-        <TextView
-            android:id="@+id/tvAboutTitle"
+        <!-- Hero Card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/about_title"
-            style="@style/DastyabAboutHeader"
-            android:textSize="22sp" />
+            android:orientation="vertical"
+            android:background="@drawable/header_card_background"
+            android:padding="18dp">
 
-        <TextView
-            android:id="@+id/tvAboutVersion"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:id="@+id/tvAboutTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_title"
+                style="@style/DastyabAboutHeader"
+                android:textSize="22sp" />
+
+            <TextView
+                android:id="@+id/tvAboutVersion"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/version_pill_bg"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorChipText" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/colorDivider"
+                android:layout_marginTop="14dp"
+                android:layout_marginBottom="10dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_description"
+                style="@style/DastyabAboutText" />
+        </LinearLayout>
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/colorDivider"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp" />
+            android:layout_height="14dp" />
 
-        <TextView
+        <!-- Commands Card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/about_description"
-            style="@style/DastyabAboutText" />
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="18dp">
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/colorDivider"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_commands_header"
+                style="@style/DastyabAboutHeader"
+                android:textSize="16sp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_commands_header"
-            style="@style/DastyabAboutHeader"
-            android:textSize="18sp" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/colorDivider"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="8dp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_verify"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_verify"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_accounts"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_accounts"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_profiles"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_profiles"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_token_list"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_token_list"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_scan"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_scan"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_deploy"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_deploy"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_autopilot"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_autopilot"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_security"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_security"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_manifest_verify"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_manifest_verify"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_update_check"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_update_check"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_configs"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_configs"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_backup"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_backup"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_zones"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_zones"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_routes"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_routes"
+                style="@style/DastyabAboutText" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/about_cmd_history"
-            style="@style/DastyabAboutText" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/about_cmd_history"
+                style="@style/DastyabAboutText" />
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>

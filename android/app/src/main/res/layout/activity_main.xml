@@ -2,46 +2,69 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/colorBackground"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="28dp">
 
-        <!-- ============ HEADER CARD ============ -->
+        <!-- ============ HERO HEADER CARD ============ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/card_selector"
-            android:clickable="true"
-            android:focusable="true">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/header_card_background"
+            android:padding="18dp">
 
-            <TextView
-                android:id="@+id/tvAppTitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/app_name"
-                android:textSize="32sp"
-                android:textStyle="bold"
-                android:textColor="@color/colorTextPrimary"
-                android:letterSpacing="0.02" />
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="14dp"
+                android:src="@drawable/ic_launcher_dastyab"
+                android:contentDescription="@string/app_name" />
 
-            <TextView
-                android:id="@+id/tvVersion"
-                android:layout_width="match_parent"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:textAppearance="?android:attr/textAppearanceSmall"
-                android:textColor="@color/colorTextSecondary"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp" />
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvAppTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name"
+                    android:textSize="26sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorAccent"
+                    android:letterSpacing="0.02" />
+
+                <TextView
+                    android:id="@+id/tvVersion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/version_pill_bg"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorChipText" />
+            </LinearLayout>
         </LinearLayout>
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="16dp" />
+            android:layout_height="12dp" />
 
         <!-- ============ STATUS CARD ============ -->
         <LinearLayout
@@ -49,59 +72,65 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="@drawable/card_selector"
-            android:clickable="true"
-            android:focusable="true">
+            android:background="@drawable/card_background"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp">
 
             <View
                 android:id="@+id/statusDot"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
                 android:layout_marginEnd="12dp"
                 android:background="@drawable/status_dot_gray" />
 
             <TextView
                 android:id="@+id/status"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:text="@string/status_checking"
-                android:textAppearance="?android:attr/textAppearanceMedium"
-                android:textColor="@color/colorTextPrimary"
-                android:layout_weight="1" />
+                android:textSize="14sp"
+                android:textColor="@color/colorTextPrimary" />
 
             <TextView
                 android:id="@+id/statusBadge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:textSize="11sp"
                 android:textColor="@color/colorTextSecondary"
                 android:text="" />
         </LinearLayout>
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="16dp" />
+            android:layout_height="20dp" />
 
         <!-- ============ QUICK ACTIONS ============ -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/section_quick_actions"
-            android:textSize="18sp"
+            android:textSize="13sp"
             android:textStyle="bold"
-            android:textColor="@color/colorTextPrimary"
-            android:letterSpacing="0.04" />
+            android:textAllCaps="true"
+            android:textColor="@color/colorTextSecondary"
+            android:letterSpacing="0.08"
+            android:paddingStart="4dp"
+            android:paddingBottom="10dp" />
 
         <!-- Row 1 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingBottom="12dp">
+            android:paddingBottom="10dp">
 
             <LinearLayout
+                android:id="@+id/btnSimpleAistudio"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:background="@drawable/card_selector"
@@ -109,42 +138,46 @@
                 android:focusable="true"
                 android:padding="16dp">
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@android:drawable/ic_dialog_info"
-                    android:tint="@color/colorButtonPrimary" />
+                <LinearLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_action_aistudio"
+                        android:contentDescription="@string/action_open_aistudio" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/btnSimpleAistudio"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_open_aistudio"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:gravity="center"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="2dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="3dp"
                     android:singleLine="false" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_open_aistudio_subtitle"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:textColor="@color/colorTextSecondary"
-                    android:gravity="center"
-                    android:paddingBottom="4dp" />
+                    android:lineSpacingExtra="2dp" />
             </LinearLayout>
 
             <View
-                android:layout_width="8dp"
+                android:layout_width="10dp"
                 android:layout_height="0dp" />
 
             <LinearLayout
+                android:id="@+id/btnSimpleVerify"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:background="@drawable/card_selector"
@@ -152,33 +185,36 @@
                 android:focusable="true"
                 android:padding="16dp">
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@android:drawable/ic_menu_revert"
-                    android:tint="@color/colorButtonPrimary" />
+                <LinearLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_action_verify"
+                        android:contentDescription="@string/action_verify" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/btnSimpleVerify"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_verify"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:gravity="center"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="2dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="3dp"
                     android:singleLine="false" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_verify_subtitle"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:textColor="@color/colorTextSecondary"
-                    android:gravity="center"
-                    android:paddingBottom="4dp" />
+                    android:lineSpacingExtra="2dp" />
             </LinearLayout>
         </LinearLayout>
 
@@ -187,11 +223,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingBottom="12dp">
+            android:paddingBottom="10dp">
 
             <LinearLayout
+                android:id="@+id/btnSimpleAccounts"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:background="@drawable/card_selector"
@@ -199,42 +236,46 @@
                 android:focusable="true"
                 android:padding="16dp">
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@android:drawable/ic_input_add"
-                    android:tint="@color/colorButtonPrimary" />
+                <LinearLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_action_accounts"
+                        android:contentDescription="@string/action_accounts" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/btnSimpleAccounts"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_accounts"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:gravity="center"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="2dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="3dp"
                     android:singleLine="false" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_accounts_subtitle"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:textColor="@color/colorTextSecondary"
-                    android:gravity="center"
-                    android:paddingBottom="4dp" />
+                    android:lineSpacingExtra="2dp" />
             </LinearLayout>
 
             <View
-                android:layout_width="8dp"
+                android:layout_width="10dp"
                 android:layout_height="0dp" />
 
             <LinearLayout
+                android:id="@+id/btnSimpleProfiles"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:background="@drawable/card_selector"
@@ -242,33 +283,36 @@
                 android:focusable="true"
                 android:padding="16dp">
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@android:drawable/ic_menu_edit"
-                    android:tint="@color/colorButtonPrimary" />
+                <LinearLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_action_profiles"
+                        android:contentDescription="@string/action_profiles" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/btnSimpleProfiles"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_profiles"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:gravity="center"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="2dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="3dp"
                     android:singleLine="false" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_profiles_subtitle"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:textColor="@color/colorTextSecondary"
-                    android:gravity="center"
-                    android:paddingBottom="4dp" />
+                    android:lineSpacingExtra="2dp" />
             </LinearLayout>
         </LinearLayout>
 
@@ -277,11 +321,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingBottom="16dp">
+            android:paddingBottom="18dp">
 
             <LinearLayout
+                android:id="@+id/btnSimpleTokens"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:background="@drawable/card_selector"
@@ -289,42 +334,46 @@
                 android:focusable="true"
                 android:padding="16dp">
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@android:drawable/ic_menu_search"
-                    android:tint="@color/colorButtonPrimary" />
+                <LinearLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_action_tokens"
+                        android:contentDescription="@string/action_tokens" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/btnSimpleTokens"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_tokens"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:gravity="center"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="2dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="3dp"
                     android:singleLine="false" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_tokens_subtitle"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:textColor="@color/colorTextSecondary"
-                    android:gravity="center"
-                    android:paddingBottom="4dp" />
+                    android:lineSpacingExtra="2dp" />
             </LinearLayout>
 
             <View
-                android:layout_width="8dp"
+                android:layout_width="10dp"
                 android:layout_height="0dp" />
 
             <LinearLayout
+                android:id="@+id/btnSimpleScan"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:background="@drawable/card_selector"
@@ -332,61 +381,58 @@
                 android:focusable="true"
                 android:padding="16dp">
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@android:drawable/ic_menu_agenda"
-                    android:tint="@color/colorButtonPrimary" />
+                <LinearLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_action_scan"
+                        android:contentDescription="@string/action_scan" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/btnSimpleScan"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_scan"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:gravity="center"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="2dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="3dp"
                     android:singleLine="false" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_scan_subtitle"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:textColor="@color/colorTextSecondary"
-                    android:gravity="center"
-                    android:paddingBottom="4dp" />
+                    android:lineSpacingExtra="2dp" />
             </LinearLayout>
         </LinearLayout>
 
         <!-- ============ OUTPUT SECTION ============ -->
+        <TextView
+            android:id="@+id/tvOutputHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/section_output"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:textColor="@color/colorTextSecondary"
+            android:letterSpacing="0.08"
+            android:paddingStart="4dp"
+            android:paddingBottom="10dp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingTop="8dp">
-
-            <TextView
-                android:id="@+id/tvOutputHeader"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/section_output"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="@color/colorTextPrimary"
-                android:letterSpacing="0.04" />
-        </LinearLayout>
-
-        <!-- Output Card -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/card_selector"
-            android:padding="0dp">
+            android:background="@drawable/card_background">
 
             <!-- Empty state overlay -->
             <LinearLayout
@@ -395,14 +441,18 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:gravity="center"
-                android:padding="40dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:paddingTop="36dp"
+                android:paddingBottom="36dp"
                 android:visibility="visible">
 
                 <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:src="@android:drawable/ic_menu_info_details"
-                    android:tint="@color/colorTextSecondary" />
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:src="@drawable/ic_action_scan"
+                    android:alpha="0.55"
+                    android:contentDescription="@string/output_empty_title" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -420,19 +470,20 @@
                     android:textSize="13sp"
                     android:textColor="@color/colorTextSecondary"
                     android:gravity="center"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="8dp" />
+                    android:paddingTop="4dp" />
             </LinearLayout>
 
-            <!-- Actual output -->
+            <!-- Actual console output -->
             <TextView
                 android:id="@+id/output"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="200dp"
+                android:minHeight="180dp"
                 android:textIsSelectable="true"
                 android:fontFamily="monospace"
-                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:textSize="12sp"
+                android:lineSpacingExtra="3dp"
+                android:textColor="@color/colorTextPrimary"
                 android:padding="16dp"
                 android:background="@color/colorOutputBg"
                 android:scrollbars="vertical"
@@ -451,8 +502,9 @@
                 style="@style/DastyabButton"
                 android:background="@android:color/transparent"
                 android:textColor="@color/colorTextSecondary"
+                android:textSize="13sp"
                 android:paddingTop="12dp"
-                android:paddingBottom="16dp" />
+                android:paddingBottom="12dp" />
         </LinearLayout>
 
         <View
@@ -466,9 +518,7 @@
             android:layout_height="wrap_content"
             android:text="@string/btn_show_advanced"
             style="@style/DastyabButton"
-            android:background="@drawable/card_selector"
-            android:paddingTop="16dp"
-            android:paddingBottom="16dp" />
+            android:textColor="@color/colorAccent" />
 
         <!-- ============ ADVANCED SECTION (collapsible card) ============ -->
         <LinearLayout
@@ -476,31 +526,27 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@drawable/card_selector"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone"
-            android:padding="0dp">
+            android:background="@drawable/card_background"
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:padding="16dp">
+                android:paddingStart="16dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp">
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/section_advanced"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary" />
-
-                <View
                     android:layout_width="0dp"
-                    android:layout_height="0dp"
-                    android:layout_weight="1" />
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/section_advanced"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorAccent" />
 
                 <Button
                     android:id="@+id/btnHideAdvanced"
@@ -509,8 +555,13 @@
                     android:text="@string/btn_hide_advanced"
                     style="@style/DastyabButton"
                     android:background="@android:color/transparent"
-                    android:textColor="@color/colorButtonPrimary"
-                    android:padding="8dp" />
+                    android:textColor="@color/colorTextSecondary"
+                    android:textSize="13sp"
+                    android:minHeight="36dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp" />
             </LinearLayout>
 
             <View
@@ -525,19 +576,28 @@
                 android:hint="@string/hint_args"
                 android:inputType="text"
                 android:imeOptions="actionDone"
-                android:padding="16dp"
-                android:background="@android:color/transparent"
+                android:fontFamily="monospace"
+                android:textSize="14sp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="13dp"
+                android:paddingBottom="13dp"
+                android:background="@drawable/input_bg"
                 android:textColor="@color/colorTextPrimary"
                 android:textColorHint="@color/colorTextSecondary"
-                android:layout_marginHorizontal="16dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_marginTop="14dp"
                 android:layout_marginBottom="12dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:paddingBottom="12dp"
-                android:layout_marginHorizontal="16dp">
+                android:gravity="center_vertical"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:paddingBottom="12dp">
 
                 <Button
                     android:id="@+id/btnRun"
@@ -554,17 +614,17 @@
                     android:layout_weight="1"
                     android:text="@string/btn_cancel"
                     style="@style/DastyabButton"
-                    android:background="@android:color/transparent"
+                    android:background="@drawable/btn_danger_bg"
                     android:textColor="@color/colorStatusError"
                     android:visibility="gone"
                     android:layout_marginStart="8dp" />
 
                 <ProgressBar
                     android:id="@+id/progress"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
                     android:layout_gravity="center_vertical"
-                    android:layout_marginStart="8dp"
+                    android:layout_marginStart="10dp"
                     android:visibility="gone" />
             </LinearLayout>
 
@@ -573,8 +633,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:prompt="@string/history_prompt"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginBottom="12dp" />
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_marginBottom="10dp" />
 
             <Button
                 android:id="@+id/btnHistory"
@@ -582,45 +643,49 @@
                 android:layout_height="wrap_content"
                 android:text="@string/btn_history"
                 style="@style/DastyabButton"
-                android:background="@android:color/transparent"
-                android:textColor="@color/colorTextSecondary"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginBottom="12dp"
-                android:paddingTop="12dp"
-                android:paddingBottom="12dp" />
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_marginBottom="14dp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/quick_commands_label"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold"
+                android:textAllCaps="true"
+                android:letterSpacing="0.06"
                 android:textColor="@color/colorTextSecondary"
-                android:layout_marginHorizontal="16dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
                 android:layout_marginBottom="8dp" />
 
             <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:scrollbars="none"
                 android:paddingBottom="8dp">
                 <LinearLayout
                     android:id="@+id/quickButtons"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginHorizontal="16dp" />
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp" />
             </HorizontalScrollView>
 
             <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:scrollbars="none"
                 android:paddingBottom="16dp">
                 <LinearLayout
                     android:id="@+id/quickButtonsProfiles"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginHorizontal="16dp" />
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp" />
             </HorizontalScrollView>
         </LinearLayout>
 
@@ -629,8 +694,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp">
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="10dp">
 
             <Button
                 android:id="@+id/btnCopy"
@@ -638,10 +703,11 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_copy"
-                style="@style/DastyabButton"
-                android:background="@drawable/card_selector"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp" />
+                style="@style/DastyabButton" />
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="0dp" />
 
             <Button
                 android:id="@+id/btnShare"
@@ -649,17 +715,14 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_share"
-                style="@style/DastyabButton"
-                android:background="@drawable/card_selector"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp" />
+                style="@style/DastyabButton" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
+            android:layout_marginBottom="10dp">
 
             <Button
                 android:id="@+id/btnViewLogs"
@@ -667,10 +730,11 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_view_logs"
-                style="@style/DastyabButton"
-                android:background="@drawable/card_selector"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp" />
+                style="@style/DastyabButton" />
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="0dp" />
 
             <Button
                 android:id="@+id/btnAbout"
@@ -678,17 +742,13 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_about"
-                style="@style/DastyabButton"
-                android:background="@drawable/card_selector"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp" />
+                style="@style/DastyabButton" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="32dp">
+            android:orientation="horizontal">
 
             <Button
                 android:id="@+id/btnSettings"
@@ -696,10 +756,11 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_settings"
-                style="@style/DastyabButton"
-                android:background="@drawable/card_selector"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp" />
+                style="@style/DastyabButton" />
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="0dp" />
 
             <Button
                 android:id="@+id/btnUpdate"
@@ -707,10 +768,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_update"
-                style="@style/DastyabButton"
-                android:background="@drawable/card_selector"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp" />
+                style="@style/DastyabButton" />
         </LinearLayout>
 
     </LinearLayout>
