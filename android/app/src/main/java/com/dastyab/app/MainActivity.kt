@@ -205,6 +205,35 @@ class MainActivity : Activity() {
         findViewById<TextView>(R.id.tvVersion).text = getString(R.string.version_format, version)
         savedInstanceState?.getString("pendingOutput")?.let { applyFormattedOutput(it) }
 
+        // ── Normal Chain vs Emergency Mode Toggle ──
+        val btnModeToggle = findViewById<Button>(R.id.btnModeToggle)
+        fun refreshModeToggleLabel() {
+            val mode = TunnelConfig.load(this).mode
+            btnModeToggle.text = if (mode == TunnelConfig.Mode.DNS_BLACKOUT) {
+                getString(R.string.mode_emergency_badge)
+            } else {
+                getString(R.string.mode_normal_badge)
+            }
+        }
+        refreshModeToggleLabel()
+        btnModeToggle.setOnClickListener {
+            val cur = TunnelConfig.load(this).mode
+            val newMode = if (cur == TunnelConfig.Mode.DNS_BLACKOUT) {
+                TunnelConfig.Mode.SMART
+            } else {
+                TunnelConfig.Mode.DNS_BLACKOUT
+            }
+            TunnelConfig.saveMode(this, newMode)
+            refreshModeToggleLabel()
+            refreshVpnCard()
+            if (DastyabVpnService.isConnected()) {
+                DastyabVpnService.start(this)
+                Toast.makeText(this, "Switched mode → ${newMode.label} (reconnected)", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Switched mode → ${newMode.label}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         // ── Bilingual Persian (RTL) / English Toggle ──
         findViewById<Button>(R.id.btnLangToggle).apply {
             text = LocaleHelper.toggleButtonLabel(LocaleHelper.getLanguage(this@MainActivity))

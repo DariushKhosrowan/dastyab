@@ -62,6 +62,20 @@
             </LinearLayout>
 
             <Button
+                android:id="@+id/btnModeToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:minWidth="64dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:text="@string/mode_normal_badge"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/mode_toggle_desc"
+                style="@style/DastyabChip" />
+
+            <Button
                 android:id="@+id/btnLangToggle"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"

@@ -292,4 +292,7 @@
     <string name="tunnel_auto_connect_boot">اتصال خودکار VPN دستیاب هنگام روشن شدن گوشی</string>
     <string name="tunnel_btn_domain_rules">مدیریت قوانین DNS و دور زدن سایت‌های ایرانی</string>
     <string name="lang_toggle_desc">تغییر زبان (فارسی / انگلیسی)</string>
+    <string name="mode_normal_badge">عادی: زنجیره</string>
+    <string name="mode_emergency_badge">اضطراری: DNS</string>
+    <string name="mode_toggle_desc">تغییر بین حالت عادی زنجیره هوشمند و حالت اضطراری DNS</string>
 </resources>

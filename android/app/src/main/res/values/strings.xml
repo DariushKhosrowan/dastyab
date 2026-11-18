@@ -307,4 +307,7 @@
     <string name="tunnel_auto_connect_boot">Auto-reconnect DastYab VPN on device boot</string>
     <string name="tunnel_btn_domain_rules">Manage Per-Domain DNS &amp; Iranian Bypass</string>
     <string name="lang_toggle_desc">Switch language (Persian / English)</string>
+    <string name="mode_normal_badge">Normal: Chain</string>
+    <string name="mode_emergency_badge">Emergency: DNS</string>
+    <string name="mode_toggle_desc">Switch between Normal Smart Chain and Emergency DNS Blackout mode</string>
 </resources>
