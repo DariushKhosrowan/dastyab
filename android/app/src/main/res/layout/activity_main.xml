@@ -10,37 +10,54 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- App header -->
-        <TextView
-            android:id="@+id/tvAppTitle"
+        <!-- ============ HEADER CARD ============ -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:textColor="@color/colorTextPrimary" />
+            android:orientation="vertical"
+            android:background="@drawable/card_selector"
+            android:clickable="true"
+            android:focusable="true">
 
-        <TextView
-            android:id="@+id/tvVersion"
+            <TextView
+                android:id="@+id/tvAppTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorTextPrimary"
+                android:letterSpacing="0.02" />
+
+            <TextView
+                android:id="@+id/tvVersion"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:textColor="@color/colorTextSecondary"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp" />
+        </LinearLayout>
+
+        <View
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textAppearance="?android:attr/textAppearanceSmall"
-            android:textColor="@color/colorTextSecondary"
-            android:paddingBottom="16dp" />
+            android:layout_height="16dp" />
 
-        <!-- Status row -->
+        <!-- ============ STATUS CARD ============ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingBottom="16dp">
+            android:background="@drawable/card_selector"
+            android:clickable="true"
+            android:focusable="true">
 
             <View
                 android:id="@+id/statusDot"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginEnd="10dp"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="12dp"
                 android:background="@drawable/status_dot_gray" />
 
             <TextView
@@ -49,10 +66,23 @@
                 android:layout_height="wrap_content"
                 android:text="@string/status_checking"
                 android:textAppearance="?android:attr/textAppearanceMedium"
-                android:textColor="@color/colorTextPrimary" />
+                android:textColor="@color/colorTextPrimary"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/statusBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:textColor="@color/colorTextSecondary"
+                android:text="" />
         </LinearLayout>
 
-        <!-- Simple actions: big tap cards, no typing required -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="16dp" />
+
+        <!-- ============ QUICK ACTIONS ============ -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -60,32 +90,96 @@
             android:textSize="18sp"
             android:textStyle="bold"
             android:textColor="@color/colorTextPrimary"
-            android:paddingTop="4dp"
-            android:paddingBottom="8dp" />
+            android:letterSpacing="0.04" />
 
         <!-- Row 1 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingBottom="8dp">
+            android:paddingBottom="12dp">
 
-            <Button
-                android:id="@+id/btnSimpleAistudio"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/action_open_aistudio"
-                style="@style/DastyabButtonPrimary" />
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="16dp">
 
-            <Button
-                android:id="@+id/btnSimpleVerify"
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@android:drawable/ic_dialog_info"
+                    android:tint="@color/colorButtonPrimary" />
+
+                <TextView
+                    android:id="@+id/btnSimpleAistudio"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_open_aistudio"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:gravity="center"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp"
+                    android:singleLine="false" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_open_aistudio_subtitle"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:gravity="center"
+                    android:paddingBottom="4dp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="8dp"
+                android:layout_height="0dp" />
+
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/action_verify"
-                style="@style/DastyabButtonPrimary"
-                android:layout_marginStart="8dp" />
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="16dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@android:drawable/ic_menu_revert"
+                    android:tint="@color/colorButtonPrimary" />
+
+                <TextView
+                    android:id="@+id/btnSimpleVerify"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_verify"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:gravity="center"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp"
+                    android:singleLine="false" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_verify_subtitle"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:gravity="center"
+                    android:paddingBottom="4dp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Row 2 -->
@@ -93,24 +187,89 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingBottom="8dp">
+            android:paddingBottom="12dp">
 
-            <Button
-                android:id="@+id/btnSimpleAccounts"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/action_accounts"
-                style="@style/DastyabButtonPrimary" />
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="16dp">
 
-            <Button
-                android:id="@+id/btnSimpleProfiles"
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@android:drawable/ic_input_add"
+                    android:tint="@color/colorButtonPrimary" />
+
+                <TextView
+                    android:id="@+id/btnSimpleAccounts"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_accounts"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:gravity="center"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp"
+                    android:singleLine="false" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_accounts_subtitle"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:gravity="center"
+                    android:paddingBottom="4dp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="8dp"
+                android:layout_height="0dp" />
+
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/action_profiles"
-                style="@style/DastyabButtonPrimary"
-                android:layout_marginStart="8dp" />
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="16dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@android:drawable/ic_menu_edit"
+                    android:tint="@color/colorButtonPrimary" />
+
+                <TextView
+                    android:id="@+id/btnSimpleProfiles"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_profiles"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:gravity="center"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp"
+                    android:singleLine="false" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_profiles_subtitle"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:gravity="center"
+                    android:paddingBottom="4dp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Row 3 -->
@@ -118,27 +277,92 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingBottom="8dp">
+            android:paddingBottom="16dp">
 
-            <Button
-                android:id="@+id/btnSimpleTokens"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/action_tokens"
-                style="@style/DastyabButtonPrimary" />
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="16dp">
 
-            <Button
-                android:id="@+id/btnSimpleScan"
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@android:drawable/ic_menu_search"
+                    android:tint="@color/colorButtonPrimary" />
+
+                <TextView
+                    android:id="@+id/btnSimpleTokens"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_tokens"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:gravity="center"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp"
+                    android:singleLine="false" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_tokens_subtitle"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:gravity="center"
+                    android:paddingBottom="4dp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="8dp"
+                android:layout_height="0dp" />
+
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/action_scan"
-                style="@style/DastyabButtonPrimary"
-                android:layout_marginStart="8dp" />
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="16dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@android:drawable/ic_menu_agenda"
+                    android:tint="@color/colorButtonPrimary" />
+
+                <TextView
+                    android:id="@+id/btnSimpleScan"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_scan"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:gravity="center"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp"
+                    android:singleLine="false" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_scan_subtitle"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:gravity="center"
+                    android:paddingBottom="4dp" />
+            </LinearLayout>
         </LinearLayout>
 
-        <!-- Output area (results from commands) -->
+        <!-- ============ OUTPUT SECTION ============ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -152,53 +376,118 @@
                 android:text="@string/section_output"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorTextPrimary" />
+                android:textColor="@color/colorTextPrimary"
+                android:letterSpacing="0.04" />
+        </LinearLayout>
 
+        <!-- Output Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_selector"
+            android:padding="0dp">
+
+            <!-- Empty state overlay -->
+            <LinearLayout
+                android:id="@+id/outputEmptyState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="40dp"
+                android:visibility="visible">
+
+                <ImageView
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@android:drawable/ic_menu_info_details"
+                    android:tint="@color/colorTextSecondary" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/output_empty_title"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:paddingTop="12dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/output_empty_subtitle"
+                    android:textSize="13sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:gravity="center"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="8dp" />
+            </LinearLayout>
+
+            <!-- Actual output -->
             <TextView
                 android:id="@+id/output"
                 android:layout_width="match_parent"
-                android:layout_height="200dp"
+                android:layout_height="wrap_content"
+                android:minHeight="200dp"
                 android:textIsSelectable="true"
                 android:fontFamily="monospace"
                 android:textAppearance="?android:attr/textAppearanceSmall"
-                android:padding="8dp"
+                android:padding="16dp"
                 android:background="@color/colorOutputBg"
-                android:scrollbars="vertical" />
+                android:scrollbars="vertical"
+                android:visibility="gone" />
 
-            <!-- Clear output (kept for the advanced command path) -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/colorDivider" />
+
             <Button
                 android:id="@+id/btnClear"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/btn_clear"
                 style="@style/DastyabButton"
-                android:layout_marginTop="8dp" />
-
-            <Button
-                android:id="@+id/btnRetry"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/btn_retry"
-                style="@style/DastyabButton"
-                android:visibility="gone"
-                android:layout_marginTop="4dp" />
+                android:background="@android:color/transparent"
+                android:textColor="@color/colorTextSecondary"
+                android:paddingTop="12dp"
+                android:paddingBottom="16dp" />
         </LinearLayout>
 
-        <!-- Advanced section: raw command input (hidden by default) -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="16dp" />
+
+        <!-- ============ ADVANCED TOGGLE ============ -->
+        <Button
+            android:id="@+id/btnShowAdvanced"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_show_advanced"
+            style="@style/DastyabButton"
+            android:background="@drawable/card_selector"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp" />
+
+        <!-- ============ ADVANCED SECTION (collapsible card) ============ -->
         <LinearLayout
             android:id="@+id/advancedSection"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
+            android:background="@drawable/card_selector"
+            android:clickable="true"
+            android:focusable="true"
             android:visibility="gone"
-            android:paddingTop="16dp">
+            android:padding="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingBottom="8dp">
+                android:padding="16dp">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -218,8 +507,16 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/btn_hide_advanced"
-                    style="@style/DastyabButton" />
+                    style="@style/DastyabButton"
+                    android:background="@android:color/transparent"
+                    android:textColor="@color/colorButtonPrimary"
+                    android:padding="8dp" />
             </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/colorDivider" />
 
             <EditText
                 android:id="@+id/argsInput"
@@ -228,15 +525,19 @@
                 android:hint="@string/hint_args"
                 android:inputType="text"
                 android:imeOptions="actionDone"
-                android:padding="10dp"
-                android:background="@color/colorOutputBg"
-                android:layout_marginBottom="8dp" />
+                android:padding="16dp"
+                android:background="@android:color/transparent"
+                android:textColor="@color/colorTextPrimary"
+                android:textColorHint="@color/colorTextSecondary"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="12dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:paddingBottom="12dp">
+                android:paddingBottom="12dp"
+                android:layout_marginHorizontal="16dp">
 
                 <Button
                     android:id="@+id/btnRun"
@@ -253,6 +554,8 @@
                     android:layout_weight="1"
                     android:text="@string/btn_cancel"
                     style="@style/DastyabButton"
+                    android:background="@android:color/transparent"
+                    android:textColor="@color/colorStatusError"
                     android:visibility="gone"
                     android:layout_marginStart="8dp" />
 
@@ -270,7 +573,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:prompt="@string/history_prompt"
-                android:layout_marginBottom="8dp" />
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="12dp" />
 
             <Button
                 android:id="@+id/btnHistory"
@@ -278,41 +582,49 @@
                 android:layout_height="wrap_content"
                 android:text="@string/btn_history"
                 style="@style/DastyabButton"
+                android:background="@android:color/transparent"
+                android:textColor="@color/colorTextSecondary"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="12dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/quick_commands_label"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorTextSecondary"
+                android:layout_marginHorizontal="16dp"
                 android:layout_marginBottom="8dp" />
 
             <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingBottom="4dp">
+                android:paddingBottom="8dp">
                 <LinearLayout
                     android:id="@+id/quickButtons"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
+                    android:orientation="horizontal"
+                    android:layout_marginHorizontal="16dp" />
             </HorizontalScrollView>
 
             <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingBottom="4dp">
+                android:paddingBottom="16dp">
                 <LinearLayout
                     android:id="@+id/quickButtonsProfiles"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
+                    android:orientation="horizontal"
+                    android:layout_marginHorizontal="16dp" />
             </HorizontalScrollView>
         </LinearLayout>
 
-        <!-- Toggle advanced section button (shown when advanced is hidden) -->
-        <Button
-            android:id="@+id/btnShowAdvanced"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/btn_show_advanced"
-            style="@style/DastyabButton"
-            android:paddingTop="16dp" />
-
-        <!-- Bottom action row: Copy / Share -->
+        <!-- ============ BOTTOM ACTIONS ============ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -326,7 +638,10 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_copy"
-                style="@style/DastyabButton" />
+                style="@style/DastyabButton"
+                android:background="@drawable/card_selector"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp" />
 
             <Button
                 android:id="@+id/btnShare"
@@ -334,15 +649,17 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_share"
-                style="@style/DastyabButton" />
+                style="@style/DastyabButton"
+                android:background="@drawable/card_selector"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp" />
         </LinearLayout>
 
-        <!-- Bottom action row: Logs / About -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="8dp">
 
             <Button
                 android:id="@+id/btnViewLogs"
@@ -350,7 +667,10 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_view_logs"
-                style="@style/DastyabButton" />
+                style="@style/DastyabButton"
+                android:background="@drawable/card_selector"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp" />
 
             <Button
                 android:id="@+id/btnAbout"
@@ -358,13 +678,17 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_about"
-                style="@style/DastyabButton" />
+                style="@style/DastyabButton"
+                android:background="@drawable/card_selector"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:layout_marginBottom="32dp">
 
             <Button
                 android:id="@+id/btnSettings"
@@ -372,7 +696,10 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_settings"
-                style="@style/DastyabButton" />
+                style="@style/DastyabButton"
+                android:background="@drawable/card_selector"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp" />
 
             <Button
                 android:id="@+id/btnUpdate"
@@ -380,7 +707,10 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_update"
-                style="@style/DastyabButton" />
+                style="@style/DastyabButton"
+                android:background="@drawable/card_selector"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp" />
         </LinearLayout>
 
     </LinearLayout>

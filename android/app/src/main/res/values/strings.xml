@@ -22,8 +22,19 @@
     <string name="action_tokens">Tokens</string>
     <string name="action_scan">Scan</string>
 
+    <!-- Quick action subtitles -->
+    <string name="action_open_aistudio_subtitle">AI-powered commands and assistant</string>
+    <string name="action_verify_subtitle">Verify your active Cloudflare token</string>
+    <string name="action_accounts_subtitle">List and manage Cloudflare accounts</string>
+    <string name="action_profiles_subtitle">List and manage tunnel profiles</string>
+    <string name="action_tokens_subtitle">List authentication tokens</string>
+    <string name="action_scan_subtitle">Scan for tunnel endpoints</string>
+
     <!-- Output / Advanced sections -->
     <string name="section_output">Output</string>
+    <string name="output_empty_title">No output yet</string>
+    <string name="output_empty_subtitle">Tap a quick action or run a command to see results here</string>
+    <string name="quick_commands_label">Quick commands</string>
     <string name="section_advanced">Advanced</string>
     <string name="btn_show_advanced">Advanced / run custom command</string>
     <string name="btn_hide_advanced">Hide advanced</string>

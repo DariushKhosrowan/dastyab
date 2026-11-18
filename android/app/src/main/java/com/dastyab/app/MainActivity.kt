@@ -44,6 +44,7 @@ import kotlin.concurrent.thread
 class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var output: TextView
+    private lateinit var outputEmptyState: LinearLayout
     private lateinit var argsInput: EditText
     private lateinit var btnRun: Button
     private lateinit var btnCancel: Button
@@ -53,12 +54,12 @@ class MainActivity : Activity() {
     private lateinit var binary: File
 
     // Simple action buttons (main screen)
-    private lateinit var btnSimpleAistudio: Button
-    private lateinit var btnSimpleVerify: Button
-    private lateinit var btnSimpleAccounts: Button
-    private lateinit var btnSimpleProfiles: Button
-    private lateinit var btnSimpleTokens: Button
-    private lateinit var btnSimpleScan: Button
+    private lateinit var btnSimpleAistudio: TextView
+    private lateinit var btnSimpleVerify: TextView
+    private lateinit var btnSimpleAccounts: TextView
+    private lateinit var btnSimpleProfiles: TextView
+    private lateinit var btnSimpleTokens: TextView
+    private lateinit var btnSimpleScan: TextView
 
     // Advanced section toggle
     private lateinit var btnShowAdvanced: Button
@@ -88,6 +89,7 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
         status = findViewById(R.id.status)
         output = findViewById(R.id.output)
+        outputEmptyState = findViewById(R.id.outputEmptyState)
         argsInput = findViewById(R.id.argsInput)
         btnRun = findViewById(R.id.btnRun)
         btnCancel = findViewById(R.id.btnCancel)
@@ -146,8 +148,11 @@ class MainActivity : Activity() {
         btnRun.setOnClickListener { runTyped() }
         btnCancel.setOnClickListener { cancelCurrentOperation() }
 
-        findViewById<Button>(R.id.btnClear).setOnClickListener { output.text = "" }
-        findViewById<Button>(R.id.btnRetry).visibility = View.GONE
+        findViewById<Button>(R.id.btnClear).setOnClickListener {
+    output.text = ""
+    outputEmptyState.visibility = View.VISIBLE
+    output.visibility = View.GONE
+}
 
         findViewById<Button>(R.id.btnViewLogs).setOnClickListener {
             openActivity(LogViewerActivity::class.java)
@@ -486,6 +491,8 @@ class MainActivity : Activity() {
     private fun postOutput(message: String) = postUi { applyFormattedOutput(message) }
 
     private fun applyFormattedOutput(message: String) {
+        outputEmptyState.visibility = View.GONE
+        output.visibility = View.VISIBLE
         output.append(formatOutput(message))
         if (output.length() > MAX_OUTPUT_CHARS) {
             output.text = output.text.subSequence(output.length() - MAX_OUTPUT_CHARS, output.length())
