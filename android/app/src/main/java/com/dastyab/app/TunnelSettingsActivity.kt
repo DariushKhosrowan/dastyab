@@ -35,10 +35,16 @@ class TunnelSettingsActivity : Activity() {
     private lateinit var etMtu: EditText
     private lateinit var cbBypassLan: CheckBox
     private lateinit var cbAutoVpnGoogle: CheckBox
+    private lateinit var cbWatchdogEnabled: CheckBox
+    private lateinit var cbAutoConnectBoot: CheckBox
     private lateinit var tvSplitSummary: TextView
 
     private val modes = TunnelConfig.Mode.values().toList()
     private val selectedPackages = mutableSetOf<String>()
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +59,8 @@ class TunnelSettingsActivity : Activity() {
         etMtu = findViewById(R.id.etMtu)
         cbBypassLan = findViewById(R.id.cbBypassLan)
         cbAutoVpnGoogle = findViewById(R.id.cbAutoVpnGoogle)
+        cbWatchdogEnabled = findViewById(R.id.cbWatchdogEnabled)
+        cbAutoConnectBoot = findViewById(R.id.cbAutoConnectBoot)
         tvSplitSummary = findViewById(R.id.tvSplitSummary)
 
         val settings = TunnelConfig.load(this)
@@ -88,9 +96,15 @@ class TunnelSettingsActivity : Activity() {
         etMtu.setText(settings.mtu.toString())
         cbBypassLan.isChecked = settings.bypassLan
         cbAutoVpnGoogle.isChecked = settings.autoVpnForGoogle
+        cbWatchdogEnabled.isChecked = settings.watchdogEnabled
+        cbAutoConnectBoot.isChecked = settings.autoConnectOnBoot
 
         updateVlessPreview(settings.vlessUri)
         updateSplitSummary()
+
+        findViewById<Button>(R.id.btnDomainDnsRules).setOnClickListener {
+            DomainDnsDialog.show(this)
+        }
 
         findViewById<Button>(R.id.btnPasteVless).setOnClickListener {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -186,7 +200,9 @@ class TunnelSettingsActivity : Activity() {
             mtu = TunnelConfig.clampMtu(mtuVal),
             bypassLan = cbBypassLan.isChecked,
             autoVpnForGoogle = cbAutoVpnGoogle.isChecked,
-            splitPackages = TunnelConfig.normalizePackages(selectedPackages)
+            splitPackages = TunnelConfig.normalizePackages(selectedPackages),
+            autoConnectOnBoot = cbAutoConnectBoot.isChecked,
+            watchdogEnabled = cbWatchdogEnabled.isChecked
         )
         TunnelConfig.save(this, settings)
         updateVlessPreview(vless)

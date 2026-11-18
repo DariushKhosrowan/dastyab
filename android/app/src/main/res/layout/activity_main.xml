@@ -60,6 +60,19 @@
                     android:textStyle="bold"
                     android:textColor="@color/colorChipText" />
             </LinearLayout>
+
+            <Button
+                android:id="@+id/btnLangToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="46dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="فا"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/lang_toggle_desc"
+                style="@style/DastyabChip" />
         </LinearLayout>
 
         <View
@@ -105,7 +118,413 @@
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="16dp" />
+            android:layout_height="12dp" />
+
+        <!-- ============ SIMPLE / ADVANCED MODE SWITCHER ============ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@drawable/card_background"
+            android:padding="6dp">
+
+            <Button
+                android:id="@+id/btnTabSimple"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/tab_simple_mode"
+                style="@style/DastyabButtonPrimary" />
+
+            <View
+                android:layout_width="8dp"
+                android:layout_height="0dp" />
+
+            <Button
+                android:id="@+id/btnTabAdvanced"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/tab_advanced_mode"
+                style="@style/DastyabButton" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
+
+        <!-- ============ SIMPLE MODE (1-CLICK AUTOMATIC DASHBOARD) ============ -->
+        <LinearLayout
+            android:id="@+id/simpleModeContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="visible">
+
+            <!-- Modern 1-Tap Magic Hero Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/header_card_background"
+                android:padding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:gravity="center"
+                        android:layout_marginEnd="14dp"
+                        android:background="@drawable/icon_badge_bg">
+                        <ImageView
+                            android:layout_width="26dp"
+                            android:layout_height="26dp"
+                            android:src="@drawable/ic_action_vpn"
+                            android:contentDescription="@string/tab_simple_mode" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <View
+                                android:id="@+id/simpleStatusDot"
+                                android:layout_width="11dp"
+                                android:layout_height="11dp"
+                                android:layout_marginEnd="8dp"
+                                android:background="@drawable/status_dot_gray" />
+
+                            <TextView
+                                android:id="@+id/tvSimpleHeroTitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/simple_hero_disconnected"
+                                android:textSize="19sp"
+                                android:textStyle="bold"
+                                android:textColor="@color/colorTextPrimary" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvSimpleReachability"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/reachability_idle"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/colorAccent"
+                            android:paddingTop="4dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvSimpleHeroSubtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/simple_hero_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="14dp" />
+
+                <ProgressBar
+                    android:id="@+id/simpleProgress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    android:paddingBottom="10dp" />
+
+                <Button
+                    android:id="@+id/btnSimpleMagicAutopilot"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="52dp"
+                    android:text="@string/simple_btn_magic"
+                    style="@style/DastyabButtonPrimary" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp">
+
+                    <Button
+                        android:id="@+id/btnSimpleQuickToggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/vpn_btn_connect"
+                        style="@style/DastyabButton" />
+
+                    <View
+                        android:layout_width="10dp"
+                        android:layout_height="0dp" />
+
+                    <Button
+                        android:id="@+id/btnSimpleSpeedIp"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/simple_btn_speed_ip"
+                        style="@style/DastyabButton" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="18dp" />
+
+            <!-- 1-Click Everyday Actions -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/simple_section_oneclick"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textAllCaps="true"
+                android:textColor="@color/colorTextSecondary"
+                android:letterSpacing="0.08"
+                android:paddingStart="4dp"
+                android:paddingBottom="10dp" />
+
+            <!-- Simple Row 1: AI Studio + Google Flow -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="10dp">
+
+                <LinearLayout
+                    android:id="@+id/btnSimpleOneClickAiStudio"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:background="@drawable/card_selector"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:gravity="center"
+                        android:background="@drawable/icon_badge_bg">
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:src="@drawable/ic_action_aistudio"
+                            android:contentDescription="@string/simple_card_aistudio" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_aistudio"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="2dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_aistudio_sub"
+                        android:textSize="12sp"
+                        android:textColor="@color/colorTextSecondary" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="0dp" />
+
+                <LinearLayout
+                    android:id="@+id/btnSimpleOneClickFlow"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:background="@drawable/card_selector"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:gravity="center"
+                        android:background="@drawable/icon_badge_bg">
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:src="@drawable/ic_action_flow"
+                            android:contentDescription="@string/simple_card_flow" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_flow"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="2dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_flow_sub"
+                        android:textSize="12sp"
+                        android:textColor="@color/colorTextSecondary" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Simple Row 2: Refresh Free Configs + Emergency Blackout Fix -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="14dp">
+
+                <LinearLayout
+                    android:id="@+id/btnSimpleOneClickRefresh"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:background="@drawable/card_selector"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:gravity="center"
+                        android:background="@drawable/icon_badge_bg">
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:src="@drawable/ic_action_harvest"
+                            android:contentDescription="@string/simple_card_refresh" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_refresh"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="2dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_refresh_sub"
+                        android:textSize="12sp"
+                        android:textColor="@color/colorTextSecondary" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="0dp" />
+
+                <LinearLayout
+                    android:id="@+id/btnSimpleOneClickBlackout"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:background="@drawable/card_selector"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:gravity="center"
+                        android:background="@drawable/icon_badge_bg">
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:src="@drawable/ic_action_dns_blackout"
+                            android:contentDescription="@string/simple_card_blackout" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_blackout"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="2dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_blackout_sub"
+                        android:textSize="12sp"
+                        android:textColor="@color/colorTextSecondary" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Simple Bottom Quick Links -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="16dp">
+
+                <Button
+                    android:id="@+id/btnSimpleLayerPick"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vpn_btn_switch_layer"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnSimpleGoAdvanced"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/simple_btn_open_advanced"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ============ ADVANCED MODE (FULL PRO CONTROL PLANE) ============ -->
+        <LinearLayout
+            android:id="@+id/advancedModeContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
 
         <!-- ============ VPN & SMART TUNNEL CARD ============ -->
         <TextView
@@ -280,12 +699,39 @@
                     style="@style/DastyabButton" />
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="8dp">
+
+                <Button
+                    android:id="@+id/btnSwitchLayer"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vpn_btn_switch_layer"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnShareQr"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vpn_btn_share_qr"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+
             <Button
-                android:id="@+id/btnSwitchLayer"
+                android:id="@+id/btnDnsRules"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/vpn_btn_switch_layer"
+                android:text="@string/vpn_btn_dns_rules"
                 style="@style/DastyabButton" />
         </LinearLayout>
 
@@ -1594,6 +2040,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp" />
             </HorizontalScrollView>
+        </LinearLayout>
         </LinearLayout>
 
         <!-- ============ BOTTOM ACTIONS ============ -->

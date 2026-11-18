@@ -47,6 +47,10 @@ class VpnLayersActivity : Activity() {
 
     private val handler = Handler(Looper.getMainLooper())
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_vpn_layers)
@@ -109,8 +113,9 @@ class VpnLayersActivity : Activity() {
         val options = arrayOf(
             "1. Activate & Connect this VPN Layer",
             "2. Edit Layer Settings",
-            "3. Clone Layer",
-            "4. Delete Layer"
+            "3. Share Layer as Offline QR Code",
+            "4. Clone Layer",
+            "5. Delete Layer"
         )
         AlertDialog.Builder(this)
             .setTitle(layer.name)
@@ -123,6 +128,10 @@ class VpnLayersActivity : Activity() {
                     }
                     1 -> showLayerEditorDialog(layer)
                     2 -> {
+                        val payload = layer.configUri.ifBlank { layer.dohUrl }
+                        QrShareDialog.show(this, "QR · ${layer.name}", payload)
+                    }
+                    3 -> {
                         val copy = layer.copy(
                             id = java.util.UUID.randomUUID().toString().take(8),
                             name = "${layer.name} (Copy)"
@@ -131,7 +140,7 @@ class VpnLayersActivity : Activity() {
                         refreshLayersUi()
                         Toast.makeText(this, "Cloned layer!", Toast.LENGTH_SHORT).show()
                     }
-                    3 -> {
+                    4 -> {
                         VpnLayerStore.delete(this, layer.id)
                         refreshLayersUi()
                         Toast.makeText(this, "Deleted layer.", Toast.LENGTH_SHORT).show()

@@ -58,7 +58,19 @@ class MainActivity : Activity() {
     private lateinit var historySpinner: Spinner
     private lateinit var binary: File
 
-    // VPN Tunnel card views
+    // Simple / Advanced Mode views
+    private lateinit var btnTabSimple: Button
+    private lateinit var btnTabAdvanced: Button
+    private lateinit var simpleModeContainer: LinearLayout
+    private lateinit var advancedModeContainer: LinearLayout
+    private lateinit var simpleStatusDot: View
+    private lateinit var tvSimpleHeroTitle: TextView
+    private lateinit var tvSimpleReachability: TextView
+    private lateinit var simpleProgress: ProgressBar
+    private lateinit var btnSimpleMagicAutopilot: Button
+    private lateinit var btnSimpleQuickToggle: Button
+
+    // VPN Tunnel card views (Advanced Mode)
     private lateinit var vpnDot: View
     private lateinit var tvVpnState: TextView
     private lateinit var tvVpnDetails: TextView
@@ -111,10 +123,15 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        const val EXTRA_AUTO_CONNECT_VPN = "extra_auto_connect_vpn"
         private const val PROCESS_TIMEOUT_MS = 300_000L
         private const val MAX_OUTPUT_CHARS = 50_000
         private const val MAX_ARGS_LENGTH = 4096
         private const val REQ_VPN_PREPARE = 4001
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -133,6 +150,18 @@ class MainActivity : Activity() {
         statusDot = findViewById(R.id.statusDot)
         historySpinner = findViewById(R.id.historySpinner)
         binary = File(applicationInfo.nativeLibraryDir, "libdastyab.so")
+
+        // Simple / Advanced Mode bindings
+        btnTabSimple = findViewById(R.id.btnTabSimple)
+        btnTabAdvanced = findViewById(R.id.btnTabAdvanced)
+        simpleModeContainer = findViewById(R.id.simpleModeContainer)
+        advancedModeContainer = findViewById(R.id.advancedModeContainer)
+        simpleStatusDot = findViewById(R.id.simpleStatusDot)
+        tvSimpleHeroTitle = findViewById(R.id.tvSimpleHeroTitle)
+        tvSimpleReachability = findViewById(R.id.tvSimpleReachability)
+        simpleProgress = findViewById(R.id.simpleProgress)
+        btnSimpleMagicAutopilot = findViewById(R.id.btnSimpleMagicAutopilot)
+        btnSimpleQuickToggle = findViewById(R.id.btnSimpleQuickToggle)
 
         // VPN Tunnel card bindings
         vpnDot = findViewById(R.id.vpnDot)
@@ -176,7 +205,45 @@ class MainActivity : Activity() {
         findViewById<TextView>(R.id.tvVersion).text = getString(R.string.version_format, version)
         savedInstanceState?.getString("pendingOutput")?.let { applyFormattedOutput(it) }
 
-        // ── VPN Tunnel controls ──
+        // ── Bilingual Persian (RTL) / English Toggle ──
+        findViewById<Button>(R.id.btnLangToggle).apply {
+            text = LocaleHelper.toggleButtonLabel(LocaleHelper.getLanguage(this@MainActivity))
+            setOnClickListener {
+                LocaleHelper.toggleLanguage(this@MainActivity)
+                DastyabWidgetProvider.updateAllWidgets(this@MainActivity)
+                recreate()
+            }
+        }
+
+        // ── Simple / Advanced Mode Switcher ──
+        btnTabSimple.setOnClickListener { applyUiMode(UiModePrefs.Mode.SIMPLE) }
+        btnTabAdvanced.setOnClickListener { applyUiMode(UiModePrefs.Mode.ADVANCED) }
+        applyUiMode(UiModePrefs.getMode(this), persist = false)
+
+        // ── Simple Mode 1-Click Controls ──
+        btnSimpleMagicAutopilot.setOnClickListener { runNewbieAutopilot() }
+        btnSimpleQuickToggle.setOnClickListener { toggleVpnTunnel() }
+        findViewById<Button>(R.id.btnSimpleSpeedIp).setOnClickListener { runQuickSpeedAndIpCheck() }
+        findViewById<View>(R.id.btnSimpleOneClickAiStudio).setOnClickListener {
+            if (operation.get() == null) launchGoogleServiceViaVpn("Google AI Studio", CommandCompat.AISTUDIO_URL)
+        }
+        findViewById<View>(R.id.btnSimpleOneClickFlow).setOnClickListener {
+            if (operation.get() == null) launchGoogleServiceViaVpn("Google Flow", CommandCompat.FLOW_URL)
+        }
+        findViewById<View>(R.id.btnSimpleOneClickRefresh).setOnClickListener {
+            openRescueHub(BlackoutRescueActivity.ACTION_HARVEST)
+        }
+        findViewById<View>(R.id.btnSimpleOneClickBlackout).setOnClickListener {
+            openRescueHub(BlackoutRescueActivity.ACTION_DNS_VPN)
+        }
+        findViewById<Button>(R.id.btnSimpleLayerPick).setOnClickListener {
+            showQuickLayerSwitcherDialog()
+        }
+        findViewById<Button>(R.id.btnSimpleGoAdvanced).setOnClickListener {
+            applyUiMode(UiModePrefs.Mode.ADVANCED)
+        }
+
+        // ── VPN Tunnel controls (Advanced Mode) ──
         btnNewbieAutopilot.setOnClickListener { runNewbieAutopilot() }
         btnVpnToggle.setOnClickListener { toggleVpnTunnel() }
         btnModeSmart.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.SMART) }
@@ -191,6 +258,15 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.btnSwitchLayer).setOnClickListener {
             showQuickLayerSwitcherDialog()
+        }
+        findViewById<Button>(R.id.btnShareQr).setOnClickListener {
+            val layer = VpnLayerStore.getActiveLayer(this)
+            val cfg = layer.configUri.ifBlank { TunnelConfig.load(this).vlessUri }
+                .ifBlank { TunnelConfig.loadHarvestedConfigs(this).firstOrNull().orEmpty() }
+            QrShareDialog.show(this, "QR · ${layer.name}", cfg)
+        }
+        findViewById<Button>(R.id.btnDnsRules).setOnClickListener {
+            DomainDnsDialog.show(this) { refreshVpnCard() }
         }
 
         // ── Blackout Rescue & Harvesting Quick Actions ──
@@ -338,6 +414,10 @@ class MainActivity : Activity() {
         refreshVpnCard()
         setBusy(false)
         evaluateBinaryState()
+
+        if (intent?.getBooleanExtra(EXTRA_AUTO_CONNECT_VPN, false) == true && !DastyabVpnService.isConnected()) {
+            requestStartVpn(null, null)
+        }
     }
 
     override fun onResume() {
@@ -542,9 +622,13 @@ class MainActivity : Activity() {
         if (operation.get() != null) return
         setBusy(true)
         btnNewbieAutopilot.isEnabled = false
+        btnSimpleMagicAutopilot.isEnabled = false
+        simpleProgress.visibility = View.VISIBLE
         postStatus("Autopilot running (auto-fixing AI Studio & Flow)…")
         setStatusDot(DotState.ORANGE)
-        tvReachabilityBadge.text = "Autopilot running… scouting DoH, harvesting & verifying…"
+        val runningText = "Autopilot running… scouting DoH, harvesting & verifying…"
+        tvReachabilityBadge.text = runningText
+        tvSimpleReachability.text = runningText
         applyFormattedOutput("\n=== DASTYAB 1-TAP NEWBIE AUTOPILOT ===\n")
 
         thread(isDaemon = true, name = "dastyab-newbie-autopilot") {
@@ -554,13 +638,17 @@ class MainActivity : Activity() {
             postUi {
                 setBusy(false)
                 btnNewbieAutopilot.isEnabled = true
+                btnSimpleMagicAutopilot.isEnabled = true
+                simpleProgress.visibility = View.GONE
                 refreshVpnCard()
 
                 val v = report.verification
                 val webMark = if (v.internet.isOk) "Web ✓" else "Web ✗"
                 val aiMark = if (v.aiStudio.isOk) "AI Studio ✓" else "AI Studio ✗"
                 val flowMark = if (v.flow.isOk) "Flow ✓" else "Flow ✗"
-                tvReachabilityBadge.text = "$webMark · $aiMark · $flowMark"
+                val badge = "$webMark · $aiMark · $flowMark"
+                tvReachabilityBadge.text = badge
+                tvSimpleReachability.text = badge
 
                 postStatus(report.headline)
                 setStatusDot(
@@ -625,19 +713,23 @@ class MainActivity : Activity() {
     }
 
     private fun openBrowserUrl(serviceName: String, url: String) {
-        postOutput("Opening $serviceName in your browser…\n")
+        postOutput("Opening $serviceName in DastYab built-in browser…\n")
         postStatus("Opening $serviceName…")
         setStatusDot(DotState.ORANGE)
         try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            InAppBrowserActivity.launch(this, serviceName, url)
             val vpnNote = if (DastyabVpnService.isConnected()) " (VPN active)" else ""
             postOutput("OK: $serviceName opened$vpnNote → $url\n")
             postStatus("$serviceName opened$vpnNote")
             setStatusDot(DotState.GREEN)
-        } catch (_: android.content.ActivityNotFoundException) {
-            postOutput("ERROR: No browser available. Open manually: $url\n")
-            postStatus("No browser available")
-            setStatusDot(DotState.RED)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } catch (_: android.content.ActivityNotFoundException) {
+                postOutput("ERROR: No browser available. Open manually: $url\n")
+                postStatus("No browser available")
+                setStatusDot(DotState.RED)
+            }
         }
     }
 
@@ -681,18 +773,27 @@ class MainActivity : Activity() {
         when (statusObj.state) {
             DastyabVpnService.State.CONNECTED -> {
                 vpnDot.background = getDrawable(R.drawable.status_dot_green)
+                simpleStatusDot.background = getDrawable(R.drawable.status_dot_green)
                 tvVpnState.text = "${getString(R.string.vpn_status_connected)} · ${activeMode.label}"
+                tvSimpleHeroTitle.text = getString(R.string.simple_hero_connected)
                 btnVpnToggle.text = getString(R.string.vpn_btn_disconnect)
+                btnSimpleQuickToggle.text = getString(R.string.vpn_btn_disconnect)
             }
             DastyabVpnService.State.CONNECTING -> {
                 vpnDot.background = getDrawable(R.drawable.status_dot_orange)
+                simpleStatusDot.background = getDrawable(R.drawable.status_dot_orange)
                 tvVpnState.text = getString(R.string.vpn_status_connecting)
+                tvSimpleHeroTitle.text = getString(R.string.vpn_status_connecting)
                 btnVpnToggle.text = getString(R.string.vpn_btn_disconnect)
+                btnSimpleQuickToggle.text = getString(R.string.vpn_btn_disconnect)
             }
             DastyabVpnService.State.DISCONNECTED -> {
                 vpnDot.background = getDrawable(R.drawable.status_dot_gray)
+                simpleStatusDot.background = getDrawable(R.drawable.status_dot_gray)
                 tvVpnState.text = "${getString(R.string.vpn_status_disconnected)} · ${activeMode.label}"
+                tvSimpleHeroTitle.text = getString(R.string.simple_hero_disconnected)
                 btnVpnToggle.text = getString(R.string.vpn_btn_connect)
+                btnSimpleQuickToggle.text = getString(R.string.vpn_btn_connect)
             }
         }
 
@@ -705,7 +806,14 @@ class MainActivity : Activity() {
         } else {
             ""
         }
-        tvVpnDetails.text = "$endpoint · DNS ${settings.dnsPrimary}$splitSuffix"
+        val iranBypassTag = if (DomainDnsRules.load(this).iranBypassEnabled) " · .ir Bypass" else ""
+        val watchdogSnap = FailoverWatchdog.getSnapshot()
+        val watchdogTag = if (statusObj.state == DastyabVpnService.State.CONNECTED && watchdogSnap.active) {
+            " · 5m Auto-Heal"
+        } else {
+            ""
+        }
+        tvVpnDetails.text = "$endpoint · DNS ${settings.dnsPrimary}$splitSuffix$iranBypassTag$watchdogTag"
 
         // Highlight active quick-mode chip
         val isSplit = activeMode == TunnelConfig.Mode.SPLIT_INCLUDE || activeMode == TunnelConfig.Mode.SPLIT_EXCLUDE
@@ -718,6 +826,48 @@ class MainActivity : Activity() {
     private fun openActivity(type: Class<out Activity>) {
         try { startActivity(Intent(this, type)) }
         catch (_: android.content.ActivityNotFoundException) { postStatus("Screen unavailable") }
+    }
+
+    /** Switches between Simple Mode (1-click automatic UI) and Advanced Mode (full pro control plane). */
+    private fun applyUiMode(mode: UiModePrefs.Mode, persist: Boolean = true) {
+        if (persist) UiModePrefs.setMode(this, mode)
+        val isSimple = mode == UiModePrefs.Mode.SIMPLE
+        simpleModeContainer.visibility = if (isSimple) View.VISIBLE else View.GONE
+        advancedModeContainer.visibility = if (isSimple) View.GONE else View.VISIBLE
+        btnTabSimple.alpha = if (isSimple) 1.0f else 0.55f
+        btnTabAdvanced.alpha = if (isSimple) 0.55f else 1.0f
+    }
+
+    /** 1-tap Speed, Exit IP & AI Studio / Flow live check right from Simple Mode. */
+    private fun runQuickSpeedAndIpCheck() {
+        simpleProgress.visibility = View.VISIBLE
+        tvSimpleReachability.text = "Testing Exit IP, AI Studio & Google Flow…"
+        thread(isDaemon = true, name = "dastyab-quick-speed") {
+            val trace = NetworkTools.fetchExitTrace(timeoutMs = 3500)
+            val check = ReachabilityVerifier.verifyAll(timeoutMs = 3000)
+            postUi {
+                simpleProgress.visibility = View.GONE
+                val webMark = if (check.internet.isOk) "Web ✓" else "Web ✗"
+                val aiMark = if (check.aiStudio.isOk) "AI Studio ✓" else "AI Studio ✗"
+                val flowMark = if (check.flow.isOk) "Flow ✓" else "Flow ✗"
+                val badge = "$webMark · $aiMark · $flowMark"
+                tvSimpleReachability.text = badge
+                tvReachabilityBadge.text = badge
+
+                val ipLine = if (trace != null) {
+                    "Exit IP: ${trace.ip} (${trace.location} · ${trace.colo})\nTLS: ${trace.tls} · HTTP: ${trace.http}"
+                } else {
+                    "Exit IP: Unreachable (try 1-Tap Autopilot or DNS Blackout)"
+                }
+                val msg = "$ipLine\n\nWeb: ${check.internet.detail}\nAI Studio: ${check.aiStudio.detail}\nGoogle Flow: ${check.flow.detail}"
+                AlertDialog.Builder(this)
+                    .setTitle("Live Speed & Reachability")
+                    .setMessage(msg)
+                    .setPositiveButton("Run 1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
+                    .setNegativeButton(android.R.string.ok, null)
+                    .show()
+            }
+        }
     }
 
     /** Show the advanced (raw command) section. */

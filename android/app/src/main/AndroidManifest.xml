@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Allow split-tunnel app picker to list launchable apps on Android 11+. -->
     <queries>
@@ -74,6 +75,12 @@
             android:exported="false"
             android:label="Settings"
             android:theme="@style/DastyabTheme" />
+        <activity
+            android:name=".InAppBrowserActivity"
+            android:exported="false"
+            android:label="DastYab Browser"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/DastyabTheme" />
 
         <service
             android:name=".DastyabVpnService"
@@ -98,6 +105,30 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name=".DastyabWidgetProvider"
+            android:label="@string/widget_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.dastyab.app.widget.TOGGLE_VPN" />
+                <action android:name="com.dastyab.app.vpn.STATE_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/dastyab_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".BootReconnectReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

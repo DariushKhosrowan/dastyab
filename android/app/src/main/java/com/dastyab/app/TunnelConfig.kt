@@ -27,6 +27,8 @@ object TunnelConfig {
     private const val KEY_DNS_TUNNEL_DOMAIN = "dns_tunnel_domain"
     private const val KEY_BOOTSTRAP_CONFIG = "bootstrap_config"
     private const val KEY_HARVESTED_CONFIGS = "harvested_configs"
+    private const val KEY_AUTO_CONNECT_BOOT = "auto_connect_on_boot"
+    private const val KEY_WATCHDOG_ENABLED = "watchdog_enabled"
 
     const val DEFAULT_DNS_PRIMARY = "1.1.1.1"
     const val DEFAULT_DNS_SECONDARY = "8.8.8.8"
@@ -92,7 +94,9 @@ object TunnelConfig {
         val splitPackages: Set<String> = emptySet(),
         val dohUrl: String = DEFAULT_DOH_URL,
         val dnsTunnelDomain: String = "",
-        val bootstrapConfig: String = ""
+        val bootstrapConfig: String = "",
+        val autoConnectOnBoot: Boolean = false,
+        val watchdogEnabled: Boolean = true
     ) {
         fun parsedEndpoint(): VlessEndpoint? = parseVlessUri(vlessUri)
     }
@@ -111,7 +115,9 @@ object TunnelConfig {
             splitPackages = normalizePackages(rawPkgs),
             dohUrl = sanitizeDohUrl(prefs.getString(KEY_DOH_URL, DEFAULT_DOH_URL)),
             dnsTunnelDomain = (prefs.getString(KEY_DNS_TUNNEL_DOMAIN, "") ?: "").trim(),
-            bootstrapConfig = (prefs.getString(KEY_BOOTSTRAP_CONFIG, "") ?: "").trim()
+            bootstrapConfig = (prefs.getString(KEY_BOOTSTRAP_CONFIG, "") ?: "").trim(),
+            autoConnectOnBoot = prefs.getBoolean(KEY_AUTO_CONNECT_BOOT, false),
+            watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
         )
     }
 
@@ -128,6 +134,8 @@ object TunnelConfig {
             .putString(KEY_DOH_URL, sanitizeDohUrl(settings.dohUrl))
             .putString(KEY_DNS_TUNNEL_DOMAIN, settings.dnsTunnelDomain.trim())
             .putString(KEY_BOOTSTRAP_CONFIG, settings.bootstrapConfig.trim())
+            .putBoolean(KEY_AUTO_CONNECT_BOOT, settings.autoConnectOnBoot)
+            .putBoolean(KEY_WATCHDOG_ENABLED, settings.watchdogEnabled)
             .apply()
     }
 

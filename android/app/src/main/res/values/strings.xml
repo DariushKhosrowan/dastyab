@@ -263,4 +263,48 @@
     <!-- Newbie Autopilot & Live Reachability -->
     <string name="vpn_btn_newbie_autopilot">1-Tap Autopilot (Auto-Fix AI Studio &amp; Flow)</string>
     <string name="reachability_idle">Tap 1-Tap Autopilot to auto-verify Web, AI Studio &amp; Flow</string>
+
+    <!-- Simple vs Advanced Mode -->
+    <string name="tab_simple_mode">Simple Mode</string>
+    <string name="tab_advanced_mode">Advanced Mode</string>
+    <string name="simple_hero_disconnected">Ready to Connect</string>
+    <string name="simple_hero_connected">Protected &amp; Connected</string>
+    <string name="simple_hero_subtitle">One tap automatically finds the fastest encrypted DNS, harvests working configs, and verifies AI Studio &amp; Google Flow.</string>
+    <string name="simple_btn_magic">Auto-Connect &amp; Fix Everything</string>
+    <string name="simple_btn_speed_ip">Speed &amp; Exit IP</string>
+    <string name="simple_section_oneclick">1-Click Smart Actions</string>
+    <string name="simple_card_aistudio">Open AI Studio</string>
+    <string name="simple_card_aistudio_sub">Auto-connect &amp; launch</string>
+    <string name="simple_card_flow">Open Google Flow</string>
+    <string name="simple_card_flow_sub">Auto-connect &amp; launch</string>
+    <string name="simple_card_refresh">Refresh Configs</string>
+    <string name="simple_card_refresh_sub">Auto-harvest &amp; pick best</string>
+    <string name="simple_card_blackout">Blackout Rescue</string>
+    <string name="simple_card_blackout_sub">1-tap WhiteDNS / DoH</string>
+    <string name="simple_btn_open_advanced">Open Advanced Tools</string>
+
+    <!-- v3.0.0: Home Widget, In-App Browser, QR Share, Domain DNS Rules, Watchdog & Bilingual -->
+    <string name="widget_label">DastYab VPN (1-Tap)</string>
+    <string name="browser_btn_autofix">Auto-Fix</string>
+    <string name="browser_btn_chrome">Chrome</string>
+    <string name="browser_btn_back">← Back</string>
+    <string name="browser_btn_forward">Forward →</string>
+    <string name="browser_btn_reload">↻ Reload</string>
+    <string name="browser_load_error_hint">Page stalled? Tap Auto-Fix or Chrome in the top bar.</string>
+    <string name="qr_empty_config">No config URI set yet — import or harvest a config first.</string>
+    <string name="qr_too_long">Config URI is too long for an offline QR code.</string>
+    <string name="vpn_btn_dns_rules">Iran Bypass &amp; DNS Rules</string>
+    <string name="vpn_btn_share_qr">Share QR</string>
+    <string name="dns_rules_title">Per-Domain DNS &amp; Iranian Site Bypass</string>
+    <string name="dns_rules_iran_bypass">Bypass .ir &amp; Iranian banking/local sites (fast local DNS)</string>
+    <string name="dns_rules_iran_hint">Automatically routes .ir and %d curated Iranian banking/shopping/local domains via fast local DNS, while keeping AI Studio, Flow, GitHub &amp; Telegram on encrypted DoH.</string>
+    <string name="dns_rules_input_hint">Enter domain (e.g. digikala.com or aistudio.google.com)</string>
+    <string name="dns_rules_btn_add_bypass">+ Local Bypass</string>
+    <string name="dns_rules_btn_add_doh">+ Force DoH</string>
+    <string name="dns_rules_btn_test">Test Rule</string>
+    <string name="dns_rules_btn_clear_custom">Clear Custom</string>
+    <string name="tunnel_watchdog_enabled">5-min Smart Auto-Failover &amp; quiet background harvester</string>
+    <string name="tunnel_auto_connect_boot">Auto-reconnect DastYab VPN on device boot</string>
+    <string name="tunnel_btn_domain_rules">Manage Per-Domain DNS &amp; Iranian Bypass</string>
+    <string name="lang_toggle_desc">Switch language (Persian / English)</string>
 </resources>

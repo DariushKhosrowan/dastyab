@@ -73,6 +73,30 @@
                 android:text="@string/tunnel_auto_vpn_google"
                 android:textColor="@color/colorTextPrimary"
                 android:paddingTop="6dp" />
+
+            <CheckBox
+                android:id="@+id/cbWatchdogEnabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/tunnel_watchdog_enabled"
+                android:textColor="@color/colorTextPrimary"
+                android:paddingTop="6dp" />
+
+            <CheckBox
+                android:id="@+id/cbAutoConnectBoot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/tunnel_auto_connect_boot"
+                android:textColor="@color/colorTextPrimary"
+                android:paddingTop="6dp" />
+
+            <Button
+                android:id="@+id/btnDomainDnsRules"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/tunnel_btn_domain_rules"
+                style="@style/DastyabButton" />
         </LinearLayout>
 
         <View

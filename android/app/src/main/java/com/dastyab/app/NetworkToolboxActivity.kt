@@ -33,6 +33,10 @@ class NetworkToolboxActivity : Activity() {
     private lateinit var tvOutput: TextView
     private val handler = Handler(Looper.getMainLooper())
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_network_toolbox)

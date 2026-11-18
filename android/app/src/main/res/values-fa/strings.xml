@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">دستیاب</string>
+    <string name="status_checking">در حال بررسی موتور…</string>
+    <string name="status_downloading">در حال دریافت فایل اجرایی دستیاب…</string>
+    <string name="status_retrying">تلاش مجدد تا %d ثانیه دیگر…</string>
+    <string name="status_ready">آماده — روی یک گزینه بزنید یا دستور را وارد کنید</string>
+    <string name="status_binary_not_ready">موتور آماده نیست</string>
+    <string name="status_error">خطا</string>
+    <string name="error_no_network">اتصال اینترنت برقرار نیست — وای‌فای یا دیتای موبایل را بررسی کنید</string>
+    <string name="error_low_storage">فضای ذخیره‌سازی کافی نیست</string>
+    <string name="error_download_failed">دانلود ناموفق بود: %s</string>
+    <string name="status_cancelled">لغو شد</string>
+    <string name="error_args_too_long">دستور بیش از حد طولانی است (حداکثر ۴۰۹۶ کاراکتر)</string>
+    <string name="error_invalid_args">کاراکترهای نامعتبر در دستور</string>
+    <string name="error_unsafe_args">مسیرهای ناامن در دستور وجود دارد</string>
+
+    <string name="section_vpn_tunnel">تونل هوشمند و VPN</string>
+    <string name="vpn_status_disconnected">VPN قطع است</string>
+    <string name="vpn_status_connecting">در حال اتصال تونل…</string>
+    <string name="vpn_status_connected">VPN متصل است</string>
+    <string name="vpn_btn_connect">اتصال VPN</string>
+    <string name="vpn_btn_disconnect">قطع اتصال</string>
+    <string name="vpn_btn_customize">تنظیمات تونل</string>
+    <string name="vpn_btn_import_vless">ورود VLESS</string>
+    <string name="vpn_mode_smart">هوشمند</string>
+    <string name="vpn_mode_global">سراسری</string>
+    <string name="vpn_mode_split">تقسیم‌تونل</string>
+    <string name="vpn_mode_dns">DNS اضطراری</string>
+
+    <string name="section_tunnel_google">سرویس‌های گوگل و تونل</string>
+    <string name="section_quick_actions">ابزارهای کلودفلر و زیرساخت</string>
+    <string name="action_open_aistudio">AI Studio (با VPN)</string>
+    <string name="action_open_flow">Google Flow (با VPN)</string>
+    <string name="action_deploy">استقرار Worker</string>
+    <string name="action_autopilot">خلبان خودکار</string>
+    <string name="action_verify">بررسی توکن</string>
+    <string name="action_accounts">حساب‌ها</string>
+    <string name="action_profiles">پروفایل‌ها</string>
+    <string name="action_tokens">توکن‌ها</string>
+    <string name="action_scan">اسکن IP تمیز</string>
+    <string name="action_configs">کانفیگ‌ها</string>
+    <string name="action_security">ممیزی امنیت</string>
+    <string name="action_doctor">عیب‌یاب کل</string>
+    <string name="action_backup">پشتیبان‌گیری</string>
+    <string name="action_zones">دامنه‌ها</string>
+
+    <string name="action_open_aistudio_subtitle">اتصال خودکار و باز کردن AI Studio</string>
+    <string name="action_open_flow_subtitle">اتصال خودکار و باز کردن Google Flow</string>
+    <string name="action_deploy_subtitle">استقرار ورکر VLESS روی لبه کلودفلر</string>
+    <string name="action_autopilot_subtitle">بررسی محافظت خودکار</string>
+    <string name="action_verify_subtitle">اعتبارسنجی توکن فعال کلودفلر</string>
+    <string name="action_accounts_subtitle">لیست حساب‌های کلودفلر</string>
+    <string name="action_profiles_subtitle">مدیریت پروفایل‌های تونل</string>
+    <string name="action_tokens_subtitle">نمایش توکن‌های ذخیره‌شده</string>
+    <string name="action_scan_subtitle">پیدا کردن سریع‌ترین IP تمیز کلودفلر</string>
+    <string name="action_configs_subtitle">مشاهده کانفیگ‌های خروجی</string>
+    <string name="action_security_subtitle">بررسی امنیت توکن و فایل‌ها</string>
+    <string name="action_doctor_subtitle">عیب‌یابی کامل سیستم</string>
+    <string name="action_backup_subtitle">تهیه نسخه پشتیبان از پروفایل‌ها</string>
+    <string name="action_zones_subtitle">لیست زون‌های DNS کلودفلر</string>
+
+    <string name="tunnel_settings_title">تنظیمات VPN و تونل</string>
+    <string name="tunnel_settings_subtitle">پیکربندی تونل هوشمند، VPN سراسری، تقسیم‌تونل برنامه‌ها، لینک VLESS، DNS و MTU.</string>
+    <string name="tunnel_mode_label">حالت مسیریابی</string>
+    <string name="tunnel_bypass_lan">عبور مستقیم شبکه‌های محلی LAN</string>
+    <string name="tunnel_auto_vpn_google">اتصال خودکار VPN قبل از باز کردن AI Studio و Flow</string>
+    <string name="tunnel_split_header">تقسیم‌تونل (بر اساس برنامه)</string>
+    <string name="tunnel_split_none">هیچ برنامه‌ای انتخاب نشده — برای انتخاب لمس کنید</string>
+    <string name="tunnel_split_count">%d برنامه برای تقسیم‌تونل انتخاب شده</string>
+    <string name="tunnel_pick_apps_btn">انتخاب برنامه‌های تقسیم‌تونل</string>
+    <string name="tunnel_pick_apps_title">انتخاب برنامه‌ها</string>
+    <string name="tunnel_clear_apps">پاک کردن همه</string>
+    <string name="tunnel_no_apps_found">برنامه‌ای یافت نشد</string>
+    <string name="tunnel_vless_header">لینک VLESS بالادستی (اختیاری)</string>
+    <string name="tunnel_vless_hint">vless://uuid@host:443?security=tls&amp;type=ws&amp;sni=worker.dev#label</string>
+    <string name="tunnel_vless_none">استفاده از DNS هوشمند کلودفلر</string>
+    <string name="tunnel_vless_invalid">فرمت لینک vless:// نامعتبر است</string>
+    <string name="tunnel_paste_vless">جای‌گذاری vless:// از کلیپ‌بورد</string>
+    <string name="tunnel_clipboard_empty">کلیپ‌بورد خالی است</string>
+    <string name="tunnel_network_header">تنظیمات DNS و رابط شبکه</string>
+    <string name="tunnel_dns_primary">DNS اصلی (IPv4)</string>
+    <string name="tunnel_dns_secondary">DNS دوم (IPv4)</string>
+    <string name="tunnel_mtu_label">اندازه MTU (۱۲۸۰ تا ۱۵۰۰)</string>
+    <string name="tunnel_save_apply">ذخیره و اعمال تنظیمات تونل</string>
+    <string name="tunnel_saved">تنظیمات تونل ذخیره شد</string>
+
+    <string name="section_output">خروجی</string>
+    <string name="output_empty_title">هنوز خروجی ثبت نشده</string>
+    <string name="output_empty_subtitle">یک ابزار را انتخاب کنید یا دستوری اجرا نمایید</string>
+    <string name="quick_commands_label">دستورهای سریع</string>
+    <string name="section_advanced">پیشرفته</string>
+    <string name="btn_show_advanced">پیشرفته / اجرای دستور دستی</string>
+    <string name="btn_hide_advanced">بستن بخش پیشرفته</string>
+
+    <string name="btn_open_aistudio">باز کردن Google AI Studio</string>
+    <string name="aistudio_opening">در حال باز کردن Google AI Studio…</string>
+    <string name="aistudio_opened">✓ AI Studio از طریق تونل دستیاب باز شد.</string>
+    <string name="aistudio_no_browser">✗ مرورگری یافت نشد: https://aistudio.google.com/</string>
+
+    <string name="cmd_not_available_title">دستور روی اندروید در دسترس نیست</string>
+    <string name="cmd_not_available_flow">در حال باز کردن Google Flow از طریق تونل دستیاب…</string>
+    <string name="cmd_not_available_hint">از دستورهای verify، accounts یا profiles استفاده کنید.</string>
+    <string name="btn_cancel">لغو</string>
+    <string name="hint_args">دستور (مثلاً verify، scan، accounts)</string>
+    <string name="btn_run">اجرا</string>
+    <string name="btn_clear">پاک کردن خروجی</string>
+    <string name="btn_retry">تلاش مجدد</string>
+    <string name="btn_view_logs">مشاهده گزارش‌ها</string>
+    <string name="lbl_prefix">\u0024 dastyab</string>
+    <string name="btn_refresh_logs">بروزرسانی گزارش‌ها</string>
+    <string name="log_files">فایل‌های گزارش</string>
+    <string name="no_logs_available">هنوز فایلی ثبت نشده است</string>
+
+    <string name="version_format">دستیاب نسخه %1$s</string>
+
+    <string name="btn_copy">کپی</string>
+    <string name="btn_share">اشتراک‌گذاری</string>
+    <string name="copied_to_clipboard">کپی شد</string>
+    <string name="share_title">اشتراک‌گذاری از طریق…</string>
+
+    <string name="btn_about">درباره</string>
+    <string name="about_title">درباره دستیاب</string>
+    <string name="about_description">دستیاب یک ابزار هوشمند عبور از محدودیت و مدیریت تونل است که به صورت کامل روی اندروید اجرا می‌شود.</string>
+    <string name="about_version_label">نسخه</string>
+    <string name="about_commands_header">دستورهای موجود</string>
+    <string name="about_cmd_verify">verify — بررسی توکن فعال کلودفلر</string>
+    <string name="about_cmd_accounts">accounts — مدیریت حساب‌های کلودفلر</string>
+    <string name="about_cmd_profiles">profiles — مدیریت پروفایل‌های تونل</string>
+    <string name="about_cmd_token_list">token-list — لیست توکن‌ها</string>
+    <string name="about_cmd_scan">scan — اسکن IPهای تمیز</string>
+    <string name="about_cmd_deploy">deploy — استقرار تونل جدید</string>
+    <string name="about_cmd_autopilot">autopilot — راه‌اندازی خودکار</string>
+    <string name="about_cmd_security">security — بررسی امنیتی</string>
+    <string name="about_cmd_manifest_verify">manifest-verify — بررسی مانیفست</string>
+    <string name="about_cmd_update_check">update-check — بررسی بروزرسانی</string>
+    <string name="about_cmd_configs">configs — مدیریت فایل‌های کانفیگ</string>
+    <string name="about_cmd_backup">backup — پشتیبان‌گیری</string>
+    <string name="about_cmd_zones">zones — لیست زون‌ها</string>
+    <string name="about_cmd_routes">routes — مدیریت مسیرها</string>
+    <string name="about_cmd_history">history — تاریخچه دستورها</string>
+
+    <string name="btn_history">تاریخچه</string>
+    <string name="history_prompt">دستورهای اخیر</string>
+    <string name="history_dialog_title">تاریخچه دستورها</string>
+    <string name="history_empty">تاریخچه‌ای وجود ندارد</string>
+
+    <string name="btn_settings">تنظیمات</string>
+    <string name="settings_title">تنظیمات</string>
+    <string name="settings_log_level">حداقل سطح ثبت گزارش</string>
+    <string name="settings_auto_update">بروزرسانی خودکار موتور در شروع</string>
+    <string name="settings_clear_logs">پاک کردن فایل‌های گزارش</string>
+    <string name="settings_clear_crash_logs">پاک کردن گزارش‌های خطا</string>
+    <string name="settings_clear_history">پاک کردن تاریخچه دستورها</string>
+    <string name="settings_force_redownload">دریافت بروزرسانی برنامه</string>
+
+    <string name="btn_update">بروزرسانی</string>
+    <string name="update_checking">در حال بررسی بروزرسانی…</string>
+    <string name="update_up_to_date">برنامه بروز است</string>
+    <string name="update_available_title">بروزرسانی جدید موجود است</string>
+    <string name="update_available_msg">نسخه جدید دستیاب در گیت‌هاب منتشر شده است. دانلود شود؟</string>
+    <string name="update_download">دانلود</string>
+    <string name="update_later">بعداً</string>
+    <string name="update_unknown">بررسی بروزرسانی ناموفق بود</string>
+
+    <string name="section_blackout_rescue">نجات در قطعی و شکار کانفیگ</string>
+    <string name="action_harvest">شکار هوشمند</string>
+    <string name="action_harvest_subtitle">گیت‌هاب ← تلگرام ← جایگزین</string>
+    <string name="action_dns_blackout">VPN اضطراری DNS</string>
+    <string name="action_dns_blackout_subtitle">WhiteDNS / DoH آخرین راه</string>
+    <string name="action_ip_scout">اسکن IP و DNS تمیز</string>
+    <string name="action_ip_scout_subtitle">یافتن IP و DNS سالم</string>
+    <string name="action_troubleshoot">عیب‌یاب ۷ لایه</string>
+    <string name="action_troubleshoot_subtitle">تشخیص دقیق محدودیت شبکه</string>
+
+    <string name="rescue_title">مرکز نجات قطعی و شکار کانفیگ</string>
+    <string name="rescue_subtitle">شکار هوشمند از گیت‌هاب و تلگرام، VPN اضطراری DNS، اسکن IP تمیز و عیب‌یاب ۷ لایه.</string>
+    <string name="rescue_harvester_title">۱. شکارچی ۵ مرحله‌ای کانفیگ</string>
+    <string name="rescue_harvester_hint">ابتدا گیت‌هاب و آینه jsDelivr، سپس کانال‌های عمومی تلگرام و در نهایت VPNهای جایگزین را بررسی می‌کند.</string>
+    <string name="rescue_btn_harvest">اجرای شکار هوشمند (گیت‌هاب ← تلگرام)</string>
+    <string name="rescue_btn_pick_configs">استخر کانفیگ‌ها</string>
+    <string name="rescue_btn_bootstrap">کانفیگ پایه موقت</string>
+
+    <string name="rescue_dns_vpn_title">۲. VPN اضطراری DNS (WhiteDNS / DoH)</string>
+    <string name="rescue_dns_vpn_hint">مناسب زمان اختلال شدید و مسمومیت DNS؛ تمام درخواست‌های DNS را با DoH رمزنگاری می‌کند.</string>
+    <string name="rescue_dns_tunnel_hint">دامنه اختیاری SlipNet / DNS Tunnel (مثلاً t.example.com)</string>
+    <string name="rescue_btn_activate_dns_vpn">فعال‌سازی VPN اضطراری DNS</string>
+
+    <string name="rescue_scout_title">۳. اسکنر رنج IP و DNS تمیز</string>
+    <string name="rescue_scout_hint">تست مستقیم IPهای کلودفلر و سرورهای DoH تمیز روی گوشی شما.</string>
+    <string name="rescue_btn_scout_ips">اسکن IPهای تمیز</string>
+    <string name="rescue_btn_scout_dns">اسکن DNS و DoH تمیز</string>
+
+    <string name="rescue_troubleshoot_title">۴. عیب‌یاب هوشمند اتصال</string>
+    <string name="rescue_troubleshoot_hint">بررسی ۷ لایه شبکه از DNS تا گیت‌هاب، تلگرام، AI Studio و Google Flow.</string>
+    <string name="rescue_btn_troubleshoot">اجرای عیب‌یابی ۷ لایه</string>
+
+    <string name="rescue_fallbacks_title">۵. ابزارهای جایگزین عبور از فیلترینگ</string>
+    <string name="rescue_fallbacks_hint">برنامه‌های نصب‌شده با یک لمس باز می‌شوند تا دسترسی اولیه برقرار شود.</string>
+    <string name="rescue_log_title">گزارش زنده نجات و عیب‌یابی</string>
+    <string name="rescue_log_empty">برای مشاهده نتیجه زنده، یکی از ابزارهای بالا را اجرا کنید.</string>
+
+    <string name="vpn_btn_switch_layer">تغییر لایه</string>
+    <string name="action_vpn_layers">لایه‌های VPN</string>
+    <string name="action_vpn_layers_subtitle">افزودن، تغییر و تست سرعت</string>
+    <string name="action_edit_sources">کانال‌ها و لینک‌ها</string>
+    <string name="action_edit_sources_subtitle">ویرایش منابع گیت‌هاب و تلگرام</string>
+    <string name="action_toolbox">جعبه ابزار شبکه</string>
+    <string name="action_toolbox_subtitle">ردیابی IP، DNS، TLS، Base64</string>
+
+    <string name="layers_title">لایه‌های VPN و منابع شکار</string>
+    <string name="layers_subtitle">ساخت، ویرایش و جابه‌جایی سریع بین لایه‌های VPN و مدیریت کانال‌های تلگرام و لینک‌های گیت‌هاب.</string>
+    <string name="layers_section_profiles">۱. لایه‌های قابل تنظیم VPN</string>
+    <string name="layers_section_profiles_hint">روی هر لایه بزنید تا متصل، ویرایش یا با کد QR به اشتراک گذاشته شود.</string>
+    <string name="layers_btn_add">+ افزودن لایه VPN</string>
+    <string name="layers_btn_auto_best">انتخاب سریع‌ترین لایه</string>
+    <string name="layers_btn_export">خروجی JSON</string>
+    <string name="layers_btn_import">ورود JSON</string>
+
+    <string name="sources_section_title">۲. لینک‌های گیت‌هاب و کانال‌های تلگرام</string>
+    <string name="sources_section_hint">لینک‌های اشتراک گیت‌هاب و کانال‌های عمومی تلگرام خود را به سادگی اضافه یا حذف کنید.</string>
+    <string name="sources_github_label">لینک‌های گیت‌هاب</string>
+    <string name="sources_btn_add_github">+ افزودن لینک گیت‌هاب</string>
+    <string name="sources_telegram_label">کانال‌های عمومی تلگرام</string>
+    <string name="sources_btn_add_telegram">+ افزودن کانال تلگرام</string>
+    <string name="sources_btn_benchmark_pool">تست استخر کانفیگ‌ها و انتخاب سریع‌ترین</string>
+    <string name="sources_btn_reset">بازنشانی منابع به پیش‌فرض</string>
+    <string name="layers_log_hint">نتایج تست سرعت و تغییرات لایه‌ها اینجا نمایش داده می‌شود.</string>
+
+    <string name="toolbox_title">جعبه ابزار حرفه‌ای شبکه</string>
+    <string name="toolbox_subtitle">ابزارهای داخلی بررسی IP خروجی، تشخیص مسمومیت DNS، بررسی TLS/SNI، پینگ TCP و مبدل Base64.</string>
+    <string name="toolbox_target_label">دامنه یا هاست هدف</string>
+    <string name="toolbox_host_hint">دامنه یا IP وارد کنید (مثلاً aistudio.google.com)</string>
+    <string name="toolbox_btn_exit_ip">بررسی IP خروجی</string>
+    <string name="toolbox_btn_dns_poison">تست مسمومیت DNS</string>
+    <string name="toolbox_btn_tls_inspect">بررسی گواهی TLS</string>
+    <string name="toolbox_btn_tcp_ping">پینگ پورت ۴۴۳</string>
+    <string name="toolbox_btn_base64">مبدل Base64</string>
+    <string name="toolbox_btn_cidr_gen">تولید IP از CIDR</string>
+    <string name="toolbox_btn_uri_inspect">تحلیل لینک VLESS</string>
+    <string name="toolbox_output_empty">یکی از ابزارهای بالا را برای تست زنده انتخاب کنید.</string>
+
+    <string name="shortcut_layers_short">لایه‌های VPN</string>
+    <string name="shortcut_layers_long">مدیریت لایه‌های VPN و کانال‌ها</string>
+    <string name="shortcut_harvest_short">شکار هوشمند</string>
+    <string name="shortcut_harvest_long">مرکز نجات و شکار کانفیگ</string>
+    <string name="shortcut_toolbox_short">جعبه ابزار</string>
+    <string name="shortcut_toolbox_long">جعبه ابزار حرفه‌ای شبکه</string>
+
+    <string name="vpn_btn_newbie_autopilot">خلبان خودکار تک‌کلیک (رفع مشکل AI Studio و Flow)</string>
+    <string name="reachability_idle">برای بررسی و اتصال خودکار، خلبان خودکار را لمس کنید</string>
+
+    <string name="tab_simple_mode">حالت ساده</string>
+    <string name="tab_advanced_mode">حالت پیشرفته</string>
+    <string name="simple_hero_disconnected">آماده اتصال</string>
+    <string name="simple_hero_connected">متصل و ایمن</string>
+    <string name="simple_hero_subtitle">با یک لمس، سریع‌ترین DNS رمزنگاری‌شده پیدا می‌شود، کانفیگ‌های سالم شکار می‌شوند و دسترسی AI Studio و Google Flow تأیید می‌گردد.</string>
+    <string name="simple_btn_magic">اتصال و رفع مشکل خودکار</string>
+    <string name="simple_btn_speed_ip">تست سرعت و IP</string>
+    <string name="simple_section_oneclick">ابزارهای تک‌کلیک هوشمند</string>
+    <string name="simple_card_aistudio">باز کردن AI Studio</string>
+    <string name="simple_card_aistudio_sub">مرورگر داخلی + اتصال خودکار</string>
+    <string name="simple_card_flow">باز کردن Google Flow</string>
+    <string name="simple_card_flow_sub">مرورگر داخلی + اتصال خودکار</string>
+    <string name="simple_card_refresh">بروزرسانی کانفیگ‌ها</string>
+    <string name="simple_card_refresh_sub">شکار و انتخاب سریع‌ترین</string>
+    <string name="simple_card_blackout">نجات در قطعی</string>
+    <string name="simple_card_blackout_sub">تک‌کلیک WhiteDNS / DoH</string>
+    <string name="simple_btn_open_advanced">ابزارهای پیشرفته</string>
+
+    <!-- v3.0.0 Persian Strings -->
+    <string name="widget_label">ویجت VPN دستیاب (تک‌کلیک)</string>
+    <string name="browser_btn_autofix">رفع خودکار</string>
+    <string name="browser_btn_chrome">کروم</string>
+    <string name="browser_btn_back">→ بازگشت</string>
+    <string name="browser_btn_forward">جلو ←</string>
+    <string name="browser_btn_reload">↻ بارگذاری مجدد</string>
+    <string name="browser_load_error_hint">صفحه باز نشد؟ دکمه «رفع خودکار» یا «کروم» را در نوار بالا بزنید.</string>
+    <string name="qr_empty_config">هنوز کانفیگی تنظیم نشده — ابتدا یک کانفیگ وارد یا شکار کنید.</string>
+    <string name="qr_too_long">لینک کانفیگ برای ساخت کد QR آفلاین بیش از حد طولانی است.</string>
+    <string name="vpn_btn_dns_rules">دور زدن سایت‌های ایرانی و DNS</string>
+    <string name="vpn_btn_share_qr">اشتراک QR</string>
+    <string name="dns_rules_title">قوانین DNS دامنه‌ها و سایت‌های ایرانی</string>
+    <string name="dns_rules_iran_bypass">عبور مستقیم دامنه‌های .ir و بانک‌ها/سرویس‌های ایرانی (DNS سریع محلی)</string>
+    <string name="dns_rules_iran_hint">دامنه‌های .ir و %d سرویس بانکی و داخلی ایران را مستقیم با DNS محلی باز می‌کند و AI Studio، Flow، گیت‌هاب و تلگرام را از DoH رمزنگاری‌شده عبور می‌دهد.</string>
+    <string name="dns_rules_input_hint">دامنه وارد کنید (مثلاً digikala.com یا aistudio.google.com)</string>
+    <string name="dns_rules_btn_add_bypass">+ عبور مستقیم</string>
+    <string name="dns_rules_btn_add_doh">+ اجبار DoH</string>
+    <string name="dns_rules_btn_test">تست قانون</string>
+    <string name="dns_rules_btn_clear_custom">پاک کردن دستی‌ها</string>
+    <string name="tunnel_watchdog_enabled">نگهبان خودکار ۵ دقیقه‌ای (تغییر خودکار DoH و شکار پس‌زمینه)</string>
+    <string name="tunnel_auto_connect_boot">اتصال خودکار VPN دستیاب هنگام روشن شدن گوشی</string>
+    <string name="tunnel_btn_domain_rules">مدیریت قوانین DNS و دور زدن سایت‌های ایرانی</string>
+    <string name="lang_toggle_desc">تغییر زبان (فارسی / انگلیسی)</string>
+</resources>

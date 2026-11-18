@@ -23,7 +23,10 @@ import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
@@ -42,6 +45,9 @@ class DastyabVpnService : VpnService() {
     private val running = AtomicBoolean(false)
     private var readerThread: Thread? = null
     private var dnsExecutor: ExecutorService? = null
+    private var watchdogScheduler: ScheduledExecutorService? = null
+    private val watchdogTickCount = AtomicInteger(0)
+    @Volatile private var activeDohUrl: String = TunnelConfig.DEFAULT_DOH_URL
     private val tunWriteLock = Any()
 
     private data class CachedDnsReply(val response: ByteArray, val expiresAtMs: Long)
@@ -234,7 +240,9 @@ class DastyabVpnService : VpnService() {
                 settings.mode.name, dnsSummary, localHttpProxyPort?.toString() ?: "none", settings.mtu, settings.splitPackages.size
             )
 
+            activeDohUrl = settings.dohUrl
             dnsExecutor = Executors.newFixedThreadPool(6)
+            startWatchdogIfEnabled(settings)
 
             // Forward every intercepted DNS query over encrypted DoH (with multi-fallback + cache)
             // and write valid IPv4/UDP DNS responses back into the TUN interface.
@@ -257,7 +265,7 @@ class DastyabVpnService : VpnService() {
                                         exec.execute {
                                             val respBytes = resolveDnsCachedOrNetwork(
                                                 req.dnsPayload,
-                                                settings.dohUrl,
+                                                activeDohUrl,
                                                 settings.dnsPrimary,
                                                 settings.dnsSecondary
                                             )
@@ -347,6 +355,9 @@ class DastyabVpnService : VpnService() {
 
     private fun stopTunnelInternal() {
         running.set(false)
+        watchdogScheduler?.shutdownNow()
+        watchdogScheduler = null
+        FailoverWatchdog.reset(active = false)
         readerThread?.interrupt()
         readerThread = null
         dnsExecutor?.shutdownNow()
@@ -355,6 +366,93 @@ class DastyabVpnService : VpnService() {
             vpnInterface?.close()
         } catch (_: IOException) {}
         vpnInterface = null
+    }
+
+    /**
+     * Starts the 5-minute Smart Auto-Failover & Background Harvester watchdog while VPN is connected.
+     */
+    private fun startWatchdogIfEnabled(settings: TunnelConfig.Settings) {
+        watchdogScheduler?.shutdownNow()
+        watchdogScheduler = null
+        watchdogTickCount.set(0)
+        if (!settings.watchdogEnabled) {
+            FailoverWatchdog.reset(active = false, dohUrl = activeDohUrl)
+            return
+        }
+        FailoverWatchdog.reset(active = true, dohUrl = activeDohUrl)
+        val sched = Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "dastyab-watchdog").apply { isDaemon = true }
+        }
+        watchdogScheduler = sched
+        sched.scheduleAtFixedRate(
+            {
+                if (!running.get()) return@scheduleAtFixedRate
+                runWatchdogTick()
+            },
+            FailoverWatchdog.CHECK_INTERVAL_SECONDS,
+            FailoverWatchdog.CHECK_INTERVAL_SECONDS,
+            TimeUnit.SECONDS
+        )
+    }
+
+    private fun runWatchdogTick() {
+        val tick = watchdogTickCount.incrementAndGet()
+        val prev = FailoverWatchdog.getSnapshot()
+        try {
+            val check = ReachabilityVerifier.verifyAll(timeoutMs = 3000)
+            val action = FailoverWatchdog.evaluateAction(
+                internetOk = check.internet.isOk,
+                aiStudioOk = check.aiStudio.isOk,
+                flowOk = check.flow.isOk
+            )
+            var swaps = prev.swapCount
+            var harvests = prev.backgroundHarvestCount
+            var summary: String
+
+            if (action == FailoverWatchdog.Action.SWAP_DOH_OR_LAYER) {
+                val nextDoh = FailoverWatchdog.nextFallbackDoh(activeDohUrl)
+                activeDohUrl = nextDoh
+                dnsCache.clear()
+                TunnelConfig.saveDohAndDns(this, dohUrl = nextDoh, primaryDns = null)
+                swaps++
+                summary = "Auto-swapped DoH → ${nextDoh.removePrefix("https://")} (check #$tick)"
+                DastyabLogger.w("Watchdog", "Health degraded — %s", summary)
+            } else {
+                val ms = check.aiStudio.latencyMs.takeIf { it >= 0 } ?: check.internet.latencyMs
+                summary = "Healthy (${ms}ms) · Check #$tick"
+            }
+
+            // Quiet background harvest if pool is empty or every 30 minutes (6 ticks)
+            val poolSize = TunnelConfig.loadHarvestedConfigs(this).size
+            if (FailoverWatchdog.shouldRunBackgroundHarvest(tick, poolSize)) {
+                try {
+                    val harvested = ConfigHarvester.harvest(this)
+                    if (harvested.configs.isNotEmpty()) {
+                        TunnelConfig.saveHarvestedConfigs(this, harvested.configs)
+                        harvests++
+                    }
+                } catch (_: Exception) {}
+            }
+
+            FailoverWatchdog.update(
+                FailoverWatchdog.Snapshot(
+                    active = true,
+                    healthy = action == FailoverWatchdog.Action.KEEP_CURRENT,
+                    lastCheckMs = System.currentTimeMillis(),
+                    lastLatencyMs = check.aiStudio.latencyMs.takeIf { it >= 0 } ?: check.internet.latencyMs,
+                    checkCount = tick,
+                    swapCount = swaps,
+                    backgroundHarvestCount = harvests,
+                    activeDohUrl = activeDohUrl,
+                    lastSummary = summary
+                )
+            )
+            val intent = Intent(ACTION_STATE_CHANGED).setPackage(packageName)
+            sendBroadcast(intent)
+            DastyabWidgetProvider.updateAllWidgets(this)
+        } catch (e: Exception) {
+            DastyabLogger.w("Watchdog", "Watchdog tick error: %s", e.message ?: "unknown")
+        }
     }
 
     /**
@@ -399,12 +497,31 @@ class DastyabVpnService : VpnService() {
             }
         }
 
-        val fresh = resolveDnsOverDohOrUdp(query, dohUrl, primaryDns, secondaryDns)
+        val rules = DomainDnsRules.load(this)
+        val fresh = if (DomainDnsRules.shouldBypassToLocalDns(domain, rules)) {
+            // Iranian (.ir / banking / local) or custom bypass domain: resolve via fast protected UDP DNS first
+            resolveDnsBypassLocalFirst(query, dohUrl, primaryDns, secondaryDns)
+        } else {
+            resolveDnsOverDohOrUdp(query, dohUrl, primaryDns, secondaryDns)
+        }
         if (fresh != null && domain.isNotEmpty()) {
             if (dnsCache.size > 400) dnsCache.clear()
             dnsCache[cacheKey] = CachedDnsReply(fresh.copyOf(), now + 45_000L)
         }
         return fresh
+    }
+
+    private fun resolveDnsBypassLocalFirst(
+        query: ByteArray,
+        dohUrl: String,
+        primaryDns: String,
+        secondaryDns: String
+    ): ByteArray? {
+        val udpChain = listOf(primaryDns, secondaryDns, "1.1.1.1", "8.8.8.8").distinct()
+        for (ip in udpChain) {
+            queryProtectedUdpDns(ip, query)?.let { return it }
+        }
+        return queryDoh(dohUrl, query)
     }
 
     /**
@@ -478,6 +595,9 @@ class DastyabVpnService : VpnService() {
         currentStatus.set(status)
         val intent = Intent(ACTION_STATE_CHANGED).setPackage(packageName)
         sendBroadcast(intent)
+        try {
+            DastyabWidgetProvider.updateAllWidgets(this)
+        } catch (_: Exception) {}
     }
 
     private fun buildNotification(settings: TunnelConfig.Settings, endpointSummary: String): Notification {

@@ -57,6 +57,10 @@ class BlackoutRescueActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val busy = AtomicBoolean(false)
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_blackout_rescue)
