@@ -297,10 +297,13 @@ object ConfigHarvester {
         var usedMirror = false
 
         // ── STAGE 1: GitHub Direct + jsDelivr Mirror Fallback ──
-        logStep("Stage 1/4: Trying GitHub config feeds first…")
+        val effectiveGithubUrls = (customGithubUrls + HarvestSourceStore.getCustomGithubUrls(context))
+            .mapNotNull { HarvestSourceStore.normalizeGithubUrl(it) }
+            .distinct()
+        logStep("Stage 1/4: Trying GitHub config feeds first (${effectiveGithubUrls.size} custom + ${DEFAULT_GITHUB_FEEDS.size} built-in)…")
         val githubFeeds = buildList {
-            customGithubUrls.filter { it.isNotBlank() }.forEachIndexed { idx, url ->
-                add(FeedSource("Custom GitHub #${idx + 1}", url.trim(), toJsDelivrMirror(url.trim()), SourceKind.GITHUB))
+            effectiveGithubUrls.forEachIndexed { idx, url ->
+                add(FeedSource("Custom GitHub #${idx + 1}", url, toJsDelivrMirror(url), SourceKind.GITHUB))
             }
             addAll(DEFAULT_GITHUB_FEEDS)
         }
@@ -337,11 +340,11 @@ object ConfigHarvester {
         }
 
         // ── STAGE 2: Telegram Public Channels ──
-        logStep("Stage 2/4: Trying Telegram public channels (t.me/s/…)…")
-        val channels = (customTelegramChannels + DEFAULT_TELEGRAM_CHANNELS)
-            .map { it.trim().removePrefix("@").removePrefix("https://t.me/s/").removePrefix("https://t.me/") }
-            .filter { it.isNotEmpty() }
+        val customChannels = HarvestSourceStore.getCustomTelegramChannels(context)
+        val channels = (customTelegramChannels + customChannels + DEFAULT_TELEGRAM_CHANNELS)
+            .mapNotNull { HarvestSourceStore.normalizeTelegramChannel(it) }
             .distinct()
+        logStep("Stage 2/4: Trying Telegram public channels (${customChannels.size} custom + ${DEFAULT_TELEGRAM_CHANNELS.size} built-in)…")
 
         for (channel in channels) {
             val url = "https://t.me/s/$channel"

@@ -184,6 +184,9 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.btnImportVless).setOnClickListener {
             showImportVlessDialog()
         }
+        findViewById<Button>(R.id.btnSwitchLayer).setOnClickListener {
+            showQuickLayerSwitcherDialog()
+        }
 
         // ── Blackout Rescue & Harvesting Quick Actions ──
         findViewById<View>(R.id.btnSimpleHarvest).setOnClickListener {
@@ -197,6 +200,15 @@ class MainActivity : Activity() {
         }
         findViewById<View>(R.id.btnSimpleTroubleshoot).setOnClickListener {
             openRescueHub(BlackoutRescueActivity.ACTION_TROUBLESHOOT)
+        }
+        findViewById<View>(R.id.btnSimpleVpnLayers).setOnClickListener {
+            openActivity(VpnLayersActivity::class.java)
+        }
+        findViewById<View>(R.id.btnSimpleEditSources).setOnClickListener {
+            openActivity(VpnLayersActivity::class.java)
+        }
+        findViewById<View>(R.id.btnSimpleToolbox).setOnClickListener {
+            openActivity(NetworkToolboxActivity::class.java)
         }
 
         // ── Google & Tunnel Quick Actions ──
@@ -411,6 +423,33 @@ class MainActivity : Activity() {
         } catch (_: android.content.ActivityNotFoundException) {
             postStatus("Blackout Rescue screen unavailable")
         }
+    }
+
+    private fun showQuickLayerSwitcherDialog() {
+        val layers = VpnLayerStore.loadAll(this)
+        val activeId = VpnLayerStore.getActiveLayerId(this)
+        val labels = layers.map { l ->
+            val mark = if (l.id == activeId) "● " else "   "
+            "$mark${l.name} (${l.mode.label})"
+        } + "+ Manage / Add VPN Layers & Channels…"
+
+        AlertDialog.Builder(this)
+            .setTitle("Quick Switch VPN Layer")
+            .setItems(labels.toTypedArray()) { _, which ->
+                if (which == layers.size) {
+                    openActivity(VpnLayersActivity::class.java)
+                } else {
+                    val picked = layers[which]
+                    VpnLayerStore.activateLayer(this, picked, restartIfConnected = true)
+                    refreshVpnCard()
+                    postOutput("Switched active VPN layer → ${picked.name} (${picked.mode.label})\n")
+                    if (!DastyabVpnService.isConnected()) {
+                        requestStartVpn(null, null)
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun showGoogleRescueDialog(serviceName: String, url: String) {

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="shortcut_vpn_layers"
+        android:enabled="true"
+        android:icon="@drawable/ic_action_layers"
+        android:shortcutShortLabel="@string/shortcut_layers_short"
+        android:shortcutLongLabel="@string/shortcut_layers_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.dastyab.app"
+            android:targetClass="com.dastyab.app.VpnLayersActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="shortcut_harvest"
+        android:enabled="true"
+        android:icon="@drawable/ic_action_harvest"
+        android:shortcutShortLabel="@string/shortcut_harvest_short"
+        android:shortcutLongLabel="@string/shortcut_harvest_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.dastyab.app"
+            android:targetClass="com.dastyab.app.BlackoutRescueActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="shortcut_toolbox"
+        android:enabled="true"
+        android:icon="@drawable/ic_action_toolbox"
+        android:shortcutShortLabel="@string/shortcut_toolbox_short"
+        android:shortcutLongLabel="@string/shortcut_toolbox_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.dastyab.app"
+            android:targetClass="com.dastyab.app.NetworkToolboxActivity" />
+    </shortcut>
+</shortcuts>

@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="28dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/header_card_background"
+            android:padding="18dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/layers_title"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorAccent" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/layers_subtitle"
+                android:textSize="13sp"
+                android:textColor="@color/colorTextSecondary"
+                android:paddingTop="4dp" />
+
+            <ProgressBar
+                android:id="@+id/layersProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:indeterminate="true"
+                android:visibility="gone"
+                android:paddingTop="10dp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
+
+        <!-- SECTION 1: VPN LAYERS MANAGER -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/layers_section_profiles"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorAccent" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/layers_section_profiles_hint"
+                android:textSize="12sp"
+                android:textColor="@color/colorTextSecondary"
+                android:paddingTop="4dp"
+                android:paddingBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="10dp">
+
+                <Button
+                    android:id="@+id/btnAddLayer"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/layers_btn_add"
+                    style="@style/DastyabButtonPrimary" />
+
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnAutoBestLayer"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/layers_btn_auto_best"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layersListContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="8dp">
+
+                <Button
+                    android:id="@+id/btnExportLayers"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/layers_btn_export"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnImportLayers"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/layers_btn_import"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
+
+        <!-- SECTION 2: HARVESTER GITHUB URLS & TELEGRAM CHANNELS EDITOR -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sources_section_title"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorAccent" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sources_section_hint"
+                android:textSize="12sp"
+                android:textColor="@color/colorTextSecondary"
+                android:paddingTop="4dp"
+                android:paddingBottom="10dp" />
+
+            <!-- GitHub URLs -->
+            <TextView
+                android:id="@+id/tvGithubCount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sources_github_label"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorTextPrimary"
+                android:paddingBottom="6dp" />
+
+            <LinearLayout
+                android:id="@+id/githubUrlsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/btnAddGithubUrl"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="14dp"
+                android:text="@string/sources_btn_add_github"
+                style="@style/DastyabButton" />
+
+            <!-- Telegram Channels -->
+            <TextView
+                android:id="@+id/tvTelegramCount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sources_telegram_label"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorTextPrimary"
+                android:paddingBottom="6dp" />
+
+            <LinearLayout
+                android:id="@+id/telegramChannelsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/btnAddTelegramChannel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="12dp"
+                android:text="@string/sources_btn_add_telegram"
+                style="@style/DastyabButton" />
+
+            <!-- Smart Harvest + Benchmark Pool + Reset -->
+            <Button
+                android:id="@+id/btnBenchmarkPool"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sources_btn_benchmark_pool"
+                style="@style/DastyabButtonPrimary" />
+
+            <Button
+                android:id="@+id/btnResetSources"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/sources_btn_reset"
+                style="@style/DastyabButton" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="12dp" />
+
+        <!-- Status / Benchmark Output -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/tvLayersLog"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/layers_log_hint"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:textColor="@color/colorTextPrimary"
+                android:textIsSelectable="true" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
+
+        <Button
+            android:id="@+id/btnLayersBack"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@android:string/cancel"
+            style="@style/DastyabButton" />
+    </LinearLayout>
+</ScrollView>

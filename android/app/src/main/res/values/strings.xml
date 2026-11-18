@@ -210,4 +210,53 @@
     <string name="rescue_fallbacks_hint">Installed tools launch in 1 tap so you can bootstrap internet access and re-harvest. Missing tools open their official GitHub repository.</string>
     <string name="rescue_log_title">Live Rescue &amp; Diagnostic Log</string>
     <string name="rescue_log_empty">Run Smart Harvest, IP Scout, or Troubleshooter to see live stage-by-stage results.</string>
+
+    <!-- VPN Layers, Harvester Sources & Power Toolbox -->
+    <string name="vpn_btn_switch_layer">Switch Layer</string>
+    <string name="action_vpn_layers">VPN Layers</string>
+    <string name="action_vpn_layers_subtitle">Add, switch &amp; auto-rank</string>
+    <string name="action_edit_sources">Channels &amp; URLs</string>
+    <string name="action_edit_sources_subtitle">Edit GitHub &amp; Telegram</string>
+    <string name="action_toolbox">Power Toolbox</string>
+    <string name="action_toolbox_subtitle">Trace, DNS, TLS, Base64</string>
+
+    <string name="layers_title">VPN Layers &amp; Harvester Sources</string>
+    <string name="layers_subtitle">Create, edit, benchmark &amp; 1-tap switch VPN layers, and customize your GitHub URLs &amp; Telegram harvesting channels.</string>
+    <string name="layers_section_profiles">1. Customizable VPN Layers</string>
+    <string name="layers_section_profiles_hint">Tap any layer to connect, edit, clone, or delete. Use Auto-Best to benchmark all layers in parallel and switch to the fastest.</string>
+    <string name="layers_btn_add">+ Add VPN Layer</string>
+    <string name="layers_btn_auto_best">Auto-Best Layer</string>
+    <string name="layers_btn_export">Export JSON</string>
+    <string name="layers_btn_import">Import JSON</string>
+
+    <string name="sources_section_title">2. Harvester GitHub URLs &amp; Telegram Channels</string>
+    <string name="sources_section_hint">Add or remove your own GitHub subscription URLs (blob links auto-convert to raw) and Telegram channels (@channel or t.me/s/channel). Tap any custom chip to remove it.</string>
+    <string name="sources_github_label">GitHub Subscription URLs</string>
+    <string name="sources_btn_add_github">+ Add GitHub / Subscription URLs</string>
+    <string name="sources_telegram_label">Telegram Public Channels</string>
+    <string name="sources_btn_add_telegram">+ Add Telegram Channels</string>
+    <string name="sources_btn_benchmark_pool">Benchmark Harvested Pool &amp; Promote Fastest</string>
+    <string name="sources_btn_reset">Reset Custom Sources to Defaults</string>
+    <string name="layers_log_hint">Benchmark results and layer updates will appear here.</string>
+
+    <string name="toolbox_title">Network Power Toolbox</string>
+    <string name="toolbox_subtitle">On-device anti-censorship utilities: Exit IP Trace, DNS Poisoning Detector, TLS/SNI Inspector, TCP Ping, Base64 Codec, CIDR Generator &amp; URI Inspector.</string>
+    <string name="toolbox_target_label">Target Domain / Host</string>
+    <string name="toolbox_host_hint">Enter domain or IP (e.g. aistudio.google.com)</string>
+    <string name="toolbox_btn_exit_ip">Exit IP Trace</string>
+    <string name="toolbox_btn_dns_poison">DNS Poison Check</string>
+    <string name="toolbox_btn_tls_inspect">TLS / SNI Inspect</string>
+    <string name="toolbox_btn_tcp_ping">TCP 443 Ping</string>
+    <string name="toolbox_btn_base64">Base64 Codec</string>
+    <string name="toolbox_btn_cidr_gen">CIDR IP Gen</string>
+    <string name="toolbox_btn_uri_inspect">VLESS URI Inspector</string>
+    <string name="toolbox_output_empty">Choose any tool above to run live diagnostics.</string>
+
+    <!-- Launcher App Shortcuts -->
+    <string name="shortcut_layers_short">VPN Layers</string>
+    <string name="shortcut_layers_long">Manage VPN Layers &amp; Channels</string>
+    <string name="shortcut_harvest_short">Smart Harvest</string>
+    <string name="shortcut_harvest_long">Blackout Rescue &amp; Harvest</string>
+    <string name="shortcut_toolbox_short">Power Toolbox</string>
+    <string name="shortcut_toolbox_long">Open Network Power Toolbox</string>
 </resources>

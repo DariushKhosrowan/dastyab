@@ -35,6 +35,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
         <activity
             android:name=".TunnelSettingsActivity"
@@ -43,8 +46,18 @@
             android:theme="@style/DastyabTheme" />
         <activity
             android:name=".BlackoutRescueActivity"
-            android:exported="false"
+            android:exported="true"
             android:label="Blackout Rescue &amp; Harvester"
+            android:theme="@style/DastyabTheme" />
+        <activity
+            android:name=".VpnLayersActivity"
+            android:exported="true"
+            android:label="VPN Layers &amp; Harvester Sources"
+            android:theme="@style/DastyabTheme" />
+        <activity
+            android:name=".NetworkToolboxActivity"
+            android:exported="true"
+            android:label="Network Power Toolbox"
             android:theme="@style/DastyabTheme" />
         <activity
             android:name=".LogViewerActivity"
@@ -73,6 +86,17 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="DastYab Smart and Split VPN tunnel" />
+        </service>
+
+        <service
+            android:name=".DastyabVpnTileService"
+            android:icon="@drawable/ic_action_vpn"
+            android:label="DastYab VPN"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
         </service>
     </application>
 

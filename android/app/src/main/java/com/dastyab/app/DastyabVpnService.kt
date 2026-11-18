@@ -56,6 +56,7 @@ class DastyabVpnService : VpnService() {
     companion object {
         const val ACTION_START = "com.dastyab.app.vpn.START"
         const val ACTION_STOP = "com.dastyab.app.vpn.STOP"
+        const val ACTION_NEXT_LAYER = "com.dastyab.app.vpn.NEXT_LAYER"
         const val ACTION_STATE_CHANGED = "com.dastyab.app.vpn.STATE_CHANGED"
 
         private const val CHANNEL_ID = "dastyab_vpn_channel"
@@ -91,6 +92,11 @@ class DastyabVpnService : VpnService() {
                 stopTunnel()
                 stopSelf()
                 START_NOT_STICKY
+            }
+            ACTION_NEXT_LAYER -> {
+                VpnLayerStore.rotateToNextLayer(this)
+                startTunnel()
+                START_STICKY
             }
             else -> {
                 startTunnel()
@@ -450,6 +456,18 @@ class DastyabVpnService : VpnService() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val stopPending = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, DastyabVpnService::class.java).apply { action = ACTION_STOP },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val nextLayerPending = PendingIntent.getService(
+            this,
+            2,
+            Intent(this, DastyabVpnService::class.java).apply { action = ACTION_NEXT_LAYER },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
@@ -458,12 +476,27 @@ class DastyabVpnService : VpnService() {
             Notification.Builder(this)
         }
 
+        val activeLayer = VpnLayerStore.getActiveLayer(this)
         return builder
-            .setContentTitle("DastYab · ${settings.mode.label}")
-            .setContentText("Connected · $endpointSummary")
+            .setContentTitle("DastYab · ${activeLayer.name}")
+            .setContentText("${settings.mode.label} · $endpointSummary")
             .setSmallIcon(R.drawable.ic_action_vpn)
             .setOngoing(true)
             .setContentIntent(openIntent)
+            .addAction(
+                Notification.Action.Builder(
+                    null,
+                    "Next Layer",
+                    nextLayerPending
+                ).build()
+            )
+            .addAction(
+                Notification.Action.Builder(
+                    null,
+                    "Disconnect",
+                    stopPending
+                ).build()
+            )
             .build()
     }
 }
