@@ -148,11 +148,17 @@ class RuntimeSafetyTest {
         val ctx = mockk<Context>(relaxed = true)
         every { ctx.getSharedPreferences(TunnelConfig.PREFS_NAME, Context.MODE_PRIVATE) } returns prefs
 
-        val receiver = BootReconnectReceiver()
-        receiver.onReceive(ctx, Intent(Intent.ACTION_TIME_CHANGED))
-        receiver.onReceive(ctx, Intent(Intent.ACTION_BOOT_COMPLETED))
-        receiver.onReceive(ctx, Intent(Intent.ACTION_MY_PACKAGE_REPLACED))
+        val timeChanged = mockk<Intent>(relaxed = true) { every { action } returns Intent.ACTION_TIME_CHANGED }
+        val bootCompleted = mockk<Intent>(relaxed = true) { every { action } returns Intent.ACTION_BOOT_COMPLETED }
+        val pkgReplaced = mockk<Intent>(relaxed = true) { every { action } returns Intent.ACTION_MY_PACKAGE_REPLACED }
 
+        val receiver = BootReconnectReceiver()
+        receiver.onReceive(ctx, null)
+        receiver.onReceive(ctx, timeChanged)
+        receiver.onReceive(ctx, bootCompleted)
+        receiver.onReceive(ctx, pkgReplaced)
+
+        verify(atLeast = 2) { ctx.getSharedPreferences(TunnelConfig.PREFS_NAME, Context.MODE_PRIVATE) }
         verify(exactly = 0) { ctx.startService(any()) }
         verify(exactly = 0) { ctx.startForegroundService(any()) }
     }

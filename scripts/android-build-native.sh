@@ -62,10 +62,13 @@ for entry in "${TARGETS[@]}"; do
 
   # Pass Cargo target config directly so runner env sanitization cannot drop linkers.
   cargo_args=(
-    build --locked --release --target "$target" -p dastyab-cli
+    build --release --target "$target" -p dastyab-cli
     --config "target.${target}.linker=\"${linker}\""
     --config "target.${target}.ar=\"${TOOLCHAIN}/llvm-ar\""
   )
+  if [[ -f "$ROOT_DIR/Cargo.lock" ]]; then
+    cargo_args+=(--locked)
+  fi
   # Enforce 16 KB ELF segment alignment on 64-bit Android ABIs (Android 15+ readiness).
   if [[ "$abi" == "arm64-v8a" || "$abi" == "x86_64" ]]; then
     cargo_args+=(--config "target.${target}.rustflags=[\"-C\",\"link-arg=-Wl,-z,max-page-size=16384\"]")

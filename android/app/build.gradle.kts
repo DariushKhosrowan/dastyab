@@ -1,3 +1,7 @@
+import java.io.File
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -40,8 +44,9 @@ android {
         create("release") {
             val signingPropsFile = rootProject.file("signing.properties")
             if (signingPropsFile.isFile) {
-                val props = java.util.Properties().apply {
-                    signingPropsFile.inputStream().use { load(it) }
+                val props = Properties()
+                FileInputStream(signingPropsFile).use { stream: FileInputStream ->
+                    props.load(stream)
                 }
                 storeFile = rootProject.file(props.getProperty("storeFile", "dastyab-release.keystore"))
                 storePassword = props.getProperty("storePassword", "dastyab-release")
@@ -112,6 +117,7 @@ dependencies {
     testImplementation("io.mockk:mockk:1.13.9")
 
     // Android instrumentation tests (require Android SDK)
+    androidTestImplementation("androidx.test:core:1.5.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test:rules:1.5.0")
@@ -121,17 +127,18 @@ dependencies {
 val verifyNativeJniLibs by tasks.registering {
     group = "verification"
     description = "Verify all 4 Android ABIs have valid ELF libdastyab.so binaries before APK packaging."
+    val skipCheck = project.hasProperty("skipNativeCheck")
+    val jniDir: File = layout.projectDirectory.dir("src/main/jniLibs").asFile
     doLast {
-        if (project.hasProperty("skipNativeCheck")) return@doLast
-        val jniDir = file("src/main/jniLibs")
+        if (skipCheck) return@doLast
         val expected = mapOf(
-            "arm64-v8a" to Pair(2, 183),
-            "armeabi-v7a" to Pair(1, 40),
-            "x86_64" to Pair(2, 62),
-            "x86" to Pair(1, 3)
+            "arm64-v8a" to (2 to 183),
+            "armeabi-v7a" to (1 to 40),
+            "x86_64" to (2 to 62),
+            "x86" to (1 to 3)
         )
         for ((abi, spec) in expected) {
-            val so = java.io.File(jniDir, "$abi/libdastyab.so")
+            val so = File(jniDir, "$abi/libdastyab.so")
             if (!so.isFile || so.length() < 4096L) {
                 throw GradleException(
                     "Missing or invalid native binary at ${so.path}. " +
@@ -139,7 +146,7 @@ val verifyNativeJniLibs by tasks.registering {
                 )
             }
             val header = ByteArray(20)
-            so.inputStream().use { ins ->
+            FileInputStream(so).use { ins: FileInputStream ->
                 if (ins.read(header) != 20) {
                     throw GradleException("Truncated ELF header in ${so.path}")
                 }
