@@ -10,6 +10,7 @@ on:
       - 'Cargo.lock'
       - 'scripts/android-build-native.sh'
       - 'scripts/android-verify-apk.sh'
+      - 'scripts/android-emulator-smoke.sh'
       - '.github/workflows/android-apk.yml'
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - 'Cargo.lock'
       - 'scripts/android-build-native.sh'
       - 'scripts/android-verify-apk.sh'
+      - 'scripts/android-emulator-smoke.sh'
       - '.github/workflows/android-apk.yml'
   workflow_dispatch:
   workflow_call:
@@ -100,10 +102,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APK=android/app/build/outputs/apk/release/app-release.apk
+          mapfile -t apks < <(find android/app/build/outputs/apk/release -type f -name '*.apk' -print)
+          if [[ ${#apks[@]} -ne 1 ]]; then
+            echo "Expected exactly one release APK, found ${#apks[@]}:" >&2
+            printf '%s\n' "${apks[@]}" >&2
+            exit 1
+          fi
+          APK="${apks[0]}"
+          test -f "$APK"
           bash scripts/android-verify-apk.sh "$APK"
           VERSION=$(grep -o 'versionName = "[^"]*"' android/app/build.gradle.kts | cut -d'"' -f2)
-          cp "$APK" "DastYab-${VERSION}-android.apk"
+          test -n "$VERSION"
+          RELEASE_APK="DastYab-${VERSION}-android.apk"
+          cp "$APK" "$RELEASE_APK"
+          test -f "$RELEASE_APK"
+          echo "RELEASE_APK=$RELEASE_APK" >> "$GITHUB_ENV"
 
       - name: Enable emulator KVM access
         run: |
@@ -117,27 +130,11 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-linux-hw-accel: false
-          script: |
-            set -euo pipefail
-            (cd android && bash ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace)
-            RELEASE_APK=$(ls DastYab-*-android.apk | head -n1)
-            adb uninstall com.dastyab.app >/dev/null 2>&1 || true
-            adb install "$RELEASE_APK"
-            adb install -r "$RELEASE_APK"
-            adb logcat -c
-            for act in MainActivity BlackoutRescueActivity VpnLayersActivity NetworkToolboxActivity; do
-              adb shell am start -W -n "com.dastyab.app/.${act}"
-              sleep 2
-            done
-            if adb logcat -d | grep -E "FATAL EXCEPTION|Process: com\.dastyab\.app.*AndroidRuntime"; then
-              echo "FATAL crash detected in release APK smoke test!" >&2
-              adb logcat -d -s AndroidRuntime:E DastyabLogger:E CrashHandler:E
-              exit 1
-            fi
+          script: bash scripts/android-emulator-smoke.sh
 
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: dastyab-release-android-apk
-          path: DastYab-*-android.apk
+          path: ${{ env.RELEASE_APK }}
           if-no-files-found: error
           retention-days: 90
