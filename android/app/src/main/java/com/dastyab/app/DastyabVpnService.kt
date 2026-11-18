@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.ProxyInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -19,6 +20,7 @@ import java.net.DatagramSocket
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -41,6 +43,9 @@ class DastyabVpnService : VpnService() {
     private var readerThread: Thread? = null
     private var dnsExecutor: ExecutorService? = null
     private val tunWriteLock = Any()
+
+    private data class CachedDnsReply(val response: ByteArray, val expiresAtMs: Long)
+    private val dnsCache = ConcurrentHashMap<String, CachedDnsReply>()
 
     enum class State { DISCONNECTED, CONNECTING, CONNECTED }
 
@@ -118,17 +123,16 @@ class DastyabVpnService : VpnService() {
 
     private fun startTunnel() {
         stopTunnelInternal()
+        dnsCache.clear()
         val settings = TunnelConfig.load(this)
-        val isDnsBlackout = settings.mode == TunnelConfig.Mode.DNS_BLACKOUT
+        val localHttpProxyPort = detectLocalHttpProxyPort()
+        val dohLabel = settings.dohUrl.removePrefix("https://")
         val endpointSummary = when {
-            isDnsBlackout -> "DoH (${settings.dohUrl.removePrefix("https://")})"
-            else -> settings.parsedEndpoint()?.summary() ?: "Cloudflare Edge (Smart DNS)"
+            localHttpProxyPort != null -> "Proxy 127.0.0.1:$localHttpProxyPort + DoH"
+            settings.mode == TunnelConfig.Mode.DNS_BLACKOUT -> "DoH ($dohLabel)"
+            else -> settings.parsedEndpoint()?.let { "${it.host}:${it.port} · DoH" } ?: "Encrypted DoH ($dohLabel)"
         }
-        val dnsSummary = if (isDnsBlackout) {
-            "DoH + ${settings.dnsPrimary}"
-        } else {
-            "${settings.dnsPrimary}, ${settings.dnsSecondary}"
-        }
+        val dnsSummary = "DoH + ${settings.dnsPrimary}"
 
         updateStatus(
             Status(
@@ -141,35 +145,22 @@ class DastyabVpnService : VpnService() {
         )
 
         try {
+            // Virtual DNS inside TUN (10.215.0.2/32): captures ALL device DNS queries and resolves
+            // them over encrypted DNS-over-HTTPS (RFC 8484) with multi-DoH & protected clean-UDP fallback,
+            // while allowing normal TCP/HTTPS traffic to flow cleanly without ever black-holing websites.
             val builder = Builder()
                 .setSession("DastYab ${settings.mode.label}")
                 .setMtu(settings.mtu)
                 .addAddress("10.215.0.1", 30)
-
-            if (isDnsBlackout) {
-                // Virtual DNS inside TUN: captures all device DNS queries and resolves them
-                // over encrypted DNS-over-HTTPS (RFC 8484) with protected clean-UDP fallback.
-                builder.addDnsServer("10.215.0.2")
-                builder.addRoute("10.215.0.2", 32)
-            } else {
-                builder.addDnsServer(settings.dnsPrimary)
-                if (settings.dnsSecondary != settings.dnsPrimary) {
-                    builder.addDnsServer(settings.dnsSecondary)
-                }
-            }
+                .addDnsServer("10.215.0.2")
+                .addRoute("10.215.0.2", 32)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 builder.setMetered(false)
-            }
-
-            // Configure routes according to tunnel mode & LAN bypass preference.
-            if (!isDnsBlackout) {
-                if (settings.mode == TunnelConfig.Mode.SMART && settings.bypassLan) {
-                    // Exclude RFC1918 private LAN subnets by adding complementary public CIDRs
-                    // so local Wi-Fi devices remain directly reachable.
-                    addPublicInternetRoutes(builder)
-                } else {
-                    builder.addRoute("0.0.0.0", 0)
+                // If a local Xray/Sing-Box/Orbot/v2rayNG HTTP proxy is running on loopback,
+                // chain all HTTP/HTTPS traffic through it automatically!
+                if (localHttpProxyPort != null) {
+                    builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", localHttpProxyPort))
                 }
             }
 
@@ -239,55 +230,49 @@ class DastyabVpnService : VpnService() {
             )
             DastyabLogger.i(
                 "VpnService",
-                "VPN connected — mode=%s dns=%s mtu=%d split=%d",
-                settings.mode.name, dnsSummary, settings.mtu, settings.splitPackages.size
+                "VPN connected — mode=%s dns=%s proxyPort=%s mtu=%d split=%d",
+                settings.mode.name, dnsSummary, localHttpProxyPort?.toString() ?: "none", settings.mtu, settings.splitPackages.size
             )
 
-            if (isDnsBlackout) {
-                dnsExecutor = Executors.newFixedThreadPool(4)
-            }
+            dnsExecutor = Executors.newFixedThreadPool(6)
 
-            // Read packets from TUN: in DNS_BLACKOUT mode, forward DNS queries over DoH / protected UDP.
+            // Forward every intercepted DNS query over encrypted DoH (with multi-fallback + cache)
+            // and write valid IPv4/UDP DNS responses back into the TUN interface.
             readerThread = thread(isDaemon = true, name = "dastyab-tun") {
                 val buf = ByteArray(settings.mtu.coerceAtLeast(1500))
                 try {
                     FileInputStream(pfd.fileDescriptor).use { input ->
-                        val output = if (isDnsBlackout) FileOutputStream(pfd.fileDescriptor) else null
-                        try {
+                        FileOutputStream(pfd.fileDescriptor).use { output ->
                             while (running.get()) {
                                 val read = input.read(buf)
                                 if (read < 0) break
                                 if (read == 0) {
-                                    Thread.sleep(20)
+                                    Thread.sleep(15)
                                     continue
                                 }
-                                if (isDnsBlackout && output != null) {
-                                    val req = DnsPacketCodec.parseIpv4UdpDnsQuery(buf, read)
-                                    if (req != null) {
-                                        val exec = dnsExecutor
-                                        if (exec != null && !exec.isShutdown) {
-                                            exec.execute {
-                                                val respBytes = resolveDnsOverDohOrUdp(
-                                                    req.dnsPayload,
-                                                    settings.dohUrl,
-                                                    settings.dnsPrimary,
-                                                    settings.dnsSecondary
-                                                )
-                                                if (respBytes != null && running.get()) {
-                                                    val ipPacket = DnsPacketCodec.buildIpv4UdpDnsResponse(req, respBytes)
-                                                    synchronized(tunWriteLock) {
-                                                        try {
-                                                            output.write(ipPacket)
-                                                        } catch (_: IOException) {}
-                                                    }
+                                val req = DnsPacketCodec.parseIpv4UdpDnsQuery(buf, read)
+                                if (req != null) {
+                                    val exec = dnsExecutor
+                                    if (exec != null && !exec.isShutdown) {
+                                        exec.execute {
+                                            val respBytes = resolveDnsCachedOrNetwork(
+                                                req.dnsPayload,
+                                                settings.dohUrl,
+                                                settings.dnsPrimary,
+                                                settings.dnsSecondary
+                                            )
+                                            if (respBytes != null && running.get()) {
+                                                val ipPacket = DnsPacketCodec.buildIpv4UdpDnsResponse(req, respBytes)
+                                                synchronized(tunWriteLock) {
+                                                    try {
+                                                        output.write(ipPacket)
+                                                    } catch (_: IOException) {}
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                        } finally {
-                            try { output?.close() } catch (_: IOException) {}
                         }
                     }
                 } catch (_: IOException) {
@@ -373,8 +358,58 @@ class DastyabVpnService : VpnService() {
     }
 
     /**
+     * Checks if a local HTTP proxy (e.g. v2rayNG 10809, Hiddify 12334, NekoBox 2081, Orbot 8118)
+     * is already listening on loopback so Android 10+ can transparently chain HTTP/HTTPS through it.
+     */
+    private fun detectLocalHttpProxyPort(): Int? {
+        val ports = listOf(10809, 12334, 2081, 8118, 7890, 8080)
+        for (port in ports) {
+            if (CleanEndpointScout.probeTcpLatency("127.0.0.1", port, 120) >= 0) {
+                return port
+            }
+        }
+        return null
+    }
+
+    /**
+     * Fast cached DNS resolver with multi-DoH + protected clean-UDP fallback so DNS never stalls
+     * and repeated lookups resolve in <1ms.
+     */
+    private fun resolveDnsCachedOrNetwork(
+        query: ByteArray,
+        dohUrl: String,
+        primaryDns: String,
+        secondaryDns: String
+    ): ByteArray? {
+        val domain = DnsPacketCodec.extractQueryDomain(query).lowercase()
+        val qtype = if (query.size >= 4) {
+            ((query[query.size - 4].toInt() and 0xFF) shl 8) or (query[query.size - 3].toInt() and 0xFF)
+        } else 0
+        val cacheKey = "$domain:$qtype"
+        val now = System.currentTimeMillis()
+        if (domain.isNotEmpty()) {
+            dnsCache[cacheKey]?.let { cached ->
+                if (cached.expiresAtMs > now && cached.response.size >= 12 && query.size >= 2) {
+                    // Patch the 2-byte DNS Transaction ID to match the incoming query
+                    val patched = cached.response.copyOf()
+                    patched[0] = query[0]
+                    patched[1] = query[1]
+                    return patched
+                }
+            }
+        }
+
+        val fresh = resolveDnsOverDohOrUdp(query, dohUrl, primaryDns, secondaryDns)
+        if (fresh != null && domain.isNotEmpty()) {
+            if (dnsCache.size > 400) dnsCache.clear()
+            dnsCache[cacheKey] = CachedDnsReply(fresh.copyOf(), now + 45_000L)
+        }
+        return fresh
+    }
+
+    /**
      * Resolves a raw DNS wire query over RFC 8484 DNS-over-HTTPS first (immune to UDP-53 poisoning),
-     * falling back to protected clean UDP-53 sockets if HTTPS is blocked during a hard blackout.
+     * trying multiple DoH providers before falling back to protected clean UDP-53 sockets.
      */
     private fun resolveDnsOverDohOrUdp(
         query: ByteArray,
@@ -382,10 +417,18 @@ class DastyabVpnService : VpnService() {
         primaryDns: String,
         secondaryDns: String
     ): ByteArray? {
-        queryDoh(dohUrl, query)?.let { return it }
-        queryProtectedUdpDns(primaryDns, query)?.let { return it }
-        if (secondaryDns != primaryDns) {
-            queryProtectedUdpDns(secondaryDns, query)?.let { return it }
+        val dohChain = listOf(
+            dohUrl,
+            "https://1.1.1.1/dns-query",
+            "https://8.8.8.8/dns-query",
+            "https://9.9.9.9/dns-query"
+        ).distinct()
+        for (url in dohChain) {
+            queryDoh(url, query)?.let { return it }
+        }
+        val udpChain = listOf(primaryDns, secondaryDns, "1.1.1.1", "8.8.8.8").distinct()
+        for (ip in udpChain) {
+            queryProtectedUdpDns(ip, query)?.let { return it }
         }
         return null
     }

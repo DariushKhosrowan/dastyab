@@ -62,6 +62,8 @@ class MainActivity : Activity() {
     private lateinit var vpnDot: View
     private lateinit var tvVpnState: TextView
     private lateinit var tvVpnDetails: TextView
+    private lateinit var tvReachabilityBadge: TextView
+    private lateinit var btnNewbieAutopilot: Button
     private lateinit var btnVpnToggle: Button
     private lateinit var btnModeSmart: Button
     private lateinit var btnModeGlobal: Button
@@ -136,6 +138,8 @@ class MainActivity : Activity() {
         vpnDot = findViewById(R.id.vpnDot)
         tvVpnState = findViewById(R.id.tvVpnState)
         tvVpnDetails = findViewById(R.id.tvVpnDetails)
+        tvReachabilityBadge = findViewById(R.id.tvReachabilityBadge)
+        btnNewbieAutopilot = findViewById(R.id.btnNewbieAutopilot)
         btnVpnToggle = findViewById(R.id.btnVpnToggle)
         btnModeSmart = findViewById(R.id.btnModeSmart)
         btnModeGlobal = findViewById(R.id.btnModeGlobal)
@@ -173,6 +177,7 @@ class MainActivity : Activity() {
         savedInstanceState?.getString("pendingOutput")?.let { applyFormattedOutput(it) }
 
         // ── VPN Tunnel controls ──
+        btnNewbieAutopilot.setOnClickListener { runNewbieAutopilot() }
         btnVpnToggle.setOnClickListener { toggleVpnTunnel() }
         btnModeSmart.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.SMART) }
         btnModeGlobal.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.GLOBAL) }
@@ -480,16 +485,142 @@ class MainActivity : Activity() {
         val name = pendingGoogleLaunchName ?: "Google Service"
         pendingGoogleLaunchUrl = null
         pendingGoogleLaunchName = null
-        openBrowserUrl(name, url)
+        verifyAndOpenGoogleService(name, url)
     }
 
     private fun launchGoogleServiceViaVpn(serviceName: String, url: String) {
         val settings = TunnelConfig.load(this)
         if (settings.autoVpnForGoogle && !DastyabVpnService.isConnected()) {
-            postOutput("Starting ${settings.mode.label} VPN before launching $serviceName…\n")
+            postOutput("Starting ${settings.mode.label} encrypted tunnel before checking $serviceName…\n")
             requestStartVpn(serviceName, url)
         } else {
-            openBrowserUrl(serviceName, url)
+            verifyAndOpenGoogleService(serviceName, url)
+        }
+    }
+
+    /**
+     * Smart AI Studio / Flow launcher: verifies real HTTPS reachability first so the user
+     * never lands on a broken page, and offers 1-tap Newbie Autopilot if the ISP blocks it.
+     */
+    private fun verifyAndOpenGoogleService(serviceName: String, url: String) {
+        setBusy(true)
+        postStatus("Verifying $serviceName reachability…")
+        setStatusDot(DotState.ORANGE)
+        postOutput("Verifying live HTTPS reachability for $serviceName ($url)…\n")
+
+        thread(isDaemon = true, name = "dastyab-verify-google") {
+            val check = ReachabilityVerifier.verifyHttpsEndpoint(serviceName, url, timeoutMs = 3500)
+            postUi {
+                setBusy(false)
+                if (check.isOk) {
+                    tvReachabilityBadge.text = "$serviceName ✓ (${check.latencyMs}ms · HTTP ${check.httpCode})"
+                    postOutput("OK: $serviceName verified reachable → ${check.detail}\n")
+                    openBrowserUrl(serviceName, url)
+                } else {
+                    tvReachabilityBadge.text = "$serviceName blocked (${check.status.name}) → Tap 1-Tap Autopilot"
+                    postOutput("WARNING: $serviceName unreachable (${check.detail})\n")
+                    postStatus("$serviceName unreachable — tap Autopilot to auto-fix")
+                    setStatusDot(DotState.RED)
+                    AlertDialog.Builder(this)
+                        .setTitle("$serviceName Not Reachable Yet")
+                        .setMessage("Live check: ${check.detail}\n\nLet 1-Tap Autopilot automatically find the fastest DoH DNS, harvest & benchmark working configs, and fix access?")
+                        .setPositiveButton("Run 1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
+                        .setNeutralButton("Open Anyway") { _, _ -> openBrowserUrl(serviceName, url) }
+                        .setNegativeButton("Rescue Tools") { _, _ -> showGoogleRescueDialog(serviceName, url) }
+                        .show()
+                }
+            }
+        }
+    }
+
+    /**
+     * 1-Tap Newbie Autopilot: does everything automatically (reachability check, DoH scout,
+     * non-blackholing VPN activation, GitHub→Telegram harvest, parallel config benchmark,
+     * and final AI Studio & Google Flow verification).
+     */
+    private fun runNewbieAutopilot() {
+        if (operation.get() != null) return
+        setBusy(true)
+        btnNewbieAutopilot.isEnabled = false
+        postStatus("Autopilot running (auto-fixing AI Studio & Flow)…")
+        setStatusDot(DotState.ORANGE)
+        tvReachabilityBadge.text = "Autopilot running… scouting DoH, harvesting & verifying…"
+        applyFormattedOutput("\n=== DASTYAB 1-TAP NEWBIE AUTOPILOT ===\n")
+
+        thread(isDaemon = true, name = "dastyab-newbie-autopilot") {
+            val report = NewbieAutopilot.run(this) { step ->
+                postOutput("$step\n")
+            }
+            postUi {
+                setBusy(false)
+                btnNewbieAutopilot.isEnabled = true
+                refreshVpnCard()
+
+                val v = report.verification
+                val webMark = if (v.internet.isOk) "Web ✓" else "Web ✗"
+                val aiMark = if (v.aiStudio.isOk) "AI Studio ✓" else "AI Studio ✗"
+                val flowMark = if (v.flow.isOk) "Flow ✓" else "Flow ✗"
+                tvReachabilityBadge.text = "$webMark · $aiMark · $flowMark"
+
+                postStatus(report.headline)
+                setStatusDot(
+                    when (report.outcome) {
+                        NewbieAutopilot.Outcome.READY_DIRECT,
+                        NewbieAutopilot.Outcome.READY_WITH_VPN -> DotState.GREEN
+                        NewbieAutopilot.Outcome.NEEDS_VPN_CONSENT,
+                        NewbieAutopilot.Outcome.NEEDS_FULL_PROXY_APP -> DotState.ORANGE
+                        NewbieAutopilot.Outcome.OFFLINE_OR_BLACKOUT -> DotState.RED
+                    }
+                )
+
+                val dialog = AlertDialog.Builder(this)
+                    .setTitle(report.headline)
+                    .setMessage(report.summary)
+
+                when (report.outcome) {
+                    NewbieAutopilot.Outcome.READY_DIRECT,
+                    NewbieAutopilot.Outcome.READY_WITH_VPN -> {
+                        dialog.setPositiveButton("Open AI Studio") { _, _ ->
+                            openBrowserUrl("Google AI Studio", CommandCompat.AISTUDIO_URL)
+                        }
+                        dialog.setNeutralButton("Open Google Flow") { _, _ ->
+                            openBrowserUrl("Google Flow", CommandCompat.FLOW_URL)
+                        }
+                        dialog.setNegativeButton(android.R.string.ok, null)
+                    }
+                    NewbieAutopilot.Outcome.NEEDS_VPN_CONSENT -> {
+                        dialog.setPositiveButton("Allow & Connect VPN") { _, _ ->
+                            requestStartVpn("Google AI Studio", CommandCompat.AISTUDIO_URL)
+                        }
+                        dialog.setNegativeButton(android.R.string.cancel, null)
+                    }
+                    NewbieAutopilot.Outcome.NEEDS_FULL_PROXY_APP -> {
+                        val bestUri = report.bestHarvestedUri
+                        val firstApp = report.installedProxyApps.firstOrNull()
+                        if (bestUri != null) {
+                            dialog.setPositiveButton(
+                                if (firstApp != null) "Copy Config & Open ${firstApp.name}" else "Copy Fastest Config"
+                            ) { _, _ ->
+                                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cm.setPrimaryClip(ClipData.newPlainText("DastYab Fastest Config", bestUri))
+                                Toast.makeText(this, "Fastest verified config copied!", Toast.LENGTH_LONG).show()
+                                firstApp?.installedPackage?.let { pkg ->
+                                    packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) }
+                                }
+                            }
+                        }
+                        dialog.setNeutralButton("Open Rescue Hub") { _, _ -> openRescueHub() }
+                        dialog.setNegativeButton(android.R.string.ok, null)
+                    }
+                    NewbieAutopilot.Outcome.OFFLINE_OR_BLACKOUT -> {
+                        dialog.setPositiveButton("Open Blackout Rescue") { _, _ ->
+                            openRescueHub(BlackoutRescueActivity.ACTION_TROUBLESHOOT)
+                        }
+                        dialog.setNegativeButton(android.R.string.ok, null)
+                    }
+                }
+                dialog.show()
+            }
         }
     }
 

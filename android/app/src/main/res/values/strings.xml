@@ -259,4 +259,8 @@
     <string name="shortcut_harvest_long">Blackout Rescue &amp; Harvest</string>
     <string name="shortcut_toolbox_short">Power Toolbox</string>
     <string name="shortcut_toolbox_long">Open Network Power Toolbox</string>
+
+    <!-- Newbie Autopilot & Live Reachability -->
+    <string name="vpn_btn_newbie_autopilot">1-Tap Autopilot (Auto-Fix AI Studio &amp; Flow)</string>
+    <string name="reachability_idle">Tap 1-Tap Autopilot to auto-verify Web, AI Studio &amp; Flow</string>
 </resources>
