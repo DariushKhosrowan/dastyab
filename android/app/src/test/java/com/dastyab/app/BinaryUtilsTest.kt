@@ -62,8 +62,9 @@ class BinaryUtilsTest {
     @Test
     fun `file with wrong magic is not valid ELF`() {
         val wrongMagic = File(tempDir, "wrong-magic")
-        writeBytes(wrongMagic, byteArrayOf(0x7f.toByte(), 'X'.toByte(), 'L'.toByte(), 'F'.toByte()) +
-            ByteArray(4092)) // pad to > 4096
+        writeBytes(wrongMagic, byteArrayOf(0x7f.toByte(), 'X'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte()) +
+            ByteArray(4096)) // pad to > 4096
+        wrongMagic.setExecutable(true)
         assertFalse(BinaryUtils.isValidElfBinary(wrongMagic))
     }
 
@@ -77,6 +78,6 @@ class BinaryUtilsTest {
 
     companion object {
         /** ELF magic number: \\x7fELF */
-        private val ELF_MAGIC = byteArrayOf(0x7f.toByte(), 'E'.toByte(), 'L'.toByte(), 'F'.toByte())
+        private val ELF_MAGIC = byteArrayOf(0x7f.toByte(), 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte())
     }
 }

@@ -73,7 +73,7 @@ object CrashHandler {
         sb.append("\nThread:    ").append(thread.name)
         sb.append("\nModel:     ").append(Build.MODEL)
         sb.append("\nSDK:       ").append(Build.VERSION.SDK_INT)
-        sb.append("\nABI:       ").append(Build.SUPPORTED_ABIS.firstOrNull() ?: Build.CPU_ABI)
+        sb.append("\nABI:       ").append(Build.SUPPORTED_ABIS?.firstOrNull() ?: Build.CPU_ABI ?: "unknown")
         sb.append("\nApp:       com.dastyab.app")
         sb.append("\nThrowable: ").append(throwable::class.java.name)
         sb.append("\nMessage:   ").append(throwable.message ?: "no message")
@@ -92,7 +92,7 @@ object CrashHandler {
         }
 
         // Also log via DastyabLogger so it appears in regular logs too
-        DastyabLogger.e("CrashHandler", "FATAL CRASH on thread ${thread.name}", throwable)
+        DastyabLogger.e("CrashHandler", throwable, "FATAL CRASH on thread %s", thread.name)
     }
 
     private fun threadDump(): String {

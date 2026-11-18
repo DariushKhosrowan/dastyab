@@ -151,28 +151,30 @@ object DastyabLogger {
     private fun log(level: LogLevel, tag: String, message: String) {
         if (level.priority < levelForTag(tag).priority) return
         val now = Date()
-        val timestamp = dateFormat.format(now)
         val thread = Thread.currentThread().name
-
-        val entry = LogEntry(
-            timestampMs = now.time,
-            timestampIso = timestamp,
-            thread = thread,
-            tag = tag,
-            level = level.name,
-            message = message,
-            appVersion = appVersion,
-            deviceModel = deviceModel,
-            sdkInt = sdkInt,
-            abi = abi,
-            sessionId = sessionId
-        )
-        val line = entry.toLogLine()
 
         try { Log.println(level.logcat, tag, message) } catch (_: Exception) {}
 
         lock.lock()
-        try { writeToFile(line) } finally { lock.unlock() }
+        try {
+            val timestamp = dateFormat.format(now)
+            val entry = LogEntry(
+                timestampMs = now.time,
+                timestampIso = timestamp,
+                thread = thread,
+                tag = tag,
+                level = level.name,
+                message = message,
+                appVersion = appVersion,
+                deviceModel = deviceModel,
+                sdkInt = sdkInt,
+                abi = abi,
+                sessionId = sessionId
+            )
+            writeToFile(entry.toLogLine())
+        } finally {
+            lock.unlock()
+        }
     }
 
     private fun writeToFile(line: String) {

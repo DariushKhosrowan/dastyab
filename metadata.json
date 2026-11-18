@@ -1,0 +1,5 @@
+{
+  "name": "DastYab",
+  "description": "Cloudflare Workers VLESS VPN console (Rust & Android).",
+  "requestFramePermissions": []
+}

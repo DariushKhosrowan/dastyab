@@ -14,7 +14,7 @@ import java.io.IOException
 object BinaryUtils {
 
     /** ELF magic number: \x7fELF */
-    private val ELF_MAGIC = byteArrayOf(0x7f.toByte(), 'E'.toByte(), 'L'.toByte(), 'F'.toByte())
+    private val ELF_MAGIC = byteArrayOf(0x7f.toByte(), 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte())
 
     /**
      * Returns true if [file] exists, is executable, and starts with the

@@ -149,10 +149,10 @@ class MainActivity : Activity() {
         btnCancel.setOnClickListener { cancelCurrentOperation() }
 
         findViewById<Button>(R.id.btnClear).setOnClickListener {
-    output.text = ""
-    outputEmptyState.visibility = View.VISIBLE
-    output.visibility = View.GONE
-}
+            output.text = ""
+            outputEmptyState.visibility = View.VISIBLE
+            output.visibility = View.GONE
+        }
 
         findViewById<Button>(R.id.btnViewLogs).setOnClickListener {
             openActivity(LogViewerActivity::class.java)
@@ -525,6 +525,7 @@ class MainActivity : Activity() {
                     offset + line.length,
                     Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
+            }
             Regex("https?://[^\\s]+").findAll(line).forEach { match ->
                 val url = match.value
                 spans.setSpan(object : ClickableSpan() {

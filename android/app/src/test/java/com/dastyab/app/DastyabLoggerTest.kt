@@ -14,6 +14,7 @@ class DastyabLoggerTest {
 
     @Before
     fun setUp() {
+        DastyabLogger.resetLevels()
         tempDir = java.io.File.createTempFile("dastyab-test-", ".dir").apply { delete() }
         tempDir.mkdirs()
         DastyabLogger.init(tempDir)
