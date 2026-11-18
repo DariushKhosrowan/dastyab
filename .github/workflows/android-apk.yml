@@ -116,7 +116,7 @@ jobs:
           VERSION=$(grep -o 'versionName = "[^"]*"' android/app/build.gradle.kts | cut -d'"' -f2)
           cp "$APK" "DastYab-${VERSION}-android.apk"
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: dastyab-release-android-apk
           path: DastYab-*-android.apk
