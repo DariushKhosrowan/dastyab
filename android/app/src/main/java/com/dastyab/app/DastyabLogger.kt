@@ -92,6 +92,20 @@ object DastyabLogger {
         } finally { lock.unlock() }
     }
 
+    /** Shutdown the logger — clears logDir so no stale file handles remain.
+     *  Useful for test isolation and clean process teardown. */
+    fun shutdown() {
+        lock.lock()
+        try {
+            logDir = null
+            context = null
+            appVersion = null
+            deviceModel = null
+            sdkInt = null
+            abi = null
+        } finally { lock.unlock() }
+    }
+
     private fun levelForTag(tag: String): LogLevel = tagLevels[tag] ?: minFileLevel
 
     fun v(tag: String, message: String, vararg args: Any?) = log(LogLevel.VERBOSE, tag, format(message, args))

@@ -22,6 +22,7 @@ class DastyabLoggerTest {
     @After
     fun tearDown() {
         // Clean up temp files, and reset level state so tests are order-independent.
+        DastyabLogger.shutdown()
         DastyabLogger.resetLevels()
         tempDir.deleteRecursively()
     }

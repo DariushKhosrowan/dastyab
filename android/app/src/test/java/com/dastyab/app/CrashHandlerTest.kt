@@ -19,6 +19,7 @@ class CrashHandlerTest {
     fun setUp() {
         previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler(null)
+        DastyabLogger.resetLevels()
         tempDir = java.io.File.createTempFile("crash-test-", ".dir").apply { delete() }
         tempDir.mkdirs()
     }
@@ -26,6 +27,8 @@ class CrashHandlerTest {
     @After
     fun tearDown() {
         Thread.setDefaultUncaughtExceptionHandler(previousHandler)
+        DastyabLogger.shutdown()
+        DastyabLogger.resetLevels()
         tempDir.deleteRecursively()
     }
 
@@ -38,7 +41,7 @@ class CrashHandlerTest {
     }
 
     /** A harmless mock Context — CrashHandler only passes it through to the logger. */
-    private fun mockCtx(): android.content.Context = mockk(relaxed = true)
+    private fun mockCtx(): android.content.Context = mockk<android.content.Context>(relaxed = true)
 
     @Test
     fun `crash directory is created on install`() {

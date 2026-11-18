@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.telephony.TelephonyManager
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Test
