@@ -69,12 +69,12 @@ jobs:
           echo "ANDROID_NDK_ROOT=$SDK/ndk/27.0.12077973" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_VERSION=27.0.12077973" >> "$GITHUB_ENV"
 
-      - name: Stage native CLI for all Android ABIs
-        run: bash scripts/android-build-native.sh android/app/src/main/jniLibs
-
       - name: Run Android unit tests
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Stage native CLI for all Android ABIs
+        run: bash scripts/android-build-native.sh android/app/src/main/jniLibs
 
       - name: Build debug APK with packaged native binaries
         working-directory: android
