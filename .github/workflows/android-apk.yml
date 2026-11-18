@@ -71,14 +71,14 @@ jobs:
 
       - name: Run Android unit tests
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+        run: bash ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Stage native CLI for all Android ABIs
         run: bash scripts/android-build-native.sh android/app/src/main/jniLibs
 
       - name: Build debug APK with packaged native binaries
         working-directory: android
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+        run: bash ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
       - name: Enable emulator KVM access
         run: |
@@ -92,11 +92,11 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-linux-hw-accel: false
-          script: cd android && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+          script: cd android && bash ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
 
       - name: Build signed release APK
         working-directory: android
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        run: bash ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
       - name: Verify packaged APK ABIs and signature
         shell: bash
