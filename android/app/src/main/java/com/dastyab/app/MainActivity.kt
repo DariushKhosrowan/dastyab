@@ -511,11 +511,20 @@ class MainActivity : Activity() {
                 lower.startsWith("ok") || lower.startsWith("success") -> Color.rgb(0x2E, 0x7D, 0x32)
                 else -> null
             }
-            if (color != null) spans.setSpan(ForegroundColorSpan(color), offset, offset + line.length,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-if (Regex("""^---\s*exit code\s+-?\d+\s*---$""", RegexOption.IGNORE_CASE).matches(line.trim())
-                spans.setSpan(StyleSpan(Typeface.BOLD), offset, offset + line.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
+            if (color != null) spans.setSpan(
+                ForegroundColorSpan(color),
+                offset,
+                offset + line.length,
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            if (Regex("""^---\s*exit code\s+-?\d+\s*---$""", RegexOption.IGNORE_CASE)
+                    .matches(line.trim())) {
+                spans.setSpan(
+                    StyleSpan(Typeface.BOLD),
+                    offset,
+                    offset + line.length,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
             Regex("https?://[^\\s]+").findAll(line).forEach { match ->
                 val url = match.value
                 spans.setSpan(object : ClickableSpan() {
