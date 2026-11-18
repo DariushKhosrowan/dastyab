@@ -1,8 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- dastyab makes outbound HTTPS to GitHub Releases; INTERNET is a normal permission. -->
+    <!-- Outbound HTTPS, VPN foreground notification, and split-tunnel app discovery. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Allow split-tunnel app picker to list launchable apps on Android 11+. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <application
         android:extractNativeLibs="true"
@@ -25,6 +37,11 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".TunnelSettingsActivity"
+            android:exported="false"
+            android:label="VPN &amp; Tunnel Settings"
+            android:theme="@style/DastyabTheme" />
+        <activity
             android:name=".LogViewerActivity"
             android:exported="false"
             android:label="View Logs"
@@ -39,6 +56,19 @@
             android:exported="false"
             android:label="Settings"
             android:theme="@style/DastyabTheme" />
+
+        <service
+            android:name=".DastyabVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="DastYab Smart and Split VPN tunnel" />
+        </service>
     </application>
 
 </manifest>

@@ -14,21 +14,76 @@
     <string name="error_invalid_args">Invalid characters in arguments</string>
     <string name="error_unsafe_args">Arguments contain unsafe path separators</string>
 
-    <string name="section_quick_actions">Quick actions</string>
-    <string name="action_open_aistudio">Open AI Studio</string>
-    <string name="action_verify">Verify</string>
+    <string name="section_vpn_tunnel">VPN &amp; Smart Tunnel</string>
+    <string name="vpn_status_disconnected">VPN Disconnected</string>
+    <string name="vpn_status_connecting">Connecting tunnel…</string>
+    <string name="vpn_status_connected">VPN Connected</string>
+    <string name="vpn_btn_connect">Connect VPN</string>
+    <string name="vpn_btn_disconnect">Disconnect</string>
+    <string name="vpn_btn_customize">Tunnel Settings</string>
+    <string name="vpn_btn_import_vless">Import VLESS</string>
+    <string name="vpn_mode_smart">Smart</string>
+    <string name="vpn_mode_global">Global</string>
+    <string name="vpn_mode_split">Split</string>
+
+    <string name="section_tunnel_google">Google &amp; Tunnel Actions</string>
+    <string name="section_quick_actions">Cloudflare &amp; Stack Tools</string>
+    <string name="action_open_aistudio">AI Studio (VPN)</string>
+    <string name="action_open_flow">Google Flow (VPN)</string>
+    <string name="action_deploy">Deploy Worker</string>
+    <string name="action_autopilot">Autopilot</string>
+    <string name="action_verify">Verify Token</string>
     <string name="action_accounts">Accounts</string>
     <string name="action_profiles">Profiles</string>
     <string name="action_tokens">Tokens</string>
-    <string name="action_scan">Scan</string>
+    <string name="action_scan">Clean IP Scan</string>
+    <string name="action_configs">Configs</string>
+    <string name="action_security">Security Audit</string>
+    <string name="action_doctor">Doctor</string>
+    <string name="action_backup">Backup</string>
+    <string name="action_zones">Zones</string>
 
     <!-- Quick action subtitles -->
-    <string name="action_open_aistudio_subtitle">AI-powered commands and assistant</string>
-    <string name="action_verify_subtitle">Verify your active Cloudflare token</string>
-    <string name="action_accounts_subtitle">List and manage Cloudflare accounts</string>
-    <string name="action_profiles_subtitle">List and manage tunnel profiles</string>
-    <string name="action_tokens_subtitle">List authentication tokens</string>
-    <string name="action_scan_subtitle">Scan for tunnel endpoints</string>
+    <string name="action_open_aistudio_subtitle">Auto-VPN + launch AI Studio</string>
+    <string name="action_open_flow_subtitle">Auto-VPN + launch Google Flow</string>
+    <string name="action_deploy_subtitle">Deploy VLESS edge worker</string>
+    <string name="action_autopilot_subtitle">Check self-healing protection</string>
+    <string name="action_verify_subtitle">Verify active Cloudflare token</string>
+    <string name="action_accounts_subtitle">List Cloudflare accounts</string>
+    <string name="action_profiles_subtitle">Manage tunnel profiles</string>
+    <string name="action_tokens_subtitle">List saved API tokens</string>
+    <string name="action_scan_subtitle">Find fast clean Cloudflare IPs</string>
+    <string name="action_configs_subtitle">View exported client configs</string>
+    <string name="action_security_subtitle">Audit local token &amp; file safety</string>
+    <string name="action_doctor_subtitle">Run full stack diagnostics</string>
+    <string name="action_backup_subtitle">Export profile backup bundle</string>
+    <string name="action_zones_subtitle">List Cloudflare DNS zones</string>
+
+    <!-- Tunnel settings screen -->
+    <string name="tunnel_settings_title">VPN &amp; Tunnel Settings</string>
+    <string name="tunnel_settings_subtitle">Configure Smart Tunnel, Global VPN, per-app Split Tunneling, VLESS upstream, DNS, and MTU.</string>
+    <string name="tunnel_mode_label">Routing Mode</string>
+    <string name="tunnel_bypass_lan">Bypass local LAN networks (Smart Tunnel)</string>
+    <string name="tunnel_auto_vpn_google">Auto-connect VPN before opening AI Studio &amp; Flow</string>
+    <string name="tunnel_split_header">Split Tunneling (Per-App)</string>
+    <string name="tunnel_split_none">No apps selected yet — tap below to choose apps</string>
+    <string name="tunnel_split_count">%d app(s) selected for split tunneling</string>
+    <string name="tunnel_pick_apps_btn">Choose Apps for Split Tunnel</string>
+    <string name="tunnel_pick_apps_title">Select Apps for Split Tunnel</string>
+    <string name="tunnel_clear_apps">Clear All</string>
+    <string name="tunnel_no_apps_found">No launchable apps found</string>
+    <string name="tunnel_vless_header">VLESS Upstream Endpoint (Optional)</string>
+    <string name="tunnel_vless_hint">vless://uuid@host:443?security=tls&amp;type=ws&amp;sni=worker.dev#label</string>
+    <string name="tunnel_vless_none">Using default Cloudflare Edge Smart DNS</string>
+    <string name="tunnel_vless_invalid">Invalid vless:// URI — check format and retry</string>
+    <string name="tunnel_paste_vless">Paste vless:// from Clipboard</string>
+    <string name="tunnel_clipboard_empty">Clipboard is empty</string>
+    <string name="tunnel_network_header">DNS &amp; Interface Tuning</string>
+    <string name="tunnel_dns_primary">Primary DNS (IPv4)</string>
+    <string name="tunnel_dns_secondary">Secondary DNS (IPv4)</string>
+    <string name="tunnel_mtu_label">TUN MTU (1280–1500)</string>
+    <string name="tunnel_save_apply">Save &amp; Apply Tunnel Config</string>
+    <string name="tunnel_saved">Tunnel configuration saved</string>
 
     <!-- Output / Advanced sections -->
     <string name="section_output">Output</string>
@@ -39,15 +94,15 @@
     <string name="btn_show_advanced">Advanced / run custom command</string>
     <string name="btn_hide_advanced">Hide advanced</string>
 
-    <!-- Open AI Studio button -->
+    <!-- Open AI Studio / Flow -->
     <string name="btn_open_aistudio">Open Google AI Studio</string>
     <string name="aistudio_opening">Opening Google AI Studio in your browser…</string>
-    <string name="aistudio_opened">✓ AI Studio opened. Sign in with your Google account — no tunnel or Python needed.</string>
+    <string name="aistudio_opened">✓ AI Studio opened via DastYab tunnel.</string>
     <string name="aistudio_no_browser">✗ No browser available. Open AI Studio manually: https://aistudio.google.com/</string>
 
-    <!-- Commands that cannot run on Android (need external helpers like Python/xray/curl) -->
+    <!-- Commands that cannot run on Android -->
     <string name="cmd_not_available_title">Command not available on Android</string>
-    <string name="cmd_not_available_flow">The &#8216;flow&#8217; command needs xray and curl, which aren&#8217;t available on Android.</string>
+    <string name="cmd_not_available_flow">Opening Google Flow via DastYab VPN tunnel…</string>
     <string name="cmd_not_available_hint">Try &#8216;verify&#8217;, &#8216;accounts&#8217;, &#8216;profiles&#8217;, or &#8216;token-list&#8217; instead.</string>
     <string name="btn_cancel">Cancel</string>
     <string name="hint_args">Args (e.g. verify, scan, token-list, accounts, deploy)</string>

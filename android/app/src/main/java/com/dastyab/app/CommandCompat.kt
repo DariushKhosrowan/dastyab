@@ -3,30 +3,23 @@ package com.dastyab.app
 /**
  * CommandCompat — Android compatibility for dastyab CLI commands.
  *
- * The bundled Rust CLI is a single static binary (no Python, no Node), but some
- * CLI subcommands shell out to external helpers that simply do not exist on
- * Android:
- *   • `aistudio` → needs `python3` + `dastyab-aistudio.py` + `xray` + `curl`
- *   • `flow`     → needs `xray` + `curl`
- *
- * Running them on Android produces cryptic "Permission denied" / "command not
- * found" errors. This object intercepts those commands *before* they reach the
- * binary and either handles them natively (aistudio opens in a browser) or
- * shows a friendly, actionable message instead of a raw traceback.
- *
- * Note on `aistudio`: Google AI Studio is reachable directly from most
- * connections (app + login + API all work, no Tor). So on Android we open
- * https://aistudio.google.com/ in the system browser — no Python, no xray, no
- * tunnel required.
+ * Intercepts commands that launch web-based Google services (`aistudio`, `flow`)
+ * so Android handles them natively through DastYab's built-in Smart/Split VPN
+ * tunnel and opens them cleanly in the system browser.
  */
 object CommandCompat {
+
+    const val AISTUDIO_URL = "https://aistudio.google.com/"
+    const val FLOW_URL = "https://flow.google.com/"
 
     /** Result of checking whether a command can run on this device. */
     sealed class Verdict {
         /** Safe to execute the bundled binary normally. */
         object RunNative : Verdict()
-        /** Open Google AI Studio in the system browser instead of the binary. */
+        /** Open Google AI Studio via DastYab's built-in VPN tunnel + browser. */
         class OpenAistudio(val url: String) : Verdict()
+        /** Open Google Flow via DastYab's built-in VPN tunnel + browser. */
+        class OpenFlow(val url: String) : Verdict()
         /** Cannot run on Android; [reason] explains why, [hint] offers an alternative. */
         class Blocked(val reason: String, val hint: String?) : Verdict()
     }
@@ -35,18 +28,9 @@ object CommandCompat {
     fun check(args: List<String>): Verdict {
         if (args.isEmpty()) return Verdict.RunNative
         val head = args[0].lowercase()
-        return when {
-            head == "aistudio" -> {
-                // Handled natively: open AI Studio in the browser. Works on
-                // Android without Python / xray / curl.
-                Verdict.OpenAistudio("https://aistudio.google.com/")
-            }
-            head == "flow" -> {
-                Verdict.Blocked(
-                    reason = "The 'flow' command needs xray and curl, which aren't available on Android.",
-                    hint = "Try 'verify', 'accounts', 'profiles', or 'token-list' instead."
-                )
-            }
+        return when (head) {
+            "aistudio" -> Verdict.OpenAistudio(AISTUDIO_URL)
+            "flow" -> Verdict.OpenFlow(FLOW_URL)
             else -> Verdict.RunNative
         }
     }

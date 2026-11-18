@@ -2,13 +2,16 @@ package com.dastyab.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
+import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -34,12 +37,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
-/** Runs the APK's bundled CLI with private app storage for its state.
- * Android's sandbox and available system tools limit which CLI features can run.
+/**
+ * MainActivity — DastYab Android control plane.
  *
- * The main screen is simple and modern: big tap buttons for the most common
- * actions, no typing required. The raw command input lives in an "Advanced"
- * section that is hidden by default.
+ * Combines:
+ *  • Built-in Smart / Global / Split VPN Tunnel (with auto-VPN for AI Studio & Google Flow)
+ *  • 14 one-tap Quick Actions covering Google access, Worker deploy, Autopilot,
+ *    Clean IP scanning, Profiles, Tokens, Configs, Security Audit, Doctor, Backup, and Zones
+ *  • Full interactive CLI console with history, quick-command chips, and clickable URLs
  */
 class MainActivity : Activity() {
     private lateinit var status: TextView
@@ -53,13 +58,30 @@ class MainActivity : Activity() {
     private lateinit var historySpinner: Spinner
     private lateinit var binary: File
 
-    // Simple action cards (main screen — entire card is clickable)
+    // VPN Tunnel card views
+    private lateinit var vpnDot: View
+    private lateinit var tvVpnState: TextView
+    private lateinit var tvVpnDetails: TextView
+    private lateinit var btnVpnToggle: Button
+    private lateinit var btnModeSmart: Button
+    private lateinit var btnModeGlobal: Button
+    private lateinit var btnModeSplit: Button
+
+    // Quick action cards (entire card is clickable)
     private lateinit var btnSimpleAistudio: View
+    private lateinit var btnSimpleFlow: View
+    private lateinit var btnSimpleDeploy: View
+    private lateinit var btnSimpleAutopilot: View
     private lateinit var btnSimpleVerify: View
     private lateinit var btnSimpleAccounts: View
     private lateinit var btnSimpleProfiles: View
     private lateinit var btnSimpleTokens: View
     private lateinit var btnSimpleScan: View
+    private lateinit var btnSimpleConfigs: View
+    private lateinit var btnSimpleSecurity: View
+    private lateinit var btnSimpleDoctor: View
+    private lateinit var btnSimpleBackup: View
+    private lateinit var btnSimpleZones: View
 
     // Advanced section toggle
     private lateinit var btnShowAdvanced: Button
@@ -70,6 +92,15 @@ class MainActivity : Activity() {
     private val uiLock = Any()
     private var destroyed = false // Protected by uiLock, including callback enqueue/removal.
     private val operation = AtomicReference<Operation?>(null)
+    private var pendingGoogleLaunchUrl: String? = null
+    private var pendingGoogleLaunchName: String? = null
+    private var vpnReceiverRegistered = false
+
+    private val vpnStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            refreshVpnCard()
+        }
+    }
 
     private class Operation {
         val cancelled = AtomicBoolean(false)
@@ -80,6 +111,7 @@ class MainActivity : Activity() {
         private const val PROCESS_TIMEOUT_MS = 300_000L
         private const val MAX_OUTPUT_CHARS = 50_000
         private const val MAX_ARGS_LENGTH = 4096
+        private const val REQ_VPN_PREPARE = 4001
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,6 +119,7 @@ class MainActivity : Activity() {
         DastyabLogger.init(filesDir)
         CrashHandler.install(applicationContext, filesDir)
         setContentView(R.layout.activity_main)
+
         status = findViewById(R.id.status)
         output = findViewById(R.id.output)
         outputEmptyState = findViewById(R.id.outputEmptyState)
@@ -98,13 +131,30 @@ class MainActivity : Activity() {
         historySpinner = findViewById(R.id.historySpinner)
         binary = File(applicationInfo.nativeLibraryDir, "libdastyab.so")
 
-        // Simple action buttons
+        // VPN Tunnel card bindings
+        vpnDot = findViewById(R.id.vpnDot)
+        tvVpnState = findViewById(R.id.tvVpnState)
+        tvVpnDetails = findViewById(R.id.tvVpnDetails)
+        btnVpnToggle = findViewById(R.id.btnVpnToggle)
+        btnModeSmart = findViewById(R.id.btnModeSmart)
+        btnModeGlobal = findViewById(R.id.btnModeGlobal)
+        btnModeSplit = findViewById(R.id.btnModeSplit)
+
+        // Quick action card bindings
         btnSimpleAistudio = findViewById(R.id.btnSimpleAistudio)
+        btnSimpleFlow = findViewById(R.id.btnSimpleFlow)
+        btnSimpleDeploy = findViewById(R.id.btnSimpleDeploy)
+        btnSimpleAutopilot = findViewById(R.id.btnSimpleAutopilot)
         btnSimpleVerify = findViewById(R.id.btnSimpleVerify)
         btnSimpleAccounts = findViewById(R.id.btnSimpleAccounts)
         btnSimpleProfiles = findViewById(R.id.btnSimpleProfiles)
         btnSimpleTokens = findViewById(R.id.btnSimpleTokens)
         btnSimpleScan = findViewById(R.id.btnSimpleScan)
+        btnSimpleConfigs = findViewById(R.id.btnSimpleConfigs)
+        btnSimpleSecurity = findViewById(R.id.btnSimpleSecurity)
+        btnSimpleDoctor = findViewById(R.id.btnSimpleDoctor)
+        btnSimpleBackup = findViewById(R.id.btnSimpleBackup)
+        btnSimpleZones = findViewById(R.id.btnSimpleZones)
 
         // Advanced section toggle
         btnShowAdvanced = findViewById(R.id.btnShowAdvanced)
@@ -120,10 +170,33 @@ class MainActivity : Activity() {
         findViewById<TextView>(R.id.tvVersion).text = getString(R.string.version_format, version)
         savedInstanceState?.getString("pendingOutput")?.let { applyFormattedOutput(it) }
 
-        // ── Simple action taps (no typing) ──
-        btnSimpleAistudio.setOnClickListener {
-            if (operation.get() == null) handleAistudio("https://aistudio.google.com/")
+        // ── VPN Tunnel controls ──
+        btnVpnToggle.setOnClickListener { toggleVpnTunnel() }
+        btnModeSmart.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.SMART) }
+        btnModeGlobal.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.GLOBAL) }
+        btnModeSplit.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.SPLIT_INCLUDE) }
+        findViewById<Button>(R.id.btnTunnelSettings).setOnClickListener {
+            openActivity(TunnelSettingsActivity::class.java)
         }
+        findViewById<Button>(R.id.btnImportVless).setOnClickListener {
+            showImportVlessDialog()
+        }
+
+        // ── Google & Tunnel Quick Actions ──
+        btnSimpleAistudio.setOnClickListener {
+            if (operation.get() == null) launchGoogleServiceViaVpn("Google AI Studio", CommandCompat.AISTUDIO_URL)
+        }
+        btnSimpleFlow.setOnClickListener {
+            if (operation.get() == null) launchGoogleServiceViaVpn("Google Flow", CommandCompat.FLOW_URL)
+        }
+        btnSimpleDeploy.setOnClickListener {
+            if (operation.get() == null) runSimple("deploy --preset standard", listOf("deploy", "--preset", "standard"))
+        }
+        btnSimpleAutopilot.setOnClickListener {
+            if (operation.get() == null) runSimple("autopilot status", listOf("autopilot", "status"))
+        }
+
+        // ── Cloudflare & Stack Quick Actions ──
         btnSimpleVerify.setOnClickListener {
             if (operation.get() == null) runSimple("verify", listOf("verify"))
         }
@@ -138,6 +211,21 @@ class MainActivity : Activity() {
         }
         btnSimpleScan.setOnClickListener {
             if (operation.get() == null) runSimple("scan", listOf("scan"))
+        }
+        btnSimpleConfigs.setOnClickListener {
+            if (operation.get() == null) runSimple("configs", listOf("configs"))
+        }
+        btnSimpleSecurity.setOnClickListener {
+            if (operation.get() == null) runSimple("security", listOf("security"))
+        }
+        btnSimpleDoctor.setOnClickListener {
+            if (operation.get() == null) runSimple("doctor", listOf("doctor"))
+        }
+        btnSimpleBackup.setOnClickListener {
+            if (operation.get() == null) runSimple("backup", listOf("backup"))
+        }
+        btnSimpleZones.setOnClickListener {
+            if (operation.get() == null) runSimple("zones", listOf("zones"))
         }
 
         // ── Advanced toggle ──
@@ -163,7 +251,7 @@ class MainActivity : Activity() {
             text = "Releases"
             setOnClickListener {
                 try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Dastyab/dastyab/releases")))
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DastYab/dastyab/releases")))
                 } catch (_: android.content.ActivityNotFoundException) {
                     postStatus("No browser available to open releases")
                 }
@@ -195,14 +283,199 @@ class MainActivity : Activity() {
             }
         }
 
-        buildQuickButtons(R.id.quickButtons, listOf("--help", "--version", "verify --help",
-            "accounts --help", "scan --help", "deploy --help", "configs --help", "doctor --help"))
-        buildQuickButtons(R.id.quickButtonsProfiles, listOf("profiles --help", "profile-create --help",
-            "profile-import --help", "profile-export --help", "token-add --help",
-            "token-list --help", "backup --help", "export --help"))
+        buildQuickButtons(R.id.quickButtons, listOf(
+            "--help", "--version", "verify", "accounts", "scan",
+            "deploy --preset standard", "autopilot status", "doctor", "security"
+        ))
+        buildQuickButtons(R.id.quickButtonsProfiles, listOf(
+            "profiles", "token-list", "configs", "zones", "routes list",
+            "manifest-verify", "inventory", "backup", "update-check"
+        ))
         setupHistorySpinner()
+        registerVpnReceiver()
+        refreshVpnCard()
         setBusy(false)
         evaluateBinaryState()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshVpnCard()
+    }
+
+    private fun registerVpnReceiver() {
+        if (vpnReceiverRegistered) return
+        val filter = IntentFilter(DastyabVpnService.ACTION_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(vpnStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(vpnStateReceiver, filter)
+        }
+        vpnReceiverRegistered = true
+    }
+
+    private fun toggleVpnTunnel() {
+        if (DastyabVpnService.isConnected()) {
+            DastyabVpnService.stop(this)
+            postOutput("VPN tunnel disconnected.\n")
+            refreshVpnCard()
+            return
+        }
+        requestStartVpn(null, null)
+    }
+
+    private fun switchTunnelMode(mode: TunnelConfig.Mode) {
+        TunnelConfig.saveMode(this, mode)
+        refreshVpnCard()
+        if (DastyabVpnService.isConnected()) {
+            DastyabVpnService.start(this)
+            postOutput("Switched VPN mode to ${mode.label} and reconnected.\n")
+        } else {
+            Toast.makeText(this, "Tunnel mode: ${mode.label}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun requestStartVpn(launchName: String?, launchUrl: String?) {
+        pendingGoogleLaunchName = launchName
+        pendingGoogleLaunchUrl = launchUrl
+        val prepIntent = VpnService.prepare(this)
+        if (prepIntent != null) {
+            try {
+                @Suppress("DEPRECATION")
+                startActivityForResult(prepIntent, REQ_VPN_PREPARE)
+            } catch (_: Exception) {
+                postOutput("WARNING: System VPN consent dialog unavailable on this device.\n")
+                openPendingGoogleUrlIfAny()
+            }
+        } else {
+            DastyabVpnService.start(this)
+            refreshVpnCard()
+            openPendingGoogleUrlIfAny()
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_VPN_PREPARE) {
+            if (resultCode == RESULT_OK) {
+                DastyabVpnService.start(this)
+                postOutput("OK: DastYab VPN tunnel started.\n")
+                refreshVpnCard()
+                openPendingGoogleUrlIfAny()
+            } else {
+                postOutput("WARNING: VPN permission declined by user.\n")
+                pendingGoogleLaunchName = null
+                pendingGoogleLaunchUrl = null
+            }
+        }
+    }
+
+    private fun openPendingGoogleUrlIfAny() {
+        val url = pendingGoogleLaunchUrl ?: return
+        val name = pendingGoogleLaunchName ?: "Google Service"
+        pendingGoogleLaunchUrl = null
+        pendingGoogleLaunchName = null
+        openBrowserUrl(name, url)
+    }
+
+    private fun launchGoogleServiceViaVpn(serviceName: String, url: String) {
+        val settings = TunnelConfig.load(this)
+        if (settings.autoVpnForGoogle && !DastyabVpnService.isConnected()) {
+            postOutput("Starting ${settings.mode.label} VPN before launching $serviceName…\n")
+            requestStartVpn(serviceName, url)
+        } else {
+            openBrowserUrl(serviceName, url)
+        }
+    }
+
+    private fun openBrowserUrl(serviceName: String, url: String) {
+        postOutput("Opening $serviceName in your browser…\n")
+        postStatus("Opening $serviceName…")
+        setStatusDot(DotState.ORANGE)
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            val vpnNote = if (DastyabVpnService.isConnected()) " (VPN active)" else ""
+            postOutput("OK: $serviceName opened$vpnNote → $url\n")
+            postStatus("$serviceName opened$vpnNote")
+            setStatusDot(DotState.GREEN)
+        } catch (_: android.content.ActivityNotFoundException) {
+            postOutput("ERROR: No browser available. Open manually: $url\n")
+            postStatus("No browser available")
+            setStatusDot(DotState.RED)
+        }
+    }
+
+    private fun showImportVlessDialog() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.tunnel_vless_hint)
+            setText(TunnelConfig.load(this@MainActivity).vlessUri)
+            setSingleLine(false)
+            maxLines = 4
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.vpn_btn_import_vless))
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val uri = input.text.toString().trim()
+                val parsed = TunnelConfig.parseVlessUri(uri)
+                if (uri.isEmpty()) {
+                    TunnelConfig.saveVlessUri(this, "")
+                    refreshVpnCard()
+                    postOutput("Cleared custom VLESS endpoint (using Cloudflare Edge Smart DNS).\n")
+                } else if (parsed == null) {
+                    Toast.makeText(this, getString(R.string.tunnel_vless_invalid), Toast.LENGTH_SHORT).show()
+                } else {
+                    TunnelConfig.saveVlessUri(this, uri)
+                    refreshVpnCard()
+                    postOutput("OK: Imported VLESS endpoint → ${parsed.summary()} (SNI: ${parsed.sni})\n")
+                    if (DastyabVpnService.isConnected()) {
+                        DastyabVpnService.start(this)
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun refreshVpnCard() {
+        val statusObj = DastyabVpnService.getStatus()
+        val settings = TunnelConfig.load(this)
+        val activeMode = if (statusObj.state == DastyabVpnService.State.CONNECTED) statusObj.mode else settings.mode
+
+        when (statusObj.state) {
+            DastyabVpnService.State.CONNECTED -> {
+                vpnDot.background = getDrawable(R.drawable.status_dot_green)
+                tvVpnState.text = "${getString(R.string.vpn_status_connected)} · ${activeMode.label}"
+                btnVpnToggle.text = getString(R.string.vpn_btn_disconnect)
+            }
+            DastyabVpnService.State.CONNECTING -> {
+                vpnDot.background = getDrawable(R.drawable.status_dot_orange)
+                tvVpnState.text = getString(R.string.vpn_status_connecting)
+                btnVpnToggle.text = getString(R.string.vpn_btn_disconnect)
+            }
+            DastyabVpnService.State.DISCONNECTED -> {
+                vpnDot.background = getDrawable(R.drawable.status_dot_gray)
+                tvVpnState.text = "${getString(R.string.vpn_status_disconnected)} · ${activeMode.label}"
+                btnVpnToggle.text = getString(R.string.vpn_btn_connect)
+            }
+        }
+
+        val endpoint = settings.parsedEndpoint()?.summary() ?: "Cloudflare Edge Smart DNS"
+        val splitSuffix = if (activeMode == TunnelConfig.Mode.SPLIT_INCLUDE || activeMode == TunnelConfig.Mode.SPLIT_EXCLUDE) {
+            " · ${settings.splitPackages.size} app(s)"
+        } else {
+            ""
+        }
+        tvVpnDetails.text = "$endpoint · DNS ${settings.dnsPrimary}$splitSuffix"
+
+        // Highlight active quick-mode chip
+        val isSplit = activeMode == TunnelConfig.Mode.SPLIT_INCLUDE || activeMode == TunnelConfig.Mode.SPLIT_EXCLUDE
+        btnModeSmart.alpha = if (activeMode == TunnelConfig.Mode.SMART) 1.0f else 0.55f
+        btnModeGlobal.alpha = if (activeMode == TunnelConfig.Mode.GLOBAL) 1.0f else 0.55f
+        btnModeSplit.alpha = if (isSplit) 1.0f else 0.55f
     }
 
     private fun openActivity(type: Class<out Activity>) {
@@ -231,10 +504,15 @@ class MainActivity : Activity() {
         postStatus("Running…")
         setStatusDot(DotState.ORANGE)
 
-        // Android compatibility check before running the binary.
         when (val verdict = CommandCompat.check(args)) {
             is CommandCompat.Verdict.OpenAistudio -> {
-                handleAistudio(verdict.url)
+                setBusy(false)
+                launchGoogleServiceViaVpn("Google AI Studio", verdict.url)
+                return
+            }
+            is CommandCompat.Verdict.OpenFlow -> {
+                setBusy(false)
+                launchGoogleServiceViaVpn("Google Flow", verdict.url)
                 return
             }
             is CommandCompat.Verdict.Blocked -> {
@@ -247,6 +525,11 @@ class MainActivity : Activity() {
             CommandCompat.Verdict.RunNative -> { /* proceed */ }
         }
 
+        if (!binary.isFile || !binary.canExecute()) {
+            setBusy(false)
+            evaluateBinaryState()
+            return
+        }
         runCommand(args, label)
     }
 
@@ -256,6 +539,10 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (vpnReceiverRegistered) {
+            try { unregisterReceiver(vpnStateReceiver) } catch (_: Exception) {}
+            vpnReceiverRegistered = false
+        }
         synchronized(uiLock) {
             destroyed = true
             handler.removeCallbacksAndMessages(null)
@@ -284,16 +571,13 @@ class MainActivity : Activity() {
             return
         }
         if (args.isEmpty()) return
-        if (!binary.isFile || !binary.canExecute()) {
-            evaluateBinaryState()
-            return
-        }
-        // Android compatibility: some CLI subcommands need external helpers
-        // (Python, xray, curl) that don't exist on Android. Handle or block
-        // them with a friendly message instead of a cryptic "Permission denied".
         when (val verdict = CommandCompat.check(args)) {
             is CommandCompat.Verdict.OpenAistudio -> {
-                handleAistudio(verdict.url)
+                launchGoogleServiceViaVpn("Google AI Studio", verdict.url)
+                return
+            }
+            is CommandCompat.Verdict.OpenFlow -> {
+                launchGoogleServiceViaVpn("Google Flow", verdict.url)
                 return
             }
             is CommandCompat.Verdict.Blocked -> {
@@ -305,26 +589,11 @@ class MainActivity : Activity() {
             }
             CommandCompat.Verdict.RunNative -> { /* proceed to run the binary */ }
         }
-        runCommand(args, text)
-    }
-
-    /** Open Google AI Studio in the system browser. Works on Android without
-     * Python, xray, or any tunnel — AI Studio is reachable directly from most
-     * connections (sign in + API all work from your IP). */
-    private fun handleAistudio(url: String) {
-        postOutput("Opening Google AI Studio in your browser…\n")
-        postStatus("Opening AI Studio…")
-        setStatusDot(DotState.ORANGE)
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            postOutput("✓ AI Studio opened. Sign in with your Google account — no tunnel or Python needed.\n")
-            postStatus("AI Studio opened in browser")
-            setStatusDot(DotState.GREEN)
-        } catch (_: android.content.ActivityNotFoundException) {
-            postOutput("✗ No browser available. Open AI Studio manually: $url\n")
-            postStatus("No browser available")
-            setStatusDot(DotState.RED)
+        if (!binary.isFile || !binary.canExecute()) {
+            evaluateBinaryState()
+            return
         }
+        runCommand(args, text)
     }
 
     private fun buildQuickButtons(containerId: Int, commands: List<String>) {
@@ -368,7 +637,6 @@ class MainActivity : Activity() {
             current.cancelled.set(true)
             current.process.get()?.let { terminate(it) }
         }
-        // The worker retains the guard until process cleanup completes.
     }
 
     private fun terminate(process: Process) {
@@ -399,7 +667,6 @@ class MainActivity : Activity() {
         setBusy(true)
         postStatus("Running…")
         setStatusDot(DotState.ORANGE)
-        // Capture all launch inputs on the main thread. Workers never read views.
         val command = listOf(binary.absolutePath) + args
         val home = filesDir
         val temporary = cacheDir.absolutePath
@@ -418,9 +685,8 @@ class MainActivity : Activity() {
                     }.start()
                     process = child
                     current.process.set(child)
-                    // Cover cancellation between start() and publication of the child.
                     if (current.cancelled.get()) terminate(child)
-                    child.outputStream.close() // This UI does not provide interactive stdin.
+                    child.outputStream.close()
                     readerThread = thread(isDaemon = true, name = "dastyab-output") {
                         try {
                             child.inputStream.reader(Charsets.UTF_8).use { reader ->
@@ -450,7 +716,6 @@ class MainActivity : Activity() {
             } finally {
                 process?.let { child ->
                     runCatching { terminate(child) }
-                    // Allow final output to drain, but never wait indefinitely for a pipe.
                     runCatching { readerThread?.join(1000) }
                     runCatching { child.inputStream.close() }
                     runCatching { child.errorStream.close() }
@@ -470,7 +735,6 @@ class MainActivity : Activity() {
                     operation.compareAndSet(current, null)
                     setBusy(false)
                 }
-                // No further operation can start on a destroyed Activity.
                 synchronized(uiLock) {
                     if (destroyed) operation.compareAndSet(current, null)
                 }

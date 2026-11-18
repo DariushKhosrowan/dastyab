@@ -66,7 +66,7 @@
             android:layout_width="match_parent"
             android:layout_height="12dp" />
 
-        <!-- ============ STATUS CARD ============ -->
+        <!-- ============ ENGINE STATUS CARD ============ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -75,8 +75,8 @@
             android:background="@drawable/card_background"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
-            android:paddingTop="14dp"
-            android:paddingBottom="14dp">
+            android:paddingTop="13dp"
+            android:paddingBottom="13dp">
 
             <View
                 android:id="@+id/statusDot"
@@ -105,13 +105,13 @@
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="20dp" />
+            android:layout_height="16dp" />
 
-        <!-- ============ QUICK ACTIONS ============ -->
+        <!-- ============ VPN & SMART TUNNEL CARD ============ -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/section_quick_actions"
+            android:text="@string/section_vpn_tunnel"
             android:textSize="13sp"
             android:textStyle="bold"
             android:textAllCaps="true"
@@ -120,7 +120,158 @@
             android:paddingStart="4dp"
             android:paddingBottom="10dp" />
 
-        <!-- Row 1 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/header_card_background"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <LinearLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:layout_marginEnd="12dp"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_action_vpn"
+                        android:contentDescription="@string/section_vpn_tunnel" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <View
+                            android:id="@+id/vpnDot"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:layout_marginEnd="8dp"
+                            android:background="@drawable/status_dot_gray" />
+
+                        <TextView
+                            android:id="@+id/tvVpnState"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/vpn_status_disconnected"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/colorTextPrimary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvVpnDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="12sp"
+                        android:textColor="@color/colorTextSecondary"
+                        android:paddingTop="2dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Quick Routing Mode Chips -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp">
+
+                <Button
+                    android:id="@+id/btnModeSmart"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vpn_mode_smart"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnModeGlobal"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vpn_mode_global"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnModeSplit"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vpn_mode_split"
+                    style="@style/DastyabChip" />
+            </LinearLayout>
+
+            <!-- Primary Connect + Settings / Import Row -->
+            <Button
+                android:id="@+id/btnVpnToggle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/vpn_btn_connect"
+                style="@style/DastyabButtonPrimary" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="10dp">
+
+                <Button
+                    android:id="@+id/btnTunnelSettings"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vpn_btn_customize"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnImportVless"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vpn_btn_import_vless"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="20dp" />
+
+        <!-- ============ GOOGLE & TUNNEL ACTIONS ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/section_tunnel_google"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:textColor="@color/colorTextSecondary"
+            android:letterSpacing="0.08"
+            android:paddingStart="4dp"
+            android:paddingBottom="10dp" />
+
+        <!-- Google Row: AI Studio + Flow -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -136,16 +287,16 @@
                 android:background="@drawable/card_selector"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="16dp">
+                android:padding="15dp">
 
                 <LinearLayout
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:gravity="center"
                     android:background="@drawable/icon_badge_bg">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
                         android:src="@drawable/ic_action_aistudio"
                         android:contentDescription="@string/action_open_aistudio" />
                 </LinearLayout>
@@ -157,22 +308,176 @@
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="3dp"
-                    android:singleLine="false" />
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_open_aistudio_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary"
-                    android:lineSpacingExtra="2dp" />
+                    android:textColor="@color/colorTextSecondary" />
             </LinearLayout>
 
             <View
                 android:layout_width="10dp"
                 android:layout_height="0dp" />
+
+            <LinearLayout
+                android:id="@+id/btnSimpleFlow"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="15dp">
+
+                <LinearLayout
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
+                        android:src="@drawable/ic_action_flow"
+                        android:contentDescription="@string/action_open_flow" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_open_flow"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_open_flow_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Deploy + Autopilot Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingBottom="18dp">
+
+            <LinearLayout
+                android:id="@+id/btnSimpleDeploy"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="15dp">
+
+                <LinearLayout
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
+                        android:src="@drawable/ic_action_deploy"
+                        android:contentDescription="@string/action_deploy" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_deploy"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_deploy_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="0dp" />
+
+            <LinearLayout
+                android:id="@+id/btnSimpleAutopilot"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="15dp">
+
+                <LinearLayout
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
+                        android:src="@drawable/ic_action_autopilot"
+                        android:contentDescription="@string/action_autopilot" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_autopilot"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_autopilot_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ============ CLOUDFLARE & STACK TOOLS ============ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/section_quick_actions"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:textColor="@color/colorTextSecondary"
+            android:letterSpacing="0.08"
+            android:paddingStart="4dp"
+            android:paddingBottom="10dp" />
+
+        <!-- Row 1: Verify + Accounts -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingBottom="10dp">
 
             <LinearLayout
                 android:id="@+id/btnSimpleVerify"
@@ -183,16 +488,16 @@
                 android:background="@drawable/card_selector"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="16dp">
+                android:padding="15dp">
 
                 <LinearLayout
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:gravity="center"
                     android:background="@drawable/icon_badge_bg">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
                         android:src="@drawable/ic_action_verify"
                         android:contentDescription="@string/action_verify" />
                 </LinearLayout>
@@ -204,26 +509,20 @@
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="3dp"
-                    android:singleLine="false" />
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_verify_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary"
-                    android:lineSpacingExtra="2dp" />
+                    android:textColor="@color/colorTextSecondary" />
             </LinearLayout>
-        </LinearLayout>
 
-        <!-- Row 2 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingBottom="10dp">
+            <View
+                android:layout_width="10dp"
+                android:layout_height="0dp" />
 
             <LinearLayout
                 android:id="@+id/btnSimpleAccounts"
@@ -234,16 +533,16 @@
                 android:background="@drawable/card_selector"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="16dp">
+                android:padding="15dp">
 
                 <LinearLayout
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:gravity="center"
                     android:background="@drawable/icon_badge_bg">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
                         android:src="@drawable/ic_action_accounts"
                         android:contentDescription="@string/action_accounts" />
                 </LinearLayout>
@@ -255,22 +554,24 @@
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="3dp"
-                    android:singleLine="false" />
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_accounts_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary"
-                    android:lineSpacingExtra="2dp" />
+                    android:textColor="@color/colorTextSecondary" />
             </LinearLayout>
+        </LinearLayout>
 
-            <View
-                android:layout_width="10dp"
-                android:layout_height="0dp" />
+        <!-- Row 2: Profiles + Tokens -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingBottom="10dp">
 
             <LinearLayout
                 android:id="@+id/btnSimpleProfiles"
@@ -281,16 +582,16 @@
                 android:background="@drawable/card_selector"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="16dp">
+                android:padding="15dp">
 
                 <LinearLayout
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:gravity="center"
                     android:background="@drawable/icon_badge_bg">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
                         android:src="@drawable/ic_action_profiles"
                         android:contentDescription="@string/action_profiles" />
                 </LinearLayout>
@@ -302,26 +603,20 @@
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="3dp"
-                    android:singleLine="false" />
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_profiles_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary"
-                    android:lineSpacingExtra="2dp" />
+                    android:textColor="@color/colorTextSecondary" />
             </LinearLayout>
-        </LinearLayout>
 
-        <!-- Row 3 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingBottom="18dp">
+            <View
+                android:layout_width="10dp"
+                android:layout_height="0dp" />
 
             <LinearLayout
                 android:id="@+id/btnSimpleTokens"
@@ -332,16 +627,16 @@
                 android:background="@drawable/card_selector"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="16dp">
+                android:padding="15dp">
 
                 <LinearLayout
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:gravity="center"
                     android:background="@drawable/icon_badge_bg">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
                         android:src="@drawable/ic_action_tokens"
                         android:contentDescription="@string/action_tokens" />
                 </LinearLayout>
@@ -353,22 +648,24 @@
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="3dp"
-                    android:singleLine="false" />
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_tokens_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary"
-                    android:lineSpacingExtra="2dp" />
+                    android:textColor="@color/colorTextSecondary" />
             </LinearLayout>
+        </LinearLayout>
 
-            <View
-                android:layout_width="10dp"
-                android:layout_height="0dp" />
+        <!-- Row 3: Clean IP Scan + Configs -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingBottom="10dp">
 
             <LinearLayout
                 android:id="@+id/btnSimpleScan"
@@ -379,16 +676,16 @@
                 android:background="@drawable/card_selector"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="16dp">
+                android:padding="15dp">
 
                 <LinearLayout
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:gravity="center"
                     android:background="@drawable/icon_badge_bg">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
                         android:src="@drawable/ic_action_scan"
                         android:contentDescription="@string/action_scan" />
                 </LinearLayout>
@@ -400,17 +697,248 @@
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="3dp"
-                    android:singleLine="false" />
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_scan_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary"
-                    android:lineSpacingExtra="2dp" />
+                    android:textColor="@color/colorTextSecondary" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="0dp" />
+
+            <LinearLayout
+                android:id="@+id/btnSimpleConfigs"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="15dp">
+
+                <LinearLayout
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
+                        android:src="@drawable/ic_action_configs"
+                        android:contentDescription="@string/action_configs" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_configs"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_configs_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Row 4: Security Audit + Doctor -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:id="@+id/btnSimpleSecurity"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="15dp">
+
+                <LinearLayout
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
+                        android:src="@drawable/ic_action_security"
+                        android:contentDescription="@string/action_security" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_security"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_security_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="0dp" />
+
+            <LinearLayout
+                android:id="@+id/btnSimpleDoctor"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="15dp">
+
+                <LinearLayout
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
+                        android:src="@drawable/ic_action_doctor"
+                        android:contentDescription="@string/action_doctor" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_doctor"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_doctor_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Row 5: Backup + Zones -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingBottom="18dp">
+
+            <LinearLayout
+                android:id="@+id/btnSimpleBackup"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="15dp">
+
+                <LinearLayout
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
+                        android:src="@drawable/ic_action_backup"
+                        android:contentDescription="@string/action_backup" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_backup"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_backup_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="0dp" />
+
+            <LinearLayout
+                android:id="@+id/btnSimpleZones"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="15dp">
+
+                <LinearLayout
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:gravity="center"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="21dp"
+                        android:layout_height="21dp"
+                        android:src="@drawable/ic_action_zones"
+                        android:contentDescription="@string/action_zones" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_zones"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="2dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_zones_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -443,8 +971,8 @@
                 android:gravity="center"
                 android:paddingStart="24dp"
                 android:paddingEnd="24dp"
-                android:paddingTop="36dp"
-                android:paddingBottom="36dp"
+                android:paddingTop="32dp"
+                android:paddingBottom="32dp"
                 android:visibility="visible">
 
                 <ImageView
