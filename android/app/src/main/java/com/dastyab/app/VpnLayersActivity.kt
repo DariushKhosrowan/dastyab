@@ -2,8 +2,6 @@ package com.dastyab.app
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
@@ -117,38 +115,40 @@ class VpnLayersActivity : Activity() {
             "4. Clone Layer",
             "5. Delete Layer"
         )
-        AlertDialog.Builder(this)
-            .setTitle(layer.name)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> {
-                        VpnLayerStore.activateLayer(this, layer, restartIfConnected = false)
-                        refreshLayersUi()
-                        startVpnWithConsent()
-                    }
-                    1 -> showLayerEditorDialog(layer)
-                    2 -> {
-                        val payload = layer.configUri.ifBlank { layer.dohUrl }
-                        QrShareDialog.show(this, "QR · ${layer.name}", payload)
-                    }
-                    3 -> {
-                        val copy = layer.copy(
-                            id = java.util.UUID.randomUUID().toString().take(8),
-                            name = "${layer.name} (Copy)"
-                        )
-                        VpnLayerStore.addOrUpdate(this, copy)
-                        refreshLayersUi()
-                        Toast.makeText(this, "Cloned layer!", Toast.LENGTH_SHORT).show()
-                    }
-                    4 -> {
-                        VpnLayerStore.delete(this, layer.id)
-                        refreshLayersUi()
-                        Toast.makeText(this, "Deleted layer.", Toast.LENGTH_SHORT).show()
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle(layer.name)
+                .setItems(options) { _, which ->
+                    when (which) {
+                        0 -> {
+                            VpnLayerStore.activateLayer(this, layer, restartIfConnected = false)
+                            refreshLayersUi()
+                            startVpnWithConsent()
+                        }
+                        1 -> showLayerEditorDialog(layer)
+                        2 -> {
+                            val payload = layer.configUri.ifBlank { layer.dohUrl }
+                            QrShareDialog.show(this, "QR · ${layer.name}", payload)
+                        }
+                        3 -> {
+                            val copy = layer.copy(
+                                id = java.util.UUID.randomUUID().toString().take(8),
+                                name = "${layer.name} (Copy)"
+                            )
+                            VpnLayerStore.addOrUpdate(this, copy)
+                            refreshLayersUi()
+                            Toast.makeText(this, "Cloned layer!", Toast.LENGTH_SHORT).show()
+                        }
+                        4 -> {
+                            VpnLayerStore.delete(this, layer.id)
+                            refreshLayersUi()
+                            Toast.makeText(this, "Deleted layer.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun showLayerEditorDialog(existing: VpnLayerStore.VpnLayer?) {
@@ -194,27 +194,29 @@ class VpnLayersActivity : Activity() {
         container.addView(etDns)
         container.addView(etDoh)
 
-        AlertDialog.Builder(this)
-            .setTitle(if (existing == null) "Add New VPN Layer" else "Edit VPN Layer")
-            .setView(container)
-            .setPositiveButton("Save & Activate") { _, _ ->
-                val name = etName.text.toString().trim().ifEmpty { "Custom VPN Layer" }
-                val mode = modes[spinnerMode.selectedItemPosition.coerceIn(0, modes.lastIndex)]
-                val layer = (existing ?: VpnLayerStore.VpnLayer(name = name, mode = mode)).copy(
-                    name = name,
-                    mode = mode,
-                    configUri = etUri.text.toString().trim(),
-                    dnsPrimary = TunnelConfig.sanitizeDns(etDns.text.toString(), TunnelConfig.DEFAULT_DNS_PRIMARY),
-                    dohUrl = TunnelConfig.sanitizeDohUrl(etDoh.text.toString())
-                )
-                VpnLayerStore.addOrUpdate(this, layer)
-                VpnLayerStore.activateLayer(this, layer, restartIfConnected = true)
-                refreshLayersUi()
-                tvLayersLog.text = "Saved & activated layer: ${layer.name}\n${layer.subtitle()}"
-                Toast.makeText(this, "Layer saved & activated!", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle(if (existing == null) "Add New VPN Layer" else "Edit VPN Layer")
+                .setView(container)
+                .setPositiveButton("Save & Activate") { _, _ ->
+                    val name = etName.text.toString().trim().ifEmpty { "Custom VPN Layer" }
+                    val mode = modes[spinnerMode.selectedItemPosition.coerceIn(0, modes.lastIndex)]
+                    val layer = (existing ?: VpnLayerStore.VpnLayer(name = name, mode = mode)).copy(
+                        name = name,
+                        mode = mode,
+                        configUri = etUri.text.toString().trim(),
+                        dnsPrimary = TunnelConfig.sanitizeDns(etDns.text.toString(), TunnelConfig.DEFAULT_DNS_PRIMARY),
+                        dohUrl = TunnelConfig.sanitizeDohUrl(etDoh.text.toString())
+                    )
+                    VpnLayerStore.addOrUpdate(this, layer)
+                    VpnLayerStore.activateLayer(this, layer, restartIfConnected = true)
+                    refreshLayersUi()
+                    tvLayersLog.text = "Saved & activated layer: ${layer.name}\n${layer.subtitle()}"
+                    Toast.makeText(this, "Layer saved & activated!", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun benchmarkAndSwitchBestLayer() {
@@ -223,7 +225,7 @@ class VpnLayersActivity : Activity() {
         val layers = VpnLayerStore.loadAll(this)
         thread(isDaemon = true, name = "dastyab-layer-bench") {
             val results = VpnLayerStore.benchmarkLayers(layers)
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 progress.visibility = View.GONE
                 val sb = StringBuilder("=== VPN LAYER BENCHMARK ===\n")
                 results.forEach { r ->
@@ -246,9 +248,9 @@ class VpnLayersActivity : Activity() {
 
     private fun exportLayersToClipboard() {
         val json = VpnLayerStore.serializeLayers(VpnLayerStore.loadAll(this))
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("DastYab VPN Layers", json))
-        Toast.makeText(this, "Exported all VPN layers JSON to clipboard!", Toast.LENGTH_SHORT).show()
+        if (UiSafety.copyTextSafely(this, "DastYab VPN Layers", json)) {
+            Toast.makeText(this, "Exported all VPN layers JSON to clipboard!", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showImportLayersDialog() {
@@ -257,21 +259,23 @@ class VpnLayersActivity : Activity() {
             setSingleLine(false)
             maxLines = 5
         }
-        AlertDialog.Builder(this)
-            .setTitle("Import VPN Layers JSON")
-            .setView(input)
-            .setPositiveButton("Import") { _, _ ->
-                val imported = VpnLayerStore.deserializeLayers(input.text.toString())
-                if (imported.isEmpty()) {
-                    Toast.makeText(this, "Invalid JSON or no layers found.", Toast.LENGTH_SHORT).show()
-                } else {
-                    VpnLayerStore.saveAll(this, imported)
-                    refreshLayersUi()
-                    Toast.makeText(this, "Imported ${imported.size} VPN layer(s)!", Toast.LENGTH_SHORT).show()
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("Import VPN Layers JSON")
+                .setView(input)
+                .setPositiveButton("Import") { _, _ ->
+                    val imported = VpnLayerStore.deserializeLayers(input.text.toString())
+                    if (imported.isEmpty()) {
+                        Toast.makeText(this, "Invalid JSON or no layers found.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        VpnLayerStore.saveAll(this, imported)
+                        refreshLayersUi()
+                        Toast.makeText(this, "Imported ${imported.size} VPN layer(s)!", Toast.LENGTH_SHORT).show()
+                    }
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun refreshSourcesUi() {
@@ -338,20 +342,22 @@ class VpnLayersActivity : Activity() {
             setSingleLine(false)
             maxLines = 5
         }
-        AlertDialog.Builder(this)
-            .setTitle("Add GitHub / Subscription URLs")
-            .setView(input)
-            .setPositiveButton("Add") { _, _ ->
-                val added = HarvestSourceStore.addGithubUrls(this, input.text.toString())
-                refreshSourcesUi()
-                Toast.makeText(
-                    this,
-                    if (added > 0) "Added $added GitHub URL(s)!" else "No valid http(s) URLs found.",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("Add GitHub / Subscription URLs")
+                .setView(input)
+                .setPositiveButton("Add") { _, _ ->
+                    val added = HarvestSourceStore.addGithubUrls(this, input.text.toString())
+                    refreshSourcesUi()
+                    Toast.makeText(
+                        this,
+                        if (added > 0) "Added $added GitHub URL(s)!" else "No valid http(s) URLs found.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun showAddTelegramChannelDialog() {
@@ -360,20 +366,22 @@ class VpnLayersActivity : Activity() {
             setSingleLine(false)
             maxLines = 5
         }
-        AlertDialog.Builder(this)
-            .setTitle("Add Telegram Public Channels")
-            .setView(input)
-            .setPositiveButton("Add") { _, _ ->
-                val added = HarvestSourceStore.addTelegramChannels(this, input.text.toString())
-                refreshSourcesUi()
-                Toast.makeText(
-                    this,
-                    if (added > 0) "Added $added Telegram channel(s)!" else "No valid channel usernames found.",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("Add Telegram Public Channels")
+                .setView(input)
+                .setPositiveButton("Add") { _, _ ->
+                    val added = HarvestSourceStore.addTelegramChannels(this, input.text.toString())
+                    refreshSourcesUi()
+                    Toast.makeText(
+                        this,
+                        if (added > 0) "Added $added Telegram channel(s)!" else "No valid channel usernames found.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun benchmarkHarvestedPool() {
@@ -386,11 +394,11 @@ class VpnLayersActivity : Activity() {
         tvLayersLog.text = "Testing up to 25 harvested configs in parallel…\n"
         thread(isDaemon = true, name = "dastyab-pool-bench") {
             val working = HarvestSourceStore.benchmarkHarvestedConfigs(pool, maxToTest = 25)
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 progress.visibility = View.GONE
                 if (working.isEmpty()) {
                     tvLayersLog.text = "No harvested configs responded within 1.8s.\nTip: Run Smart Harvest again or activate DNS Blackout VPN."
-                    return@post
+                    return@safePostUi
                 }
                 val sb = StringBuilder("Found ${working.size} live configs (fastest first):\n")
                 working.take(10).forEach { r ->
@@ -401,24 +409,31 @@ class VpnLayersActivity : Activity() {
                 val items = working.take(10).map {
                     "[${it.protocol.uppercase()}] ${it.host}:${it.port} · ${it.latencyMs}ms"
                 }.toTypedArray()
-                AlertDialog.Builder(this)
-                    .setTitle("Promote Fastest Config to VPN Layer")
-                    .setItems(items) { _, which ->
-                        val picked = working[which]
-                        val newLayer = VpnLayerStore.VpnLayer(
-                            name = "Fast ${picked.protocol.uppercase()} (${picked.host})",
-                            mode = TunnelConfig.Mode.SMART,
-                            configUri = picked.uri
-                        )
-                        VpnLayerStore.addOrUpdate(this, newLayer)
-                        VpnLayerStore.activateLayer(this, newLayer, restartIfConnected = true)
-                        refreshLayersUi()
-                        Toast.makeText(this, "Promoted & activated ${newLayer.name}!", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show()
+                UiSafety.safeShowDialog(
+                    this,
+                    AlertDialog.Builder(this)
+                        .setTitle("Promote Fastest Config to VPN Layer")
+                        .setItems(items) { _, which ->
+                            val picked = working[which]
+                            val newLayer = VpnLayerStore.VpnLayer(
+                                name = "Fast ${picked.protocol.uppercase()} (${picked.host})",
+                                mode = TunnelConfig.Mode.SMART,
+                                configUri = picked.uri
+                            )
+                            VpnLayerStore.addOrUpdate(this, newLayer)
+                            VpnLayerStore.activateLayer(this, newLayer, restartIfConnected = true)
+                            refreshLayersUi()
+                            Toast.makeText(this, "Promoted & activated ${newLayer.name}!", Toast.LENGTH_SHORT).show()
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                )
             }
         }
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 
     private fun startVpnWithConsent() {

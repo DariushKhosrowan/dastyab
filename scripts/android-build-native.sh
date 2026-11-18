@@ -19,7 +19,13 @@ if [[ -z "$SDK_ROOT" ]]; then
   exit 2
 fi
 NDK_ROOT=${ANDROID_NDK_ROOT:-$SDK_ROOT/ndk/$NDK_VERSION}
-TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+HOST_TAG="linux-x86_64"
+if [[ ! -d "$NDK_ROOT/toolchains/llvm/prebuilt/$HOST_TAG/bin" && -d "$NDK_ROOT/toolchains/llvm/prebuilt/darwin-x86_64/bin" ]]; then
+  HOST_TAG="darwin-x86_64"
+elif [[ ! -d "$NDK_ROOT/toolchains/llvm/prebuilt/$HOST_TAG/bin" && -d "$NDK_ROOT/toolchains/llvm/prebuilt/darwin-arm64/bin" ]]; then
+  HOST_TAG="darwin-arm64"
+fi
+TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/$HOST_TAG/bin"
 if [[ ! -d "$TOOLCHAIN" ]]; then
   echo "Android NDK toolchain not found: $TOOLCHAIN" >&2
   exit 1
@@ -44,12 +50,29 @@ for entry in "${TARGETS[@]}"; do
   fi
 
   target_env=$(printf '%s' "$target" | tr '[:lower:]-' '[:upper:]_')
+  cc_dashed="${target//-/_}"
   export "CARGO_TARGET_${target_env}_LINKER=$linker"
   export "CC_${cc_suffix}=$linker"
+  export "CC_${target_env}=$linker"
+  export "CC_${cc_dashed}=$linker"
   export "AR_${cc_suffix}=$TOOLCHAIN/llvm-ar"
+  export "AR_${target_env}=$TOOLCHAIN/llvm-ar"
+  export "AR_${cc_dashed}=$TOOLCHAIN/llvm-ar"
+  export "RANLIB_${cc_suffix}=$TOOLCHAIN/llvm-ranlib"
+
+  # Pass Cargo target config directly so runner env sanitization cannot drop linkers.
+  cargo_args=(
+    build --locked --release --target "$target" -p dastyab-cli
+    --config "target.${target}.linker=\"${linker}\""
+    --config "target.${target}.ar=\"${TOOLCHAIN}/llvm-ar\""
+  )
+  # Enforce 16 KB ELF segment alignment on 64-bit Android ABIs (Android 15+ readiness).
+  if [[ "$abi" == "arm64-v8a" || "$abi" == "x86_64" ]]; then
+    cargo_args+=(--config "target.${target}.rustflags=[\"-C\",\"link-arg=-Wl,-z,max-page-size=16384\"]")
+  fi
 
   echo "Building dastyab-cli: target=$target abi=$abi api=$ANDROID_API"
-  cargo build --locked --release --target "$target" -p dastyab-cli
+  cargo "${cargo_args[@]}"
 
   source_bin="$ROOT_DIR/target/$target/release/dastyab"
   staged_bin="$OUTPUT_DIR/$abi/libdastyab.so"

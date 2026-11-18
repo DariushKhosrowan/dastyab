@@ -10,24 +10,20 @@ import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
 
 /**
  * CrashHandler — installs a global uncaught-exception handler so that every
  * crash on a real device is captured to a log file before the process dies.
  *
- * Without this, crashes on user devices are invisible unless the user happens
- * to have adb connected. With this, every crash gets a timestamped stack trace
- * plus full device context written to <filesDir>/logs/crashes/.
- *
- * Usage (in Application.onCreate or Activity.onCreate):
- *   CrashHandler.install(context, filesDir)
+ * Uses non-blocking logger writes and writes a pending-crash marker so the next
+ * launch can surface a calm Safe-Mode recovery prompt without deadlocking.
  */
 object CrashHandler {
 
     private const val CRASH_DIR_NAME = "crashes"
     private const val CRASH_FILE_BASE = "crash"
     private const val CRASH_FILE_EXT = ".log"
+    private const val PENDING_MARKER = "last_crash.marker"
 
     private var originalHandler: Thread.UncaughtExceptionHandler? = null
     private val handler = Thread.UncaughtExceptionHandler { thread, throwable ->
@@ -41,19 +37,21 @@ object CrashHandler {
             originalHandler?.uncaughtException(thread, throwable)
         }
     }
+    @Volatile
     private var crashDir: File? = null
 
     @Synchronized
     fun install(ctx: Context, filesDir: File) {
-        crashDir = File(filesDir, CRASH_DIR_NAME)
-        if (!crashDir!!.exists()) { crashDir!!.mkdirs() }
+        val dir = File(filesDir, CRASH_DIR_NAME)
+        if (!dir.exists()) { dir.mkdirs() }
+        crashDir = dir
 
         if (Thread.getDefaultUncaughtExceptionHandler() !== handler) {
             originalHandler = Thread.getDefaultUncaughtExceptionHandler()
             Thread.setDefaultUncaughtExceptionHandler(handler)
         }
 
-        DastyabLogger.i("CrashHandler", "Crash handler installed. Dir: %s", crashDir!!.absolutePath)
+        DastyabLogger.i("CrashHandler", "Crash handler installed. Dir: %s", dir.absolutePath)
     }
 
     private fun handleCrash(thread: Thread, throwable: Throwable) {
@@ -83,28 +81,28 @@ object CrashHandler {
         sb.append("\n").append(threadDump())
         sb.append("\n=============================================")
 
-        // Write to crash file
-        val crashFile = File(crashDir, "$CRASH_FILE_BASE${System.currentTimeMillis()}$CRASH_FILE_EXT")
-        try {
-            FileWriter(crashFile).use { it.write(sb.toString()) }
-        } catch (e: Exception) {
-            Log.e("CrashHandler", "Failed to write crash file", e)
+        val dir = crashDir
+        if (dir != null) {
+            val crashFile = File(dir, "$CRASH_FILE_BASE${System.currentTimeMillis()}$CRASH_FILE_EXT")
+            try {
+                FileWriter(crashFile).use { it.write(sb.toString()) }
+                File(dir, PENDING_MARKER).writeText("${throwable::class.java.simpleName}: ${throwable.message ?: ""}")
+            } catch (e: Exception) {
+                try { Log.e("CrashHandler", "Failed to write crash file", e) } catch (_: Throwable) {}
+            }
         }
 
-        // Also log via DastyabLogger so it appears in regular logs too
-        DastyabLogger.e("CrashHandler", throwable, "FATAL CRASH on thread %s", thread.name)
+        // Non-blocking log so CrashHandler can never deadlock on a held logger lock.
+        DastyabLogger.eNonBlocking("CrashHandler", throwable, "FATAL CRASH on thread %s", thread.name)
     }
 
     private fun threadDump(): String {
         val sb = StringBuilder()
-        val threads: Collection<Thread> = Thread.getAllStackTraces().keys
-        for (t in threads) {
+        val allTraces = Thread.getAllStackTraces()
+        for ((t, stack) in allTraces) {
             sb.append("\n-- ").append(t.name).append(" (").append(t.id).append(") --")
-            val stack = Thread.getAllStackTraces()[t]
-            if (stack != null) {
-                for (ste in stack) {
-                    sb.append("\n    at ").append(ste)
-                }
+            for (ste in stack) {
+                sb.append("\n    at ").append(ste)
             }
         }
         return sb.toString()
@@ -116,8 +114,25 @@ object CrashHandler {
             ?.sortedByDescending { it.lastModified() }?.toList() ?: emptyList()
     }
 
-    /** Delete all crash files. @return number of files deleted. */
+    fun consumePendingCrashNotice(): String? {
+        val dir = crashDir ?: return null
+        val marker = File(dir, PENDING_MARKER)
+        if (!marker.isFile) return null
+        return try {
+            val summary = marker.readText().trim().ifEmpty { "Previous session exited unexpectedly." }
+            marker.delete()
+            summary
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /** Delete all crash files and markers. @return number of crash log files deleted. */
     fun clearCrashFiles(): Int {
+        val dir = crashDir
+        if (dir != null) {
+            runCatching { File(dir, PENDING_MARKER).delete() }
+        }
         var deleted = 0
         for (f in getCrashFiles()) {
             if (f.delete()) deleted++

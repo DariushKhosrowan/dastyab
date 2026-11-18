@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@mipmap/ic_launcher,@mipmap/ic_launcher_round,@drawable/ic_launcher_*,@drawable/ic_notification_vpn,@drawable/ic_action_*,@drawable/status_dot_*,@drawable/header_card_background,@drawable/btn_primary_bg,@layout/widget_dastyab_vpn,@xml/shortcuts,@xml/dastyab_widget_info,@xml/network_security_config" />

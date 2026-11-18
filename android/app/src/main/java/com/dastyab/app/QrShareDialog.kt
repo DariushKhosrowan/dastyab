@@ -1,8 +1,6 @@
 package com.dastyab.app
 
 import android.app.AlertDialog
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -61,23 +59,26 @@ object QrShareDialog {
         }
         container.addView(preview)
 
-        AlertDialog.Builder(context)
+        val builder = AlertDialog.Builder(context)
             .setTitle(title)
             .setView(container)
             .setPositiveButton(context.getString(R.string.btn_copy)) { _, _ ->
-                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("DastYab VPN Config", trimmed))
-                Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                if (UiSafety.copyTextSafely(context, "DastYab VPN Config", trimmed)) {
+                    Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                }
             }
             .setNeutralButton(context.getString(R.string.btn_share)) { _, _ ->
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, trimmed)
                 }
-                context.startActivity(Intent.createChooser(shareIntent, title))
+                if (!UiSafety.safeStartActivity(context, Intent.createChooser(shareIntent, title))) {
+                    Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                    UiSafety.copyTextSafely(context, "DastYab VPN Config", trimmed)
+                }
             }
             .setNegativeButton(android.R.string.ok, null)
-            .show()
+        UiSafety.safeShowDialog(context, builder)
     }
 
     fun renderBitmap(

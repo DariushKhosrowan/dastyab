@@ -79,13 +79,23 @@ class DastyabVpnService : VpnService() {
         fun isConnected(): Boolean = currentStatus.get().state == State.CONNECTED
 
         fun start(context: Context) {
+            startSafely(context)
+        }
+
+        fun startSafely(context: Context): Boolean {
             val intent = Intent(context, DastyabVpnService::class.java).apply {
                 action = ACTION_START
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            return try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+                true
+            } catch (t: Throwable) {
+                DastyabLogger.w("VpnService", t, "Unable to start foreground VPN service")
+                false
             }
         }
 
@@ -93,19 +103,28 @@ class DastyabVpnService : VpnService() {
             val intent = Intent(context, DastyabVpnService::class.java).apply {
                 action = ACTION_STOP
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (t: Throwable) {
+                DastyabLogger.w("VpnService", t, "Ignoring stopService call while service is inactive")
+            }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return when (intent?.action) {
             ACTION_STOP -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !running.get()) {
+                    enterForegroundCompat(loadSettingsSafely(), "Disconnecting…")
+                }
                 stopTunnel()
                 stopSelf()
                 START_NOT_STICKY
             }
             ACTION_NEXT_LAYER -> {
-                VpnLayerStore.rotateToNextLayer(this)
+                if (UiSafety.isUserUnlockedCompat(this)) {
+                    runCatching { VpnLayerStore.rotateToNextLayer(this) }
+                }
                 startTunnel()
                 START_STICKY
             }
@@ -119,6 +138,7 @@ class DastyabVpnService : VpnService() {
     override fun onRevoke() {
         DastyabLogger.w("VpnService", "VPN permission revoked by system")
         stopTunnel()
+        stopSelf()
         super.onRevoke()
     }
 
@@ -127,10 +147,43 @@ class DastyabVpnService : VpnService() {
         super.onDestroy()
     }
 
+    private fun loadSettingsSafely(): TunnelConfig.Settings {
+        if (!UiSafety.isUserUnlockedCompat(this)) {
+            return TunnelConfig.Settings()
+        }
+        return try {
+            TunnelConfig.load(this)
+        } catch (t: Throwable) {
+            DastyabLogger.w("VpnService", t, "Using default TunnelConfig because prefs are unavailable")
+            TunnelConfig.Settings()
+        }
+    }
+
+    private fun enterForegroundCompat(settings: TunnelConfig.Settings, endpointSummary: String) {
+        try {
+            val notification = buildNotification(settings, endpointSummary)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (t: Throwable) {
+            DastyabLogger.e("VpnService", t, "Failed to enter foreground notification state")
+        }
+    }
+
     private fun startTunnel() {
         stopTunnelInternal()
         dnsCache.clear()
-        val settings = TunnelConfig.load(this)
+        val settings = loadSettingsSafely()
+        // Call startForeground immediately so Android 8–15+ never throws ForegroundServiceDidNotStartInTimeException
+        // even if establish() returns null or fails below.
+        enterForegroundCompat(settings, "Connecting…")
+
         val localHttpProxyPort = detectLocalHttpProxyPort()
         val dohLabel = settings.dohUrl.removePrefix("https://")
         val endpointSummary = when {
@@ -156,7 +209,7 @@ class DastyabVpnService : VpnService() {
             // while allowing normal TCP/HTTPS traffic to flow cleanly without ever black-holing websites.
             val builder = Builder()
                 .setSession("DastYab ${settings.mode.label}")
-                .setMtu(settings.mtu)
+                .setMtu(TunnelConfig.clampMtu(settings.mtu))
                 .addAddress("10.215.0.1", 30)
                 .addDnsServer("10.215.0.2")
                 .addRoute("10.215.0.2", 32)
@@ -166,7 +219,9 @@ class DastyabVpnService : VpnService() {
                 // If a local Xray/Sing-Box/Orbot/v2rayNG HTTP proxy is running on loopback,
                 // chain all HTTP/HTTPS traffic through it automatically!
                 if (localHttpProxyPort != null) {
-                    builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", localHttpProxyPort))
+                    runCatching {
+                        builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", localHttpProxyPort))
+                    }
                 }
             }
 
@@ -180,6 +235,7 @@ class DastyabVpnService : VpnService() {
                             added++
                         } catch (_: PackageManager.NameNotFoundException) {
                             DastyabLogger.w("VpnService", "Split include package not found: %s", pkg)
+                        } catch (_: Exception) {
                         }
                     }
                     // If no valid package was selected, fall back to excluding self so VPN stays valid.
@@ -194,6 +250,7 @@ class DastyabVpnService : VpnService() {
                             builder.addDisallowedApplication(pkg)
                         } catch (_: PackageManager.NameNotFoundException) {
                             DastyabLogger.w("VpnService", "Split exclude package not found: %s", pkg)
+                        } catch (_: Exception) {
                         }
                     }
                 }
@@ -206,23 +263,14 @@ class DastyabVpnService : VpnService() {
             val pfd = builder.establish()
             if (pfd == null) {
                 DastyabLogger.e("VpnService", "VpnService.Builder.establish() returned null")
-                updateStatus(Status(state = State.DISCONNECTED, mode = settings.mode))
+                stopTunnel()
                 stopSelf()
                 return
             }
 
             vpnInterface = pfd
             running.set(true)
-            val notification = buildNotification(settings, endpointSummary)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                )
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
+            enterForegroundCompat(settings, endpointSummary)
 
             updateStatus(
                 Status(
@@ -342,13 +390,15 @@ class DastyabVpnService : VpnService() {
 
     private fun stopTunnel() {
         stopTunnelInternal()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
         }
-        val settings = TunnelConfig.load(this)
+        val settings = loadSettingsSafely()
         updateStatus(Status(state = State.DISCONNECTED, mode = settings.mode))
         DastyabLogger.i("VpnService", "VPN disconnected")
     }
@@ -448,7 +498,7 @@ class DastyabVpnService : VpnService() {
                 )
             )
             val intent = Intent(ACTION_STATE_CHANGED).setPackage(packageName)
-            sendBroadcast(intent)
+            runCatching { sendBroadcast(intent) }
             DastyabWidgetProvider.updateAllWidgets(this)
         } catch (e: Exception) {
             DastyabLogger.w("Watchdog", "Watchdog tick error: %s", e.message ?: "unknown")
@@ -497,7 +547,11 @@ class DastyabVpnService : VpnService() {
             }
         }
 
-        val rules = DomainDnsRules.load(this)
+        val rules = if (UiSafety.isUserUnlockedCompat(this)) {
+            runCatching { DomainDnsRules.load(this) }.getOrNull() ?: DomainDnsRules.Rules()
+        } else {
+            DomainDnsRules.Rules()
+        }
         val fresh = if (DomainDnsRules.shouldBypassToLocalDns(domain, rules)) {
             // Iranian (.ir / banking / local) or custom bypass domain: resolve via fast protected UDP DNS first
             resolveDnsBypassLocalFirst(query, dohUrl, primaryDns, secondaryDns)
@@ -594,7 +648,7 @@ class DastyabVpnService : VpnService() {
     private fun updateStatus(status: Status) {
         currentStatus.set(status)
         val intent = Intent(ACTION_STATE_CHANGED).setPackage(packageName)
-        sendBroadcast(intent)
+        runCatching { sendBroadcast(intent) }
         try {
             DastyabWidgetProvider.updateAllWidgets(this)
         } catch (_: Exception) {}
@@ -639,11 +693,16 @@ class DastyabVpnService : VpnService() {
             Notification.Builder(this)
         }
 
-        val activeLayer = VpnLayerStore.getActiveLayer(this)
+        val activeLayer = if (UiSafety.isUserUnlockedCompat(this)) {
+            runCatching { VpnLayerStore.getActiveLayer(this) }.getOrNull()
+        } else {
+            null
+        }
+        val layerName = activeLayer?.name ?: "Smart Tunnel"
         return builder
-            .setContentTitle("DastYab · ${activeLayer.name}")
+            .setContentTitle("DastYab · $layerName")
             .setContentText("${settings.mode.label} · $endpointSummary")
-            .setSmallIcon(R.drawable.ic_action_vpn)
+            .setSmallIcon(R.drawable.ic_notification_vpn)
             .setOngoing(true)
             .setContentIntent(openIntent)
             .addAction(

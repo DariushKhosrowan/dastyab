@@ -66,99 +66,129 @@ class InAppBrowserActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_in_app_browser)
-
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "Google AI Studio"
         initialUrl = intent.getStringExtra(EXTRA_URL) ?: CommandCompat.AISTUDIO_URL
 
-        webView = findViewById(R.id.browserWebView)
-        progress = findViewById(R.id.browserProgress)
-        tvTitle = findViewById(R.id.tvBrowserTitle)
-        vpnDot = findViewById(R.id.browserVpnDot)
-        tvTitle.text = title
+        try {
+            setContentView(R.layout.activity_in_app_browser)
+            webView = findViewById(R.id.browserWebView)
+            progress = findViewById(R.id.browserProgress)
+            tvTitle = findViewById(R.id.tvBrowserTitle)
+            vpnDot = findViewById(R.id.browserVpnDot)
+            tvTitle.text = title
 
-        val settings = webView.settings
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        settings.databaseEnabled = true
-        settings.loadWithOverviewMode = true
-        settings.useWideViewPort = true
-        settings.builtInZoomControls = true
-        settings.displayZoomControls = false
-        settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-        // Strip "; wv" so Google web apps recognize a standard mobile Chrome engine
-        val defaultUa = settings.userAgentString ?: ""
-        settings.userAgentString = defaultUa.replace("; wv)", ")").replace("Version/4.0 ", "")
+            val settings = webView.settings
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.databaseEnabled = true
+            settings.loadWithOverviewMode = true
+            settings.useWideViewPort = true
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            // Strip "; wv" so Google web apps recognize a standard mobile Chrome engine
+            val defaultUa = settings.userAgentString ?: ""
+            settings.userAgentString = defaultUa.replace("; wv)", ")").replace("Version/4.0 ", "")
 
-        val cm = CookieManager.getInstance()
-        cm.setAcceptCookie(true)
-        cm.setAcceptThirdPartyCookies(webView, true)
-
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                progress.progress = newProgress
-                progress.visibility = if (newProgress in 1..99) View.VISIBLE else View.GONE
+            runCatching {
+                val cm = CookieManager.getInstance()
+                cm.setAcceptCookie(true)
+                cm.setAcceptThirdPartyCookies(webView, true)
             }
 
-            override fun onReceivedTitle(view: WebView?, pageTitle: String?) {
-                if (!pageTitle.isNullOrBlank()) {
-                    tvTitle.text = pageTitle
+            webView.webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    if (!UiSafety.isActivityAlive(this@InAppBrowserActivity)) return
+                    progress.progress = newProgress
+                    progress.visibility = if (newProgress in 1..99) View.VISIBLE else View.GONE
+                }
+
+                override fun onReceivedTitle(view: WebView?, pageTitle: String?) {
+                    if (!UiSafety.isActivityAlive(this@InAppBrowserActivity)) return
+                    if (!pageTitle.isNullOrBlank()) {
+                        tvTitle.text = pageTitle
+                    }
                 }
             }
-        }
 
-        webView.webViewClient = object : WebViewClient() {
-            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                progress.visibility = View.VISIBLE
-            }
+            webView.webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    if (UiSafety.isActivityAlive(this@InAppBrowserActivity)) {
+                        progress.visibility = View.VISIBLE
+                    }
+                }
 
-            override fun onPageFinished(view: WebView?, url: String?) {
-                progress.visibility = View.GONE
-            }
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    if (UiSafety.isActivityAlive(this@InAppBrowserActivity)) {
+                        progress.visibility = View.GONE
+                    }
+                }
 
-            override fun onReceivedError(
-                view: WebView?,
-                request: WebResourceRequest?,
-                error: WebResourceError?
-            ) {
-                if (request?.isForMainFrame == true) {
-                    Toast.makeText(
-                        this@InAppBrowserActivity,
-                        getString(R.string.browser_load_error_hint),
-                        Toast.LENGTH_LONG
-                    ).show()
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: WebResourceError?
+                ) {
+                    if (request?.isForMainFrame == true && UiSafety.isActivityAlive(this@InAppBrowserActivity)) {
+                        Toast.makeText(
+                            this@InAppBrowserActivity,
+                            getString(R.string.browser_load_error_hint),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
-        }
 
-        findViewById<Button>(R.id.btnBrowserClose).setOnClickListener { finish() }
-        findViewById<Button>(R.id.btnBrowserBack).setOnClickListener {
-            if (webView.canGoBack()) webView.goBack() else finish()
-        }
-        findViewById<Button>(R.id.btnBrowserForward).setOnClickListener {
-            if (webView.canGoForward()) webView.goForward()
-        }
-        findViewById<Button>(R.id.btnBrowserReload).setOnClickListener {
-            webView.reload()
-        }
-        findViewById<Button>(R.id.btnBrowserAutoFix).setOnClickListener {
-            val intent = Intent(this, BlackoutRescueActivity::class.java).apply {
-                putExtra(BlackoutRescueActivity.EXTRA_AUTO_ACTION, BlackoutRescueActivity.ACTION_DNS_VPN)
+            findViewById<Button>(R.id.btnBrowserClose).setOnClickListener { finish() }
+            findViewById<Button>(R.id.btnBrowserBack).setOnClickListener {
+                if (webView.canGoBack()) webView.goBack() else finish()
             }
-            startActivity(intent)
-        }
-        findViewById<Button>(R.id.btnBrowserOpenChrome).setOnClickListener {
-            val currentUrl = webView.url?.takeIf { it.startsWith("http") } ?: initialUrl
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentUrl)))
-            } catch (_: Exception) {
-                Toast.makeText(this, getString(R.string.aistudio_no_browser), Toast.LENGTH_SHORT).show()
+            findViewById<Button>(R.id.btnBrowserForward).setOnClickListener {
+                if (webView.canGoForward()) webView.goForward()
             }
-        }
+            findViewById<Button>(R.id.btnBrowserReload).setOnClickListener {
+                webView.reload()
+            }
+            findViewById<Button>(R.id.btnBrowserAutoFix).setOnClickListener {
+                val rescue = Intent(this, BlackoutRescueActivity::class.java).apply {
+                    putExtra(BlackoutRescueActivity.EXTRA_AUTO_ACTION, BlackoutRescueActivity.ACTION_DNS_VPN)
+                }
+                UiSafety.safeStartActivity(this, rescue)
+            }
+            findViewById<Button>(R.id.btnBrowserOpenChrome).setOnClickListener {
+                val currentUrl = webView.url?.takeIf { it.startsWith("http") } ?: initialUrl
+                if (!UiSafety.safeStartActivity(this, Intent(Intent.ACTION_VIEW, Uri.parse(currentUrl)))) {
+                    Toast.makeText(this, getString(R.string.aistudio_no_browser), Toast.LENGTH_SHORT).show()
+                }
+            }
 
-        registerVpnReceiver()
-        refreshVpnIndicator()
-        webView.loadUrl(initialUrl)
+            registerVpnReceiver()
+            refreshVpnIndicator()
+            webView.loadUrl(initialUrl)
+        } catch (t: Throwable) {
+            DastyabLogger.e("InAppBrowser", t, "WebView unavailable; falling back to external browser")
+            val opened = UiSafety.safeStartActivity(this, Intent(Intent.ACTION_VIEW, Uri.parse(initialUrl)))
+            Toast.makeText(
+                this,
+                if (opened) "System WebView unavailable; opened in browser." else getString(R.string.aistudio_no_browser),
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (this::webView.isInitialized) {
+            runCatching { webView.onResume() }
+        }
+    }
+
+    override fun onPause() {
+        if (this::webView.isInitialized) {
+            runCatching { webView.onPause() }
+        }
+        super.onPause()
     }
 
     private fun registerVpnReceiver() {
@@ -174,14 +204,18 @@ class InAppBrowserActivity : Activity() {
     }
 
     private fun refreshVpnIndicator() {
-        val status = DastyabVpnService.getStatus()
-        vpnDot.background = getDrawable(
-            when (status.state) {
-                DastyabVpnService.State.CONNECTED -> R.drawable.status_dot_green
-                DastyabVpnService.State.CONNECTING -> R.drawable.status_dot_orange
-                DastyabVpnService.State.DISCONNECTED -> R.drawable.status_dot_gray
-            }
-        )
+        if (!UiSafety.isActivityAlive(this) || !this::vpnDot.isInitialized) return
+        try {
+            val status = DastyabVpnService.getStatus()
+            vpnDot.background = getDrawable(
+                when (status.state) {
+                    DastyabVpnService.State.CONNECTED -> R.drawable.status_dot_green
+                    DastyabVpnService.State.CONNECTING -> R.drawable.status_dot_orange
+                    DastyabVpnService.State.DISCONNECTED -> R.drawable.status_dot_gray
+                }
+            )
+        } catch (_: Throwable) {
+        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -200,7 +234,13 @@ class InAppBrowserActivity : Activity() {
             receiverRegistered = false
         }
         if (this::webView.isInitialized) {
-            webView.destroy()
+            runCatching {
+                webView.stopLoading()
+                webView.loadUrl("about:blank")
+                webView.clearHistory()
+                webView.removeAllViews()
+                webView.destroy()
+            }
         }
         super.onDestroy()
     }

@@ -172,38 +172,47 @@ download_artifact() {
         "$api_url" 2>/dev/null)
     
     if [ -n "$artifacts_json" ]; then
-        # Find app-debug-apk artifact ID
+        # Find release APK artifact ID (fallback to debug artifact if present)
         local artifact_id=$(echo "$artifacts_json" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
     if data and 'artifacts' in data:
-        for art in data['artifacts']:
-            if 'app-debug-apk' in art.get('name', '').lower() or art.get('name', '').endswith('.apk'):
+        arts = data['artifacts']
+        for target in ('dastyab-release-android-apk', 'app-debug-apk'):
+            for art in arts:
+                if target in art.get('name', '').lower():
+                    print(art['id'])
+                    raise SystemExit(0)
+        for art in arts:
+            if art.get('name', '').endswith('.apk'):
                 print(art['id'])
                 break
-except:
+except Exception:
     pass
 " 2>/dev/null)
         
         if [ -n "$artifact_id" ]; then
             # Download the artifact
             local download_api="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/artifacts/${artifact_id}/zip"
-            local zip_data=$(curl -sL -o "app-debug-apk.zip" "$download_api" -w "%{http_code}" 2>/dev/null)
+            local zip_data=$(curl -sL -o "dastyab-apk.zip" "$download_api" -w "%{http_code}" 2>/dev/null)
             
             if [ "$zip_data" = "200" ]; then
-                unzip -o -q app-debug-apk.zip -d . 2>/dev/null
-                rm -f app-debug-apk.zip
+                unzip -o -q dastyab-apk.zip -d . 2>/dev/null
+                rm -f dastyab-apk.zip
                 echo "   ✅ Artifact downloaded and extracted"
                 
-                # Find the APK file
-                local apk_file=$(find . -name "app-debug*.apk" -type f 2>/dev/null | head -1)
+                # Find the APK file (prefer signed release APK)
+                local apk_file=$(find . \( -name "DastYab-*-android.apk" -o -name "app-release*.apk" -o -name "app-debug*.apk" \) -type f 2>/dev/null | head -1)
                 if [ -n "$apk_file" ]; then
                     echo "   📄 Found: $apk_file"
+                    if [ -f "scripts/android-verify-apk.sh" ]; then
+                        bash scripts/android-verify-apk.sh "$apk_file" --static-only || return 1
+                    fi
                     install_apk "$apk_file"
                     return 0
                 else
-                    echo "   ⚠️ No app-debug*.apk found in archive"
+                    echo "   ⚠️ No APK file found in archive"
                 fi
             else
                 echo "   ⚠️ Failed to download artifact (HTTP: $zip_data)"

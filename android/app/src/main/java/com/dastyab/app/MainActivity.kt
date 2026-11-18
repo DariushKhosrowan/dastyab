@@ -3,8 +3,6 @@ package com.dastyab.app
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.BroadcastReceiver
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -113,7 +111,9 @@ class MainActivity : Activity() {
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            refreshVpnCard()
+            if (UiSafety.isActivityAlive(this@MainActivity)) {
+                refreshVpnCard()
+            }
         }
     }
 
@@ -405,17 +405,21 @@ class MainActivity : Activity() {
             }
         }
         findViewById<Button>(R.id.btnCopy).setOnClickListener {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("Dastyab output", output.text.toString()))
-            Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+            if (UiSafety.copyTextSafely(this, "Dastyab output", output.text.toString())) {
+                Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+            }
         }
         findViewById<Button>(R.id.btnShare).setOnClickListener {
             val text = output.text.toString()
             if (text.isNotEmpty()) {
-                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                val share = Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, text)
-                }, getString(R.string.share_title)))
+                }, getString(R.string.share_title))
+                if (!UiSafety.safeStartActivity(this, share)) {
+                    Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                    UiSafety.copyTextSafely(this, "Dastyab output", text)
+                }
             }
         }
         findViewById<Button>(R.id.btnHistory).setOnClickListener {
@@ -423,10 +427,13 @@ class MainActivity : Activity() {
             if (entries.isEmpty()) {
                 Toast.makeText(this, getString(R.string.history_empty), Toast.LENGTH_SHORT).show()
             } else {
-                AlertDialog.Builder(this).setTitle(getString(R.string.history_dialog_title))
-                    .setItems(entries.map { it.command }.toTypedArray()) { _, index ->
-                        argsInput.setText(entries[index].command)
-                    }.setPositiveButton(android.R.string.ok, null).show()
+                UiSafety.safeShowDialog(
+                    this,
+                    AlertDialog.Builder(this).setTitle(getString(R.string.history_dialog_title))
+                        .setItems(entries.map { it.command }.toTypedArray()) { _, index ->
+                            argsInput.setText(entries[index].command)
+                        }.setPositiveButton(android.R.string.ok, null)
+                )
             }
         }
 
@@ -444,9 +451,24 @@ class MainActivity : Activity() {
         setBusy(false)
         evaluateBinaryState()
 
+        CrashHandler.consumePendingCrashNotice()?.let { notice ->
+            showSafeModeRecoveryDialog(notice)
+        }
+
         if (intent?.getBooleanExtra(EXTRA_AUTO_CONNECT_VPN, false) == true && !DastyabVpnService.isConnected()) {
             requestStartVpn(null, null)
         }
+    }
+
+    private fun showSafeModeRecoveryDialog(notice: String) {
+        val builder = AlertDialog.Builder(this)
+            .setTitle("Safe-Mode Recovery")
+            .setMessage("The previous session closed unexpectedly:\n$notice\n\nDastYab cleared the transient fault and started safely.")
+            .setPositiveButton("View Crash Logs") { _, _ ->
+                openActivity(LogViewerActivity::class.java)
+            }
+            .setNegativeButton(android.R.string.ok, null)
+        UiSafety.safeShowDialog(this, builder)
     }
 
     override fun onResume() {
@@ -547,23 +569,25 @@ class MainActivity : Activity() {
             "$mark${l.name} (${l.mode.label})"
         } + "+ Manage / Add VPN Layers & Channels…"
 
-        AlertDialog.Builder(this)
-            .setTitle("Quick Switch VPN Layer")
-            .setItems(labels.toTypedArray()) { _, which ->
-                if (which == layers.size) {
-                    openActivity(VpnLayersActivity::class.java)
-                } else {
-                    val picked = layers[which]
-                    VpnLayerStore.activateLayer(this, picked, restartIfConnected = true)
-                    refreshVpnCard()
-                    postOutput("Switched active VPN layer → ${picked.name} (${picked.mode.label})\n")
-                    if (!DastyabVpnService.isConnected()) {
-                        requestStartVpn(null, null)
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("Quick Switch VPN Layer")
+                .setItems(labels.toTypedArray()) { _, which ->
+                    if (which == layers.size) {
+                        openActivity(VpnLayersActivity::class.java)
+                    } else {
+                        val picked = layers[which]
+                        VpnLayerStore.activateLayer(this, picked, restartIfConnected = true)
+                        refreshVpnCard()
+                        postOutput("Switched active VPN layer → ${picked.name} (${picked.mode.label})\n")
+                        if (!DastyabVpnService.isConnected()) {
+                            requestStartVpn(null, null)
+                        }
                     }
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun showGoogleRescueDialog(serviceName: String, url: String) {
@@ -574,19 +598,21 @@ class MainActivity : Activity() {
             "4. Run Clean IP & DNS Scout",
             "5. Run 7-Layer Connectivity Troubleshooter"
         )
-        AlertDialog.Builder(this)
-            .setTitle("Troubleshoot $serviceName Access")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> openBrowserUrl(serviceName, url)
-                    1 -> openRescueHub(BlackoutRescueActivity.ACTION_DNS_VPN)
-                    2 -> openRescueHub(BlackoutRescueActivity.ACTION_HARVEST)
-                    3 -> openRescueHub(BlackoutRescueActivity.ACTION_SCOUT)
-                    4 -> openRescueHub(BlackoutRescueActivity.ACTION_TROUBLESHOOT)
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("Troubleshoot $serviceName Access")
+                .setItems(options) { _, which ->
+                    when (which) {
+                        0 -> openBrowserUrl(serviceName, url)
+                        1 -> openRescueHub(BlackoutRescueActivity.ACTION_DNS_VPN)
+                        2 -> openRescueHub(BlackoutRescueActivity.ACTION_HARVEST)
+                        3 -> openRescueHub(BlackoutRescueActivity.ACTION_SCOUT)
+                        4 -> openRescueHub(BlackoutRescueActivity.ACTION_TROUBLESHOOT)
+                    }
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun openPendingGoogleUrlIfAny() {
@@ -630,13 +656,15 @@ class MainActivity : Activity() {
                     postOutput("WARNING: $serviceName unreachable (${check.detail})\n")
                     postStatus("$serviceName unreachable — tap Autopilot to auto-fix")
                     setStatusDot(DotState.RED)
-                    AlertDialog.Builder(this)
-                        .setTitle("$serviceName Not Reachable Yet")
-                        .setMessage("Live check: ${check.detail}\n\nLet 1-Tap Autopilot automatically find the fastest DoH DNS, harvest & benchmark working configs, and fix access?")
-                        .setPositiveButton("Run 1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
-                        .setNeutralButton("Open Anyway") { _, _ -> openBrowserUrl(serviceName, url) }
-                        .setNegativeButton("Rescue Tools") { _, _ -> showGoogleRescueDialog(serviceName, url) }
-                        .show()
+                    UiSafety.safeShowDialog(
+                        this,
+                        AlertDialog.Builder(this)
+                            .setTitle("$serviceName Not Reachable Yet")
+                            .setMessage("Live check: ${check.detail}\n\nLet 1-Tap Autopilot automatically find the fastest DoH DNS, harvest & benchmark working configs, and fix access?")
+                            .setPositiveButton("Run 1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
+                            .setNeutralButton("Open Anyway") { _, _ -> openBrowserUrl(serviceName, url) }
+                            .setNegativeButton("Rescue Tools") { _, _ -> showGoogleRescueDialog(serviceName, url) }
+                    )
                 }
             }
         }
@@ -718,11 +746,13 @@ class MainActivity : Activity() {
                             dialog.setPositiveButton(
                                 if (firstApp != null) "Copy Config & Open ${firstApp.name}" else "Copy Fastest Config"
                             ) { _, _ ->
-                                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                cm.setPrimaryClip(ClipData.newPlainText("DastYab Fastest Config", bestUri))
-                                Toast.makeText(this, "Fastest verified config copied!", Toast.LENGTH_LONG).show()
+                                if (UiSafety.copyTextSafely(this, "DastYab Fastest Config", bestUri)) {
+                                    Toast.makeText(this, "Fastest verified config copied!", Toast.LENGTH_LONG).show()
+                                }
                                 firstApp?.installedPackage?.let { pkg ->
-                                    packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) }
+                                    packageManager.getLaunchIntentForPackage(pkg)?.let {
+                                        UiSafety.safeStartActivity(this, it)
+                                    }
                                 }
                             }
                         }
@@ -736,7 +766,7 @@ class MainActivity : Activity() {
                         dialog.setNegativeButton(android.R.string.ok, null)
                     }
                 }
-                dialog.show()
+                UiSafety.safeShowDialog(this, dialog)
             }
         }
     }
@@ -769,32 +799,35 @@ class MainActivity : Activity() {
             setSingleLine(false)
             maxLines = 4
         }
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.vpn_btn_import_vless))
-            .setView(input)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val uri = input.text.toString().trim()
-                val parsed = TunnelConfig.parseVlessUri(uri)
-                if (uri.isEmpty()) {
-                    TunnelConfig.saveVlessUri(this, "")
-                    refreshVpnCard()
-                    postOutput("Cleared custom VLESS endpoint (using Cloudflare Edge Smart DNS).\n")
-                } else if (parsed == null) {
-                    Toast.makeText(this, getString(R.string.tunnel_vless_invalid), Toast.LENGTH_SHORT).show()
-                } else {
-                    TunnelConfig.saveVlessUri(this, uri)
-                    refreshVpnCard()
-                    postOutput("OK: Imported VLESS endpoint → ${parsed.summary()} (SNI: ${parsed.sni})\n")
-                    if (DastyabVpnService.isConnected()) {
-                        DastyabVpnService.start(this)
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.vpn_btn_import_vless))
+                .setView(input)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    val uri = input.text.toString().trim()
+                    val parsed = TunnelConfig.parseVlessUri(uri)
+                    if (uri.isEmpty()) {
+                        TunnelConfig.saveVlessUri(this, "")
+                        refreshVpnCard()
+                        postOutput("Cleared custom VLESS endpoint (using Cloudflare Edge Smart DNS).\n")
+                    } else if (parsed == null) {
+                        Toast.makeText(this, getString(R.string.tunnel_vless_invalid), Toast.LENGTH_SHORT).show()
+                    } else {
+                        TunnelConfig.saveVlessUri(this, uri)
+                        refreshVpnCard()
+                        postOutput("OK: Imported VLESS endpoint → ${parsed.summary()} (SNI: ${parsed.sni})\n")
+                        if (DastyabVpnService.isConnected()) {
+                            DastyabVpnService.start(this)
+                        }
                     }
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun refreshVpnCard() {
+        if (!UiSafety.isActivityAlive(this)) return
         val statusObj = DastyabVpnService.getStatus()
         val settings = TunnelConfig.load(this)
         val activeMode = if (statusObj.state == DastyabVpnService.State.CONNECTED) statusObj.mode else settings.mode
@@ -889,12 +922,14 @@ class MainActivity : Activity() {
                     "Exit IP: Unreachable (try 1-Tap Autopilot or DNS Blackout)"
                 }
                 val msg = "$ipLine\n\nWeb: ${check.internet.detail}\nAI Studio: ${check.aiStudio.detail}\nGoogle Flow: ${check.flow.detail}"
-                AlertDialog.Builder(this)
-                    .setTitle("Live Speed & Reachability")
-                    .setMessage(msg)
-                    .setPositiveButton("Run 1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
-                    .setNegativeButton(android.R.string.ok, null)
-                    .show()
+                UiSafety.safeShowDialog(
+                    this,
+                    AlertDialog.Builder(this)
+                        .setTitle("Live Speed & Reachability")
+                        .setMessage(msg)
+                        .setPositiveButton("Run 1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
+                        .setNegativeButton(android.R.string.ok, null)
+                )
             }
         }
     }
@@ -1161,8 +1196,16 @@ class MainActivity : Activity() {
     /** Enqueue and teardown use the same lock: no callbacks can be added after teardown. */
     private fun postUi(action: () -> Unit) {
         synchronized(uiLock) {
-            if (!destroyed) handler.post {
-                synchronized(uiLock) { if (!destroyed) action() }
+            if (!destroyed && UiSafety.isActivityAlive(this)) handler.post {
+                synchronized(uiLock) {
+                    if (!destroyed && UiSafety.isActivityAlive(this)) {
+                        try {
+                            action()
+                        } catch (t: Throwable) {
+                            DastyabLogger.e("MainActivity", t, "Suppressed UI callback error")
+                        }
+                    }
+                }
             }
         }
     }

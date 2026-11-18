@@ -120,6 +120,23 @@ object DastyabLogger {
         log(LogLevel.ERROR, tag, formatted)
     }
 
+    /** Best-effort non-blocking error log safe to invoke inside UncaughtExceptionHandler. */
+    fun eNonBlocking(tag: String, throwable: Throwable, message: String, vararg args: Any?) {
+        val formatted = format(message, args) + "\n" + formatThrowable(throwable)
+        try { Log.println(Log.ERROR, tag, formatted) } catch (_: Throwable) {}
+        val acquired = try {
+            lock.tryLock(150, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: InterruptedException) {
+            false
+        }
+        if (!acquired) return
+        try {
+            writeEntryLocked(LogLevel.ERROR, tag, formatted)
+        } finally {
+            lock.unlock()
+        }
+    }
+
     fun w(tag: String, throwable: Throwable, message: String, vararg args: Any?) {
         val formatted = format(message, args) + "\n" + formatThrowable(throwable)
         log(LogLevel.WARN, tag, formatted)
@@ -145,36 +162,39 @@ object DastyabLogger {
 
     fun getLatestLog(): String? {
         val files = getLogFiles()
-        return if (files.isEmpty()) null else files[0].readText()
+        return if (files.isEmpty()) null else try { files[0].readText() } catch (_: Throwable) { null }
     }
 
     private fun log(level: LogLevel, tag: String, message: String) {
         if (level.priority < levelForTag(tag).priority) return
-        val now = Date()
-        val thread = Thread.currentThread().name
-
-        try { Log.println(level.logcat, tag, message) } catch (_: Exception) {}
+        try { Log.println(level.logcat, tag, message) } catch (_: Throwable) {}
 
         lock.lock()
         try {
-            val timestamp = dateFormat.format(now)
-            val entry = LogEntry(
-                timestampMs = now.time,
-                timestampIso = timestamp,
-                thread = thread,
-                tag = tag,
-                level = level.name,
-                message = message,
-                appVersion = appVersion,
-                deviceModel = deviceModel,
-                sdkInt = sdkInt,
-                abi = abi,
-                sessionId = sessionId
-            )
-            writeToFile(entry.toLogLine())
+            writeEntryLocked(level, tag, message)
         } finally {
             lock.unlock()
         }
+    }
+
+    private fun writeEntryLocked(level: LogLevel, tag: String, message: String) {
+        val now = Date()
+        val thread = Thread.currentThread().name
+        val timestamp = dateFormat.format(now)
+        val entry = LogEntry(
+            timestampMs = now.time,
+            timestampIso = timestamp,
+            thread = thread,
+            tag = tag,
+            level = level.name,
+            message = message,
+            appVersion = appVersion,
+            deviceModel = deviceModel,
+            sdkInt = sdkInt,
+            abi = abi,
+            sessionId = sessionId
+        )
+        writeToFile(entry.toLogLine())
     }
 
     private fun writeToFile(line: String) {

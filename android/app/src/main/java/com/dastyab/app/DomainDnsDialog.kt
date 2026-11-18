@@ -123,7 +123,7 @@ object DomainDnsDialog {
         root.addView(btnRow)
         root.addView(tvSummary)
 
-        AlertDialog.Builder(context)
+        val builder = AlertDialog.Builder(context)
             .setTitle(context.getString(R.string.dns_rules_title))
             .setView(scroll)
             .setPositiveButton(android.R.string.ok, null)
@@ -133,6 +133,6 @@ object DomainDnsDialog {
                 onChanged?.invoke()
                 Toast.makeText(context, "Cleared custom DNS rules", Toast.LENGTH_SHORT).show()
             }
-            .show()
+        UiSafety.safeShowDialog(context, builder)
     }
 }

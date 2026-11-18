@@ -107,8 +107,10 @@ class TunnelSettingsActivity : Activity() {
         }
 
         findViewById<Button>(R.id.btnPasteVless).setOnClickListener {
-            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val text = cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()?.trim().orEmpty()
+            val text = runCatching {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                cm?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()?.trim().orEmpty()
+            }.getOrDefault("")
             if (text.isEmpty()) {
                 Toast.makeText(this, getString(R.string.tunnel_clipboard_empty), Toast.LENGTH_SHORT).show()
             } else {
@@ -168,19 +170,21 @@ class TunnelSettingsActivity : Activity() {
         val labels = apps.map { "${it.first} (${it.second})" }.toTypedArray()
         val checked = BooleanArray(apps.size) { i -> selectedPackages.contains(apps[i].second) }
 
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.tunnel_pick_apps_title))
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                val pkg = apps[which].second
-                if (isChecked) selectedPackages.add(pkg) else selectedPackages.remove(pkg)
-            }
-            .setPositiveButton(android.R.string.ok) { _, _ -> updateSplitSummary() }
-            .setNeutralButton(getString(R.string.tunnel_clear_apps)) { _, _ ->
-                selectedPackages.clear()
-                updateSplitSummary()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.tunnel_pick_apps_title))
+                .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                    val pkg = apps[which].second
+                    if (isChecked) selectedPackages.add(pkg) else selectedPackages.remove(pkg)
+                }
+                .setPositiveButton(android.R.string.ok) { _, _ -> updateSplitSummary() }
+                .setNeutralButton(getString(R.string.tunnel_clear_apps)) { _, _ ->
+                    selectedPackages.clear()
+                    updateSplitSummary()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun saveAndApply() {

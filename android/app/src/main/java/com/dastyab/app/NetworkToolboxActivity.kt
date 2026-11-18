@@ -2,8 +2,6 @@ package com.dastyab.app
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
 import android.os.Handler
@@ -66,7 +64,7 @@ class NetworkToolboxActivity : Activity() {
         setBusy(true, "Fetching Exit IP & Cloudflare Edge Trace…\n")
         thread(isDaemon = true, name = "dastyab-trace") {
             val trace = NetworkTools.fetchExitTrace()
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 setBusy(false)
                 if (trace == null) {
                     tvOutput.text = "ERROR: Could not reach Cloudflare trace.\nTip: Activate Smart VPN or Emergency DNS Blackout VPN."
@@ -91,7 +89,7 @@ class NetworkToolboxActivity : Activity() {
         setBusy(true, "Checking DNS poisoning for $host…\n")
         thread(isDaemon = true, name = "dastyab-dns-check") {
             val res = NetworkTools.checkDnsPoisoning(host, dohUrl)
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 setBusy(false)
                 tvOutput.text = buildString {
                     append("=== DNS POISONING DETECTOR ===\n")
@@ -110,7 +108,7 @@ class NetworkToolboxActivity : Activity() {
         setBusy(true, "Inspecting TLS / SNI handshake & certificate for $host:443…\n")
         thread(isDaemon = true, name = "dastyab-tls") {
             val res = NetworkTools.inspectTlsHandshake(host, 443)
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 setBusy(false)
                 tvOutput.text = if (!res.connected) {
                     "=== TLS / SNI INSPECTOR ===\nTarget: ${res.host}:${res.port}\nStatus: FAILED / RESET\nError : ${res.error}\n\nTip: SNI/TLS DPI reset detected. Use Clean IP Scout or DNS Blackout VPN."
@@ -134,7 +132,7 @@ class NetworkToolboxActivity : Activity() {
         setBusy(true, "Running 3x TCP port-443 latency probes to $host…\n")
         thread(isDaemon = true, name = "dastyab-ping") {
             val samples = (1..3).map { CleanEndpointScout.probeTcpLatency(host, 443, 2500) }
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 setBusy(false)
                 val valid = samples.filter { it >= 0 }
                 val avg = if (valid.isNotEmpty()) "${valid.average().toLong()} ms" else "FAILED"
@@ -155,25 +153,27 @@ class NetworkToolboxActivity : Activity() {
             setSingleLine(false)
             maxLines = 5
         }
-        AlertDialog.Builder(this)
-            .setTitle("Base64 Subscription Codec")
-            .setView(input)
-            .setPositiveButton("Decode") { _, _ ->
-                val decoded = NetworkTools.decodeBase64(input.text.toString())
-                if (decoded == null) {
-                    Toast.makeText(this, "Invalid Base64 text.", Toast.LENGTH_SHORT).show()
-                } else {
-                    tvOutput.text = "=== DECODED SUBSCRIPTION ===\n$decoded"
-                    copyToClipboard("Decoded Sub", decoded)
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("Base64 Subscription Codec")
+                .setView(input)
+                .setPositiveButton("Decode") { _, _ ->
+                    val decoded = NetworkTools.decodeBase64(input.text.toString())
+                    if (decoded == null) {
+                        Toast.makeText(this, "Invalid Base64 text.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        tvOutput.text = "=== DECODED SUBSCRIPTION ===\n$decoded"
+                        copyToClipboard("Decoded Sub", decoded)
+                    }
                 }
-            }
-            .setNeutralButton("Encode") { _, _ ->
-                val encoded = NetworkTools.encodeBase64(input.text.toString())
-                tvOutput.text = "=== ENCODED BASE64 ===\n$encoded"
-                copyToClipboard("Encoded Sub", encoded)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNeutralButton("Encode") { _, _ ->
+                    val encoded = NetworkTools.encodeBase64(input.text.toString())
+                    tvOutput.text = "=== ENCODED BASE64 ===\n$encoded"
+                    copyToClipboard("Encoded Sub", encoded)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun showCidrGeneratorDialog() {
@@ -181,22 +181,24 @@ class NetworkToolboxActivity : Activity() {
             hint = "IPv4 CIDR (e.g. 104.16.0.0/16)"
             setText("104.16.0.0/16")
         }
-        AlertDialog.Builder(this)
-            .setTitle("CIDR IPv4 Candidate Generator")
-            .setView(input)
-            .setPositiveButton("Generate 15 IPs") { _, _ ->
-                val cidr = input.text.toString().trim()
-                val ips = CleanEndpointScout.sampleIpsFromCidr(cidr, 15)
-                if (ips.isEmpty()) {
-                    Toast.makeText(this, "Invalid IPv4 CIDR (prefix must be /8../30).", Toast.LENGTH_SHORT).show()
-                } else {
-                    val text = ips.joinToString("\n")
-                    tvOutput.text = "=== GENERATED IPs FROM $cidr ===\n$text"
-                    copyToClipboard("CIDR IPs", text)
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("CIDR IPv4 Candidate Generator")
+                .setView(input)
+                .setPositiveButton("Generate 15 IPs") { _, _ ->
+                    val cidr = input.text.toString().trim()
+                    val ips = CleanEndpointScout.sampleIpsFromCidr(cidr, 15)
+                    if (ips.isEmpty()) {
+                        Toast.makeText(this, "Invalid IPv4 CIDR (prefix must be /8../30).", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val text = ips.joinToString("\n")
+                        tvOutput.text = "=== GENERATED IPs FROM $cidr ===\n$text"
+                        copyToClipboard("CIDR IPs", text)
+                    }
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun showUriInspectorDialog() {
@@ -207,39 +209,46 @@ class NetworkToolboxActivity : Activity() {
             setSingleLine(false)
             maxLines = 4
         }
-        AlertDialog.Builder(this)
-            .setTitle("VLESS URI Inspector")
-            .setView(input)
-            .setPositiveButton("Inspect") { _, _ ->
-                val parsed = TunnelConfig.parseVlessUri(input.text.toString())
-                if (parsed == null) {
-                    Toast.makeText(this, "Invalid vless:// URI.", Toast.LENGTH_SHORT).show()
-                } else {
-                    tvOutput.text = buildString {
-                        append("=== VLESS URI DECODED ===\n")
-                        append("Label    : ${parsed.label.ifBlank { "(none)" }}\n")
-                        append("UUID     : ${parsed.uuid}\n")
-                        append("Host     : ${parsed.host}\n")
-                        append("Port     : ${parsed.port}\n")
-                        append("SNI      : ${parsed.sni}\n")
-                        append("Path     : ${parsed.path}\n")
-                        append("Transport: ${parsed.transport}\n")
-                        append("Security : ${parsed.security}\n")
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("VLESS URI Inspector")
+                .setView(input)
+                .setPositiveButton("Inspect") { _, _ ->
+                    val parsed = TunnelConfig.parseVlessUri(input.text.toString())
+                    if (parsed == null) {
+                        Toast.makeText(this, "Invalid vless:// URI.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        tvOutput.text = buildString {
+                            append("=== VLESS URI DECODED ===\n")
+                            append("Label    : ${parsed.label.ifBlank { "(none)" }}\n")
+                            append("UUID     : ${parsed.uuid}\n")
+                            append("Host     : ${parsed.host}\n")
+                            append("Port     : ${parsed.port}\n")
+                            append("SNI      : ${parsed.sni}\n")
+                            append("Path     : ${parsed.path}\n")
+                            append("Transport: ${parsed.transport}\n")
+                            append("Security : ${parsed.security}\n")
+                        }
                     }
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun copyToClipboard(label: String, text: String) {
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText(label, text))
-        Toast.makeText(this, "Result copied to clipboard!", Toast.LENGTH_SHORT).show()
+        if (UiSafety.copyTextSafely(this, label, text)) {
+            Toast.makeText(this, "Result copied to clipboard!", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun setBusy(busy: Boolean, initialMsg: String? = null) {
         progress.visibility = if (busy) View.VISIBLE else View.GONE
         if (initialMsg != null) tvOutput.text = initialMsg
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 }

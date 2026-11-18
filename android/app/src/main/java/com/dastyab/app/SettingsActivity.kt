@@ -1,6 +1,7 @@
 package com.dastyab.app
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
@@ -28,6 +29,10 @@ class SettingsActivity : Activity() {
     private lateinit var levelSpinner: Spinner
     private lateinit var cbAutoUpdate: CheckBox
     private lateinit var tvStatus: TextView
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,17 +102,18 @@ class SettingsActivity : Activity() {
 
         // ── Force re-download binary ──
         btnForceRedownload.setOnClickListener {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW,
-                    android.net.Uri.parse("https://github.com/DastYab/dastyab/releases")))
-            } catch (_: android.content.ActivityNotFoundException) {
+            val opened = UiSafety.safeStartActivity(
+                this,
+                Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/DastYab/dastyab/releases"))
+            )
+            if (!opened) {
                 setStatus("Open github.com/DastYab/dastyab/releases in a browser to update the app.")
             }
         }
 
         // ── About ──
         btnAbout.setOnClickListener {
-            startActivity(Intent(this, AboutActivity::class.java))
+            UiSafety.safeStartActivity(this, Intent(this, AboutActivity::class.java))
         }
     }
 

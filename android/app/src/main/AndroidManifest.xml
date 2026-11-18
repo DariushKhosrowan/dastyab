@@ -18,11 +18,13 @@
     </queries>
 
     <application
+        android:name=".DastyabApplication"
         android:extractNativeLibs="true"
         android:allowBackup="false"
         android:fullBackupContent="false"
-        android:icon="@drawable/ic_launcher_dastyab"
-        android:roundIcon="@drawable/ic_launcher_dastyab"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="Dastyab"
         android:theme="@style/DastyabTheme"
         android:hardwareAccelerated="true"
@@ -97,7 +99,7 @@
 
         <service
             android:name=".DastyabVpnTileService"
-            android:icon="@drawable/ic_action_vpn"
+            android:icon="@drawable/ic_notification_vpn"
             android:label="DastYab VPN"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">
@@ -122,11 +124,12 @@
 
         <receiver
             android:name=".BootReconnectReceiver"
+            android:directBootAware="false"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
     </application>

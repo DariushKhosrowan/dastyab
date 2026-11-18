@@ -11,8 +11,8 @@ android {
         applicationId = "com.dastyab.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 13
-        versionName = "0.3.1"
+        versionCode = 14
+        versionName = "0.3.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -25,14 +25,39 @@ android {
         }
     }
 
+    if (project.hasProperty("abiSplits")) {
+        splits {
+            abi {
+                isEnable = true
+                reset()
+                include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+                isUniversalApk = true
+            }
+        }
+    }
+
     signingConfigs {
         create("release") {
-            // Stable, in-repo signing config (project is public; key is a
-            // dedicated Dastyab release key, not shared with other apps).
-            storeFile = rootProject.file("dastyab-release.keystore")
-            storePassword = "dastyab-release"
-            keyAlias = "dastyab"
-            keyPassword = "dastyab-release"
+            val signingPropsFile = rootProject.file("signing.properties")
+            if (signingPropsFile.isFile) {
+                val props = java.util.Properties().apply {
+                    signingPropsFile.inputStream().use { load(it) }
+                }
+                storeFile = rootProject.file(props.getProperty("storeFile", "dastyab-release.keystore"))
+                storePassword = props.getProperty("storePassword", "dastyab-release")
+                keyAlias = props.getProperty("keyAlias", "dastyab")
+                keyPassword = props.getProperty("keyPassword", "dastyab-release")
+            } else {
+                // Stable, in-repo signing config (project is public; key is a
+                // dedicated Dastyab release key, not shared with other apps).
+                storeFile = rootProject.file("dastyab-release.keystore")
+                storePassword = "dastyab-release"
+                keyAlias = "dastyab"
+                keyPassword = "dastyab-release"
+            }
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
 
@@ -45,8 +70,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Configure your release signing in android/signing.properties or
-            // via Gradle properties: android.injected.signing.store.file etc.
         }
         debug {
             isMinifyEnabled = false
@@ -93,4 +116,56 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test:rules:1.5.0")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.2.0")
+}
+
+val verifyNativeJniLibs by tasks.registering {
+    group = "verification"
+    description = "Verify all 4 Android ABIs have valid ELF libdastyab.so binaries before APK packaging."
+    doLast {
+        if (project.hasProperty("skipNativeCheck")) return@doLast
+        val jniDir = file("src/main/jniLibs")
+        val expected = mapOf(
+            "arm64-v8a" to Pair(2, 183),
+            "armeabi-v7a" to Pair(1, 40),
+            "x86_64" to Pair(2, 62),
+            "x86" to Pair(1, 3)
+        )
+        for ((abi, spec) in expected) {
+            val so = java.io.File(jniDir, "$abi/libdastyab.so")
+            if (!so.isFile || so.length() < 4096L) {
+                throw GradleException(
+                    "Missing or invalid native binary at ${so.path}. " +
+                        "Run: bash scripts/android-build-native.sh android/app/src/main/jniLibs"
+                )
+            }
+            val header = ByteArray(20)
+            so.inputStream().use { ins ->
+                if (ins.read(header) != 20) {
+                    throw GradleException("Truncated ELF header in ${so.path}")
+                }
+            }
+            if (header[0] != 0x7f.toByte() ||
+                header[1] != 'E'.code.toByte() ||
+                header[2] != 'L'.code.toByte() ||
+                header[3] != 'F'.code.toByte() ||
+                header[5] != 1.toByte()
+            ) {
+                throw GradleException("Invalid little-endian ELF magic in ${so.path}")
+            }
+            val elfClass = header[4].toInt() and 0xFF
+            val machine = (header[18].toInt() and 0xFF) or ((header[19].toInt() and 0xFF) shl 8)
+            if (elfClass != spec.first || machine != spec.second) {
+                throw GradleException(
+                    "ABI mismatch in ${so.path}: got class=$elfClass machine=$machine, " +
+                        "expected ${spec.first}/${spec.second}"
+                )
+            }
+        }
+    }
+}
+
+tasks.matching {
+    it.name == "mergeReleaseJniLibFolders" || it.name == "mergeDebugJniLibFolders"
+}.configureEach {
+    dependsOn(verifyNativeJniLibs)
 }

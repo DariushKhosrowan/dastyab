@@ -1,8 +1,11 @@
 package com.dastyab.app
 
+import android.app.Activity
+import android.content.Intent
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -17,6 +20,13 @@ import java.util.concurrent.TimeUnit
 class MainActivityTest {
     @get:Rule
     val activityRule = ActivityScenarioRule(MainActivity::class.java)
+
+    @Test
+    fun applicationBootstrapsLoggerAndCrashHandler() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
+        assertTrue("Application must be DastyabApplication", app is DastyabApplication)
+        assertNotNull("Logger dir must be initialized by Application", DastyabLogger.getLogDir())
+    }
 
     @Test
     fun bundledEngineRunsOfflineInAppSandbox() {
@@ -64,6 +74,27 @@ class MainActivityTest {
         activityRule.scenario.recreate()
         activityRule.scenario.onActivity {
             assertTrue(it.findViewById<TextView>(R.id.output).text.contains("exit code 0"))
+        }
+    }
+
+    @Test
+    fun allActivitiesLaunchWithoutCrashing() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val targets: List<Class<out Activity>> = listOf(
+            AboutActivity::class.java,
+            SettingsActivity::class.java,
+            LogViewerActivity::class.java,
+            TunnelSettingsActivity::class.java,
+            BlackoutRescueActivity::class.java,
+            VpnLayersActivity::class.java,
+            NetworkToolboxActivity::class.java
+        )
+        for (cls in targets) {
+            ActivityScenario.launch<Activity>(Intent(context, cls)).use { scenario ->
+                scenario.onActivity { act ->
+                    assertTrue("${cls.simpleName} should remain alive", UiSafety.isActivityAlive(act))
+                }
+            }
         }
     }
 }

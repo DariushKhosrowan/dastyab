@@ -130,8 +130,7 @@ class BlackoutRescueActivity : Activity() {
                 setOnClickListener {
                     if (tool.isInstalled && tool.installedPackage != null) {
                         val launch = packageManager.getLaunchIntentForPackage(tool.installedPackage)
-                        if (launch != null) {
-                            startActivity(launch)
+                        if (launch != null && UiSafety.safeStartActivity(this@BlackoutRescueActivity, launch)) {
                             Toast.makeText(
                                 this@BlackoutRescueActivity,
                                 "Connect ${tool.name}, then return to DastYab and tap Smart Harvest.",
@@ -164,7 +163,7 @@ class BlackoutRescueActivity : Activity() {
             val report = ConfigHarvester.harvestResilient(this) { line ->
                 appendLog("$line\n")
             }
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 setLoading(false)
                 busy.set(false)
                 refreshHarvestSummary()
@@ -194,24 +193,28 @@ class BlackoutRescueActivity : Activity() {
         if (report.installedFallbackTools.isNotEmpty()) {
             options.add("4. Launch Installed Fallback VPN (${report.installedFallbackTools.first().name})")
         }
-        AlertDialog.Builder(this)
-            .setTitle("GitHub & Telegram Unreachable")
-            .setMessage(report.guidance)
-            .setItems(options.toTypedArray()) { _, which ->
-                when (which) {
-                    0 -> activateDnsBlackoutVpn()
-                    1 -> showBootstrapConfigDialog()
-                    2 -> runCleanDnsScout()
-                    3 -> {
-                        val pkg = report.installedFallbackTools.firstOrNull()?.installedPackage
-                        if (pkg != null) {
-                            packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) }
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("GitHub & Telegram Unreachable")
+                .setMessage(report.guidance)
+                .setItems(options.toTypedArray()) { _, which ->
+                    when (which) {
+                        0 -> activateDnsBlackoutVpn()
+                        1 -> showBootstrapConfigDialog()
+                        2 -> runCleanDnsScout()
+                        3 -> {
+                            val pkg = report.installedFallbackTools.firstOrNull()?.installedPackage
+                            if (pkg != null) {
+                                packageManager.getLaunchIntentForPackage(pkg)?.let {
+                                    UiSafety.safeStartActivity(this, it)
+                                }
+                            }
                         }
                     }
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun showHarvestedConfigsDialog() {
@@ -230,27 +233,29 @@ class BlackoutRescueActivity : Activity() {
             }
         }.toTypedArray()
 
-        AlertDialog.Builder(this)
-            .setTitle("Harvested Config Pool (${configs.size})")
-            .setItems(labels) { _, which ->
-                val chosen = configs[which]
-                if (chosen.startsWith("vless://", ignoreCase = true)) {
-                    TunnelConfig.saveVlessUri(this, chosen)
-                    Toast.makeText(this, "Applied VLESS config to DastYab VPN!", Toast.LENGTH_SHORT).show()
-                    appendLog("Applied harvested config #${which + 1} as active VPN endpoint.\n")
-                    if (DastyabVpnService.isConnected()) {
-                        DastyabVpnService.start(this)
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("Harvested Config Pool (${configs.size})")
+                .setItems(labels) { _, which ->
+                    val chosen = configs[which]
+                    if (chosen.startsWith("vless://", ignoreCase = true)) {
+                        TunnelConfig.saveVlessUri(this, chosen)
+                        Toast.makeText(this, "Applied VLESS config to DastYab VPN!", Toast.LENGTH_SHORT).show()
+                        appendLog("Applied harvested config #${which + 1} as active VPN endpoint.\n")
+                        if (DastyabVpnService.isConnected()) {
+                            DastyabVpnService.start(this)
+                        }
+                    } else {
+                        if (UiSafety.copyTextSafely(this, "DastYab Config", chosen)) {
+                            Toast.makeText(this, "Copied ${ConfigHarvester.protocolOf(chosen).uppercase()} config to clipboard!", Toast.LENGTH_SHORT).show()
+                        }
+                        TunnelConfig.saveBootstrapConfig(this, chosen)
+                        appendLog("Copied harvested config #${which + 1} to clipboard.\n")
                     }
-                } else {
-                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("DastYab Config", chosen))
-                    TunnelConfig.saveBootstrapConfig(this, chosen)
-                    Toast.makeText(this, "Copied ${ConfigHarvester.protocolOf(chosen).uppercase()} config to clipboard!", Toast.LENGTH_SHORT).show()
-                    appendLog("Copied harvested config #${which + 1} to clipboard.\n")
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun showBootstrapConfigDialog() {
@@ -261,40 +266,44 @@ class BlackoutRescueActivity : Activity() {
             setSingleLine(false)
             maxLines = 5
         }
-        AlertDialog.Builder(this)
-            .setTitle("Temporary Base Bootstrap Config")
-            .setMessage("When GitHub & Telegram are blocked, paste any single working config here. DastYab will save it, connect VPN, and let you harvest fresh free configs through it.")
-            .setView(input)
-            .setPositiveButton("Save & Connect") { _, _ ->
-                val cfg = input.text.toString().trim()
-                if (cfg.isEmpty()) {
-                    TunnelConfig.saveBootstrapConfig(this, "")
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("Temporary Base Bootstrap Config")
+                .setMessage("When GitHub & Telegram are blocked, paste any single working config here. DastYab will save it, connect VPN, and let you harvest fresh free configs through it.")
+                .setView(input)
+                .setPositiveButton("Save & Connect") { _, _ ->
+                    val cfg = input.text.toString().trim()
+                    if (cfg.isEmpty()) {
+                        TunnelConfig.saveBootstrapConfig(this, "")
+                        refreshHarvestSummary()
+                        return@setPositiveButton
+                    }
+                    TunnelConfig.saveBootstrapConfig(this, cfg)
                     refreshHarvestSummary()
-                    return@setPositiveButton
+                    appendLog("Saved temporary bootstrap config (${ConfigHarvester.protocolOf(cfg).uppercase()}).\n")
+                    if (cfg.startsWith("vless://", ignoreCase = true)) {
+                        TunnelConfig.saveMode(this, TunnelConfig.Mode.SMART)
+                        requestStartVpnNow()
+                    } else {
+                        if (UiSafety.copyTextSafely(this, "Bootstrap Config", cfg)) {
+                            Toast.makeText(this, "Saved & copied! Connect it in v2rayNG/Hiddify, then tap Smart Harvest.", Toast.LENGTH_LONG).show()
+                        }
+                    }
                 }
-                TunnelConfig.saveBootstrapConfig(this, cfg)
-                refreshHarvestSummary()
-                appendLog("Saved temporary bootstrap config (${ConfigHarvester.protocolOf(cfg).uppercase()}).\n")
-                if (cfg.startsWith("vless://", ignoreCase = true)) {
-                    TunnelConfig.saveMode(this, TunnelConfig.Mode.SMART)
-                    requestStartVpnNow()
-                } else {
-                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("Bootstrap Config", cfg))
-                    Toast.makeText(this, "Saved & copied! Connect it in v2rayNG/Hiddify, then tap Smart Harvest.", Toast.LENGTH_LONG).show()
+                .setNeutralButton("Paste") { _, _ ->
+                    val clip = runCatching {
+                        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        cm?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+                    }.getOrDefault("")
+                    if (clip.isNotBlank()) {
+                        TunnelConfig.saveBootstrapConfig(this, clip)
+                        refreshHarvestSummary()
+                        Toast.makeText(this, "Pasted & saved bootstrap config!", Toast.LENGTH_SHORT).show()
+                    }
                 }
-            }
-            .setNeutralButton("Paste") { _, _ ->
-                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
-                if (clip.isNotBlank()) {
-                    TunnelConfig.saveBootstrapConfig(this, clip)
-                    refreshHarvestSummary()
-                    Toast.makeText(this, "Pasted & saved bootstrap config!", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun activateDnsBlackoutVpn() {
@@ -341,12 +350,12 @@ class BlackoutRescueActivity : Activity() {
 
         thread(isDaemon = true, name = "dastyab-ip-scout") {
             val results = CleanEndpointScout.scoutCleanEdgeIps()
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 setLoading(false)
                 busy.set(false)
                 if (results.isEmpty()) {
                     appendLog("No clean edge IPs responded within 1.8s.\nTip: Try Clean DNS Scout or Emergency DNS Blackout VPN.\n")
-                    return@post
+                    return@safePostUi
                 }
                 appendLog("Found ${results.size} reachable Clean Edge IPs:\n")
                 results.take(10).forEach { r ->
@@ -359,28 +368,30 @@ class BlackoutRescueActivity : Activity() {
 
     private fun showApplyScoutedIpDialog(results: List<CleanEndpointScout.EndpointResult>) {
         val items = results.map { "${it.address}  ·  ${it.latencyMs} ms  (${it.label})" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("Clean Edge IPs Found — Tap to Apply")
-            .setItems(items) { _, which ->
-                val chosenIp = results[which].address
-                val current = TunnelConfig.load(this).vlessUri
-                val patched = if (current.isNotBlank()) {
-                    CleanEndpointScout.patchVlessWithCleanIp(current, chosenIp)
-                } else null
-                if (patched != null) {
-                    TunnelConfig.saveVlessUri(this, patched)
-                    Toast.makeText(this, "Patched active VLESS config with $chosenIp!", Toast.LENGTH_SHORT).show()
-                    appendLog("Patched VLESS endpoint with Clean IP $chosenIp.\n")
-                    if (DastyabVpnService.isConnected()) DastyabVpnService.start(this)
-                } else {
-                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("Clean Edge IP", chosenIp))
-                    Toast.makeText(this, "Copied Clean IP $chosenIp to clipboard!", Toast.LENGTH_SHORT).show()
-                    appendLog("Copied Clean IP $chosenIp to clipboard (import a vless:// link to auto-patch).\n")
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("Clean Edge IPs Found — Tap to Apply")
+                .setItems(items) { _, which ->
+                    val chosenIp = results[which].address
+                    val current = TunnelConfig.load(this).vlessUri
+                    val patched = if (current.isNotBlank()) {
+                        CleanEndpointScout.patchVlessWithCleanIp(current, chosenIp)
+                    } else null
+                    if (patched != null) {
+                        TunnelConfig.saveVlessUri(this, patched)
+                        Toast.makeText(this, "Patched active VLESS config with $chosenIp!", Toast.LENGTH_SHORT).show()
+                        appendLog("Patched VLESS endpoint with Clean IP $chosenIp.\n")
+                        if (DastyabVpnService.isConnected()) DastyabVpnService.start(this)
+                    } else {
+                        if (UiSafety.copyTextSafely(this, "Clean Edge IP", chosenIp)) {
+                            Toast.makeText(this, "Copied Clean IP $chosenIp to clipboard!", Toast.LENGTH_SHORT).show()
+                        }
+                        appendLog("Copied Clean IP $chosenIp to clipboard (import a vless:// link to auto-patch).\n")
+                    }
                 }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun runCleanDnsScout() {
@@ -390,35 +401,37 @@ class BlackoutRescueActivity : Activity() {
 
         thread(isDaemon = true, name = "dastyab-dns-scout") {
             val results = CleanEndpointScout.scoutCleanDnsAndDoh()
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 setLoading(false)
                 busy.set(false)
                 if (results.isEmpty()) {
                     appendLog("No external DNS or DoH resolvers responded.\nTip: Try an installed fallback VPN (Tor/Orbot, Lantern, SlipNet, WhiteVPN).\n")
-                    return@post
+                    return@safePostUi
                 }
                 appendLog("Found ${results.size} reachable DNS / DoH resolvers:\n")
                 results.take(10).forEach { r ->
                     appendLog("  • ${r.label}: ${r.address} (${r.latencyMs} ms)\n")
                 }
                 val items = results.take(10).map { "${it.label} · ${it.latencyMs} ms" }.toTypedArray()
-                AlertDialog.Builder(this)
-                    .setTitle("Reachable Clean DNS / DoH — Tap to Apply")
-                    .setItems(items) { _, which ->
-                        val picked = results[which]
-                        if (picked.kind == CleanEndpointScout.Kind.DOH) {
-                            TunnelConfig.saveDohAndDns(this, picked.address, null)
-                            Toast.makeText(this, "Set DoH resolver: ${picked.label}", Toast.LENGTH_SHORT).show()
-                            appendLog("Applied DoH resolver → ${picked.address}\n")
-                        } else {
-                            TunnelConfig.saveDohAndDns(this, null, picked.address)
-                            Toast.makeText(this, "Set Primary DNS: ${picked.address}", Toast.LENGTH_SHORT).show()
-                            appendLog("Applied Primary Clean DNS → ${picked.address}\n")
+                UiSafety.safeShowDialog(
+                    this,
+                    AlertDialog.Builder(this)
+                        .setTitle("Reachable Clean DNS / DoH — Tap to Apply")
+                        .setItems(items) { _, which ->
+                            val picked = results[which]
+                            if (picked.kind == CleanEndpointScout.Kind.DOH) {
+                                TunnelConfig.saveDohAndDns(this, picked.address, null)
+                                Toast.makeText(this, "Set DoH resolver: ${picked.label}", Toast.LENGTH_SHORT).show()
+                                appendLog("Applied DoH resolver → ${picked.address}\n")
+                            } else {
+                                TunnelConfig.saveDohAndDns(this, null, picked.address)
+                                Toast.makeText(this, "Set Primary DNS: ${picked.address}", Toast.LENGTH_SHORT).show()
+                                appendLog("Applied Primary Clean DNS → ${picked.address}\n")
+                            }
+                            if (DastyabVpnService.isConnected()) DastyabVpnService.start(this)
                         }
-                        if (DastyabVpnService.isConnected()) DastyabVpnService.start(this)
-                    }
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show()
+                        .setNegativeButton(android.R.string.cancel, null)
+                )
             }
         }
     }
@@ -432,7 +445,7 @@ class BlackoutRescueActivity : Activity() {
             val report = ConnectivityTroubleshooter.runLiveDiagnostics(this) { step ->
                 appendLog("  • $step\n")
             }
-            handler.post {
+            UiSafety.safePostUi(this, handler) {
                 setLoading(false)
                 busy.set(false)
                 tvDiagnosisHeadline.text = "${report.headline}\n${report.summary}"
@@ -458,39 +471,38 @@ class BlackoutRescueActivity : Activity() {
 
     private fun showRescuePlanDialog(report: ConnectivityTroubleshooter.DiagnosticReport) {
         val labels = report.rescueSteps.mapIndexed { i, step -> "${i + 1}. ${step.title} — ${step.detail}" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(report.headline)
-            .setItems(labels) { _, which ->
-                when (report.rescueSteps[which].actionId) {
-                    ConnectivityTroubleshooter.RescueActionId.CONNECT_SMART_VPN -> {
-                        TunnelConfig.saveMode(this, TunnelConfig.Mode.SMART)
-                        requestStartVpnNow()
-                    }
-                    ConnectivityTroubleshooter.RescueActionId.ENABLE_DNS_BLACKOUT_VPN -> activateDnsBlackoutVpn()
-                    ConnectivityTroubleshooter.RescueActionId.HARVEST_CONFIGS -> runSmartHarvest()
-                    ConnectivityTroubleshooter.RescueActionId.RUN_IP_SCOUT -> runEdgeIpScout()
-                    ConnectivityTroubleshooter.RescueActionId.SET_BOOTSTRAP_CONFIG -> showBootstrapConfigDialog()
-                    ConnectivityTroubleshooter.RescueActionId.LAUNCH_FALLBACK_VPN -> {
-                        val installed = ConfigHarvester.detectFallbackTools(this).firstOrNull { it.isInstalled }
-                        if (installed?.installedPackage != null) {
-                            packageManager.getLaunchIntentForPackage(installed.installedPackage)?.let { startActivity(it) }
-                        } else {
-                            Toast.makeText(this, "Scroll down to install a fallback VPN from GitHub.", Toast.LENGTH_SHORT).show()
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle(report.headline)
+                .setItems(labels) { _, which ->
+                    when (report.rescueSteps[which].actionId) {
+                        ConnectivityTroubleshooter.RescueActionId.CONNECT_SMART_VPN -> {
+                            TunnelConfig.saveMode(this, TunnelConfig.Mode.SMART)
+                            requestStartVpnNow()
+                        }
+                        ConnectivityTroubleshooter.RescueActionId.ENABLE_DNS_BLACKOUT_VPN -> activateDnsBlackoutVpn()
+                        ConnectivityTroubleshooter.RescueActionId.HARVEST_CONFIGS -> runSmartHarvest()
+                        ConnectivityTroubleshooter.RescueActionId.RUN_IP_SCOUT -> runEdgeIpScout()
+                        ConnectivityTroubleshooter.RescueActionId.SET_BOOTSTRAP_CONFIG -> showBootstrapConfigDialog()
+                        ConnectivityTroubleshooter.RescueActionId.LAUNCH_FALLBACK_VPN -> {
+                            val installed = ConfigHarvester.detectFallbackTools(this).firstOrNull { it.isInstalled }
+                            val launch = installed?.installedPackage?.let { packageManager.getLaunchIntentForPackage(it) }
+                            if (launch == null || !UiSafety.safeStartActivity(this, launch)) {
+                                Toast.makeText(this, "Scroll down to install a fallback VPN from GitHub.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        ConnectivityTroubleshooter.RescueActionId.OPEN_TUNNEL_SETTINGS -> {
+                            UiSafety.safeStartActivity(this, Intent(this, TunnelSettingsActivity::class.java))
                         }
                     }
-                    ConnectivityTroubleshooter.RescueActionId.OPEN_TUNNEL_SETTINGS -> {
-                        startActivity(Intent(this, TunnelSettingsActivity::class.java))
-                    }
                 }
-            }
-            .setNegativeButton(android.R.string.ok, null)
-            .show()
+                .setNegativeButton(android.R.string.ok, null)
+        )
     }
 
     private fun openExternalUrl(url: String) {
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        } catch (_: Exception) {
+        if (!UiSafety.safeStartActivity(this, Intent(Intent.ACTION_VIEW, Uri.parse(url)))) {
             Toast.makeText(this, "Open in browser: $url", Toast.LENGTH_LONG).show()
         }
     }
@@ -500,10 +512,15 @@ class BlackoutRescueActivity : Activity() {
     }
 
     private fun clearLog(initial: String) {
-        handler.post { tvRescueLog.text = initial }
+        UiSafety.safePostUi(this, handler) { tvRescueLog.text = initial }
     }
 
     private fun appendLog(text: String) {
-        handler.post { tvRescueLog.append(text) }
+        UiSafety.safePostUi(this, handler) { tvRescueLog.append(text) }
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 }
