@@ -426,7 +426,7 @@ class DastyabVpnService : VpnService() {
             val poolSize = TunnelConfig.loadHarvestedConfigs(this).size
             if (FailoverWatchdog.shouldRunBackgroundHarvest(tick, poolSize)) {
                 try {
-                    val harvested = ConfigHarvester.harvest(this)
+                    val harvested = ConfigHarvester.harvestResilient(this)
                     if (harvested.configs.isNotEmpty()) {
                         TunnelConfig.saveHarvestedConfigs(this, harvested.configs)
                         harvests++
