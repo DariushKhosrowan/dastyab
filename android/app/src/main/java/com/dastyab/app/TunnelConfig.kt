@@ -23,9 +23,14 @@ object TunnelConfig {
     private const val KEY_BYPASS_LAN = "bypass_lan"
     private const val KEY_AUTO_VPN_GOOGLE = "auto_vpn_google"
     private const val KEY_SPLIT_PACKAGES = "split_packages"
+    private const val KEY_DOH_URL = "doh_url"
+    private const val KEY_DNS_TUNNEL_DOMAIN = "dns_tunnel_domain"
+    private const val KEY_BOOTSTRAP_CONFIG = "bootstrap_config"
+    private const val KEY_HARVESTED_CONFIGS = "harvested_configs"
 
     const val DEFAULT_DNS_PRIMARY = "1.1.1.1"
     const val DEFAULT_DNS_SECONDARY = "8.8.8.8"
+    const val DEFAULT_DOH_URL = "https://1.1.1.1/dns-query"
     const val DEFAULT_MTU = 1500
     const val MIN_MTU = 1280
     const val MAX_MTU = 1500
@@ -46,6 +51,10 @@ object TunnelConfig {
         SPLIT_EXCLUDE(
             "Split Tunnel (Exclude Apps)",
             "All apps use the tunnel except the excluded local/banking apps"
+        ),
+        DNS_BLACKOUT(
+            "DNS Blackout VPN (DoH / WhiteDNS)",
+            "Emergency DNS-over-HTTPS & clean DNS tunnel for severe blackouts and DNS poisoning"
         );
 
         companion object {
@@ -80,7 +89,10 @@ object TunnelConfig {
         val mtu: Int = DEFAULT_MTU,
         val bypassLan: Boolean = true,
         val autoVpnForGoogle: Boolean = true,
-        val splitPackages: Set<String> = emptySet()
+        val splitPackages: Set<String> = emptySet(),
+        val dohUrl: String = DEFAULT_DOH_URL,
+        val dnsTunnelDomain: String = "",
+        val bootstrapConfig: String = ""
     ) {
         fun parsedEndpoint(): VlessEndpoint? = parseVlessUri(vlessUri)
     }
@@ -96,7 +108,10 @@ object TunnelConfig {
             mtu = clampMtu(prefs.getInt(KEY_MTU, DEFAULT_MTU)),
             bypassLan = prefs.getBoolean(KEY_BYPASS_LAN, true),
             autoVpnForGoogle = prefs.getBoolean(KEY_AUTO_VPN_GOOGLE, true),
-            splitPackages = normalizePackages(rawPkgs)
+            splitPackages = normalizePackages(rawPkgs),
+            dohUrl = sanitizeDohUrl(prefs.getString(KEY_DOH_URL, DEFAULT_DOH_URL)),
+            dnsTunnelDomain = (prefs.getString(KEY_DNS_TUNNEL_DOMAIN, "") ?: "").trim(),
+            bootstrapConfig = (prefs.getString(KEY_BOOTSTRAP_CONFIG, "") ?: "").trim()
         )
     }
 
@@ -110,6 +125,9 @@ object TunnelConfig {
             .putBoolean(KEY_BYPASS_LAN, settings.bypassLan)
             .putBoolean(KEY_AUTO_VPN_GOOGLE, settings.autoVpnForGoogle)
             .putStringSet(KEY_SPLIT_PACKAGES, normalizePackages(settings.splitPackages))
+            .putString(KEY_DOH_URL, sanitizeDohUrl(settings.dohUrl))
+            .putString(KEY_DNS_TUNNEL_DOMAIN, settings.dnsTunnelDomain.trim())
+            .putString(KEY_BOOTSTRAP_CONFIG, settings.bootstrapConfig.trim())
             .apply()
     }
 
@@ -121,6 +139,47 @@ object TunnelConfig {
     fun saveVlessUri(context: Context, uri: String) {
         val current = load(context)
         save(context, current.copy(vlessUri = uri.trim()))
+    }
+
+    fun saveBootstrapConfig(context: Context, config: String) {
+        val current = load(context)
+        val trimmed = config.trim()
+        val updatedVless = if (trimmed.startsWith("vless://", ignoreCase = true)) trimmed else current.vlessUri
+        save(context, current.copy(bootstrapConfig = trimmed, vlessUri = updatedVless))
+    }
+
+    fun saveDohAndDns(context: Context, dohUrl: String?, primaryDns: String?, dnsTunnelDomain: String? = null) {
+        val current = load(context)
+        save(
+            context,
+            current.copy(
+                dohUrl = sanitizeDohUrl(dohUrl ?: current.dohUrl),
+                dnsPrimary = sanitizeDns(primaryDns ?: current.dnsPrimary, current.dnsPrimary),
+                dnsTunnelDomain = dnsTunnelDomain?.trim() ?: current.dnsTunnelDomain
+            )
+        )
+    }
+
+    fun saveHarvestedConfigs(context: Context, configs: List<String>) {
+        val cleaned = configs.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(120)
+        prefs(context).edit()
+            .putString(KEY_HARVESTED_CONFIGS, cleaned.joinToString("\n"))
+            .apply()
+    }
+
+    fun loadHarvestedConfigs(context: Context): List<String> {
+        val raw = prefs(context).getString(KEY_HARVESTED_CONFIGS, "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return raw.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+    }
+
+    fun sanitizeDohUrl(url: String?): String {
+        val trimmed = url?.trim().orEmpty()
+        return if (trimmed.startsWith("https://", ignoreCase = true) && trimmed.length > 10) {
+            trimmed
+        } else {
+            DEFAULT_DOH_URL
+        }
     }
 
     fun clampMtu(mtu: Int): Int = mtu.coerceIn(MIN_MTU, MAX_MTU)

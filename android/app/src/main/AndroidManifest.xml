@@ -42,6 +42,11 @@
             android:label="VPN &amp; Tunnel Settings"
             android:theme="@style/DastyabTheme" />
         <activity
+            android:name=".BlackoutRescueActivity"
+            android:exported="false"
+            android:label="Blackout Rescue &amp; Harvester"
+            android:theme="@style/DastyabTheme" />
+        <activity
             android:name=".LogViewerActivity"
             android:exported="false"
             android:label="View Logs"

@@ -66,6 +66,7 @@ class MainActivity : Activity() {
     private lateinit var btnModeSmart: Button
     private lateinit var btnModeGlobal: Button
     private lateinit var btnModeSplit: Button
+    private lateinit var btnModeDns: Button
 
     // Quick action cards (entire card is clickable)
     private lateinit var btnSimpleAistudio: View
@@ -139,6 +140,7 @@ class MainActivity : Activity() {
         btnModeSmart = findViewById(R.id.btnModeSmart)
         btnModeGlobal = findViewById(R.id.btnModeGlobal)
         btnModeSplit = findViewById(R.id.btnModeSplit)
+        btnModeDns = findViewById(R.id.btnModeDns)
 
         // Quick action card bindings
         btnSimpleAistudio = findViewById(R.id.btnSimpleAistudio)
@@ -175,6 +177,7 @@ class MainActivity : Activity() {
         btnModeSmart.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.SMART) }
         btnModeGlobal.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.GLOBAL) }
         btnModeSplit.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.SPLIT_INCLUDE) }
+        btnModeDns.setOnClickListener { switchTunnelMode(TunnelConfig.Mode.DNS_BLACKOUT) }
         findViewById<Button>(R.id.btnTunnelSettings).setOnClickListener {
             openActivity(TunnelSettingsActivity::class.java)
         }
@@ -182,12 +185,34 @@ class MainActivity : Activity() {
             showImportVlessDialog()
         }
 
+        // ── Blackout Rescue & Harvesting Quick Actions ──
+        findViewById<View>(R.id.btnSimpleHarvest).setOnClickListener {
+            openRescueHub(BlackoutRescueActivity.ACTION_HARVEST)
+        }
+        findViewById<View>(R.id.btnSimpleDnsBlackout).setOnClickListener {
+            openRescueHub(BlackoutRescueActivity.ACTION_DNS_VPN)
+        }
+        findViewById<View>(R.id.btnSimpleIpScout).setOnClickListener {
+            openRescueHub(BlackoutRescueActivity.ACTION_SCOUT)
+        }
+        findViewById<View>(R.id.btnSimpleTroubleshoot).setOnClickListener {
+            openRescueHub(BlackoutRescueActivity.ACTION_TROUBLESHOOT)
+        }
+
         // ── Google & Tunnel Quick Actions ──
         btnSimpleAistudio.setOnClickListener {
             if (operation.get() == null) launchGoogleServiceViaVpn("Google AI Studio", CommandCompat.AISTUDIO_URL)
         }
+        btnSimpleAistudio.setOnLongClickListener {
+            showGoogleRescueDialog("Google AI Studio", CommandCompat.AISTUDIO_URL)
+            true
+        }
         btnSimpleFlow.setOnClickListener {
             if (operation.get() == null) launchGoogleServiceViaVpn("Google Flow", CommandCompat.FLOW_URL)
+        }
+        btnSimpleFlow.setOnLongClickListener {
+            showGoogleRescueDialog("Google Flow", CommandCompat.FLOW_URL)
+            true
         }
         btnSimpleDeploy.setOnClickListener {
             if (operation.get() == null) runSimple("deploy --preset standard", listOf("deploy", "--preset", "standard"))
@@ -367,10 +392,48 @@ class MainActivity : Activity() {
                 openPendingGoogleUrlIfAny()
             } else {
                 postOutput("WARNING: VPN permission declined by user.\n")
+                val failedName = pendingGoogleLaunchName
+                val failedUrl = pendingGoogleLaunchUrl
                 pendingGoogleLaunchName = null
                 pendingGoogleLaunchUrl = null
+                if (failedName != null && failedUrl != null) {
+                    showGoogleRescueDialog(failedName, failedUrl)
+                }
             }
         }
+    }
+
+    private fun openRescueHub(autoAction: String? = null) {
+        try {
+            val intent = Intent(this, BlackoutRescueActivity::class.java)
+            if (autoAction != null) intent.putExtra(BlackoutRescueActivity.EXTRA_AUTO_ACTION, autoAction)
+            startActivity(intent)
+        } catch (_: android.content.ActivityNotFoundException) {
+            postStatus("Blackout Rescue screen unavailable")
+        }
+    }
+
+    private fun showGoogleRescueDialog(serviceName: String, url: String) {
+        val options = arrayOf(
+            "1. Open $serviceName anyway (current connection)",
+            "2. Activate Emergency DNS Blackout VPN (DoH / WhiteDNS)",
+            "3. Run Smart Config Harvester (GitHub → Telegram)",
+            "4. Run Clean IP & DNS Scout",
+            "5. Run 7-Layer Connectivity Troubleshooter"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Troubleshoot $serviceName Access")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> openBrowserUrl(serviceName, url)
+                    1 -> openRescueHub(BlackoutRescueActivity.ACTION_DNS_VPN)
+                    2 -> openRescueHub(BlackoutRescueActivity.ACTION_HARVEST)
+                    3 -> openRescueHub(BlackoutRescueActivity.ACTION_SCOUT)
+                    4 -> openRescueHub(BlackoutRescueActivity.ACTION_TROUBLESHOOT)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun openPendingGoogleUrlIfAny() {
@@ -463,7 +526,10 @@ class MainActivity : Activity() {
             }
         }
 
-        val endpoint = settings.parsedEndpoint()?.summary() ?: "Cloudflare Edge Smart DNS"
+        val endpoint = when {
+            activeMode == TunnelConfig.Mode.DNS_BLACKOUT -> "DoH (${settings.dohUrl.removePrefix("https://")})"
+            else -> settings.parsedEndpoint()?.summary() ?: "Cloudflare Edge Smart DNS"
+        }
         val splitSuffix = if (activeMode == TunnelConfig.Mode.SPLIT_INCLUDE || activeMode == TunnelConfig.Mode.SPLIT_EXCLUDE) {
             " · ${settings.splitPackages.size} app(s)"
         } else {
@@ -476,6 +542,7 @@ class MainActivity : Activity() {
         btnModeSmart.alpha = if (activeMode == TunnelConfig.Mode.SMART) 1.0f else 0.55f
         btnModeGlobal.alpha = if (activeMode == TunnelConfig.Mode.GLOBAL) 1.0f else 0.55f
         btnModeSplit.alpha = if (isSplit) 1.0f else 0.55f
+        btnModeDns.alpha = if (activeMode == TunnelConfig.Mode.DNS_BLACKOUT) 1.0f else 0.55f
     }
 
     private fun openActivity(type: Class<out Activity>) {

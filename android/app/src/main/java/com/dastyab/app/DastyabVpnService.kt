@@ -12,7 +12,15 @@ import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.IOException
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.HttpURLConnection
+import java.net.InetAddress
+import java.net.URL
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
@@ -31,6 +39,8 @@ class DastyabVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private val running = AtomicBoolean(false)
     private var readerThread: Thread? = null
+    private var dnsExecutor: ExecutorService? = null
+    private val tunWriteLock = Any()
 
     enum class State { DISCONNECTED, CONNECTING, CONNECTED }
 
@@ -103,8 +113,16 @@ class DastyabVpnService : VpnService() {
     private fun startTunnel() {
         stopTunnelInternal()
         val settings = TunnelConfig.load(this)
-        val endpointSummary = settings.parsedEndpoint()?.summary() ?: "Cloudflare Edge (Smart DNS)"
-        val dnsSummary = "${settings.dnsPrimary}, ${settings.dnsSecondary}"
+        val isDnsBlackout = settings.mode == TunnelConfig.Mode.DNS_BLACKOUT
+        val endpointSummary = when {
+            isDnsBlackout -> "DoH (${settings.dohUrl.removePrefix("https://")})"
+            else -> settings.parsedEndpoint()?.summary() ?: "Cloudflare Edge (Smart DNS)"
+        }
+        val dnsSummary = if (isDnsBlackout) {
+            "DoH + ${settings.dnsPrimary}"
+        } else {
+            "${settings.dnsPrimary}, ${settings.dnsSecondary}"
+        }
 
         updateStatus(
             Status(
@@ -121,10 +139,17 @@ class DastyabVpnService : VpnService() {
                 .setSession("DastYab ${settings.mode.label}")
                 .setMtu(settings.mtu)
                 .addAddress("10.215.0.1", 30)
-                .addDnsServer(settings.dnsPrimary)
 
-            if (settings.dnsSecondary != settings.dnsPrimary) {
-                builder.addDnsServer(settings.dnsSecondary)
+            if (isDnsBlackout) {
+                // Virtual DNS inside TUN: captures all device DNS queries and resolves them
+                // over encrypted DNS-over-HTTPS (RFC 8484) with protected clean-UDP fallback.
+                builder.addDnsServer("10.215.0.2")
+                builder.addRoute("10.215.0.2", 32)
+            } else {
+                builder.addDnsServer(settings.dnsPrimary)
+                if (settings.dnsSecondary != settings.dnsPrimary) {
+                    builder.addDnsServer(settings.dnsSecondary)
+                }
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -132,12 +157,14 @@ class DastyabVpnService : VpnService() {
             }
 
             // Configure routes according to tunnel mode & LAN bypass preference.
-            if (settings.mode == TunnelConfig.Mode.SMART && settings.bypassLan) {
-                // Exclude RFC1918 private LAN subnets by adding complementary public CIDRs
-                // so local Wi-Fi devices remain directly reachable.
-                addPublicInternetRoutes(builder)
-            } else {
-                builder.addRoute("0.0.0.0", 0)
+            if (!isDnsBlackout) {
+                if (settings.mode == TunnelConfig.Mode.SMART && settings.bypassLan) {
+                    // Exclude RFC1918 private LAN subnets by adding complementary public CIDRs
+                    // so local Wi-Fi devices remain directly reachable.
+                    addPublicInternetRoutes(builder)
+                } else {
+                    builder.addRoute("0.0.0.0", 0)
+                }
             }
 
             // Configure per-app Split Tunneling.
@@ -167,8 +194,8 @@ class DastyabVpnService : VpnService() {
                         }
                     }
                 }
-                TunnelConfig.Mode.SMART, TunnelConfig.Mode.GLOBAL -> {
-                    // Always exclude DastYab itself so CLI/API outbound sockets never loop.
+                TunnelConfig.Mode.SMART, TunnelConfig.Mode.GLOBAL, TunnelConfig.Mode.DNS_BLACKOUT -> {
+                    // Always exclude DastYab itself so DoH / CLI / API outbound sockets never loop.
                     try { builder.addDisallowedApplication(packageName) } catch (_: Exception) {}
                 }
             }
@@ -210,15 +237,51 @@ class DastyabVpnService : VpnService() {
                 settings.mode.name, dnsSummary, settings.mtu, settings.splitPackages.size
             )
 
-            // Keep TUN descriptor drained cleanly until disconnect.
+            if (isDnsBlackout) {
+                dnsExecutor = Executors.newFixedThreadPool(4)
+            }
+
+            // Read packets from TUN: in DNS_BLACKOUT mode, forward DNS queries over DoH / protected UDP.
             readerThread = thread(isDaemon = true, name = "dastyab-tun") {
                 val buf = ByteArray(settings.mtu.coerceAtLeast(1500))
                 try {
                     FileInputStream(pfd.fileDescriptor).use { input ->
-                        while (running.get()) {
-                            val read = input.read(buf)
-                            if (read < 0) break
-                            if (read == 0) Thread.sleep(25)
+                        val output = if (isDnsBlackout) FileOutputStream(pfd.fileDescriptor) else null
+                        try {
+                            while (running.get()) {
+                                val read = input.read(buf)
+                                if (read < 0) break
+                                if (read == 0) {
+                                    Thread.sleep(20)
+                                    continue
+                                }
+                                if (isDnsBlackout && output != null) {
+                                    val req = DnsPacketCodec.parseIpv4UdpDnsQuery(buf, read)
+                                    if (req != null) {
+                                        val exec = dnsExecutor
+                                        if (exec != null && !exec.isShutdown) {
+                                            exec.execute {
+                                                val respBytes = resolveDnsOverDohOrUdp(
+                                                    req.dnsPayload,
+                                                    settings.dohUrl,
+                                                    settings.dnsPrimary,
+                                                    settings.dnsSecondary
+                                                )
+                                                if (respBytes != null && running.get()) {
+                                                    val ipPacket = DnsPacketCodec.buildIpv4UdpDnsResponse(req, respBytes)
+                                                    synchronized(tunWriteLock) {
+                                                        try {
+                                                            output.write(ipPacket)
+                                                        } catch (_: IOException) {}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } finally {
+                            try { output?.close() } catch (_: IOException) {}
                         }
                     }
                 } catch (_: IOException) {
@@ -295,10 +358,71 @@ class DastyabVpnService : VpnService() {
         running.set(false)
         readerThread?.interrupt()
         readerThread = null
+        dnsExecutor?.shutdownNow()
+        dnsExecutor = null
         try {
             vpnInterface?.close()
         } catch (_: IOException) {}
         vpnInterface = null
+    }
+
+    /**
+     * Resolves a raw DNS wire query over RFC 8484 DNS-over-HTTPS first (immune to UDP-53 poisoning),
+     * falling back to protected clean UDP-53 sockets if HTTPS is blocked during a hard blackout.
+     */
+    private fun resolveDnsOverDohOrUdp(
+        query: ByteArray,
+        dohUrl: String,
+        primaryDns: String,
+        secondaryDns: String
+    ): ByteArray? {
+        queryDoh(dohUrl, query)?.let { return it }
+        queryProtectedUdpDns(primaryDns, query)?.let { return it }
+        if (secondaryDns != primaryDns) {
+            queryProtectedUdpDns(secondaryDns, query)?.let { return it }
+        }
+        return null
+    }
+
+    private fun queryDoh(dohUrl: String, query: ByteArray): ByteArray? {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(dohUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 2800
+                readTimeout = 2800
+                setRequestProperty("Content-Type", "application/dns-message")
+                setRequestProperty("Accept", "application/dns-message")
+            }
+            conn.outputStream.use { it.write(query) }
+            if (conn.responseCode == 200) {
+                conn.inputStream.use { it.readBytes() }.takeIf { it.size >= 12 }
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    private fun queryProtectedUdpDns(dnsIp: String, query: ByteArray): ByteArray? {
+        return try {
+            DatagramSocket().use { socket ->
+                protect(socket)
+                socket.soTimeout = 2200
+                val addr = InetAddress.getByName(dnsIp)
+                socket.send(DatagramPacket(query, query.size, addr, 53))
+                val respBuf = ByteArray(1500)
+                val resp = DatagramPacket(respBuf, respBuf.size)
+                socket.receive(resp)
+                if (resp.length >= 12) respBuf.copyOf(resp.length) else null
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun updateStatus(status: Status) {

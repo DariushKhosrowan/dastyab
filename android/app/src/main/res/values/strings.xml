@@ -171,4 +171,43 @@
     <string name="update_download">Download</string>
     <string name="update_later">Later</string>
     <string name="update_unknown">Could not check for updates (no network or release unreachable)</string>
+
+    <!-- Blackout Rescue, Smart Harvester & DNS VPN -->
+    <string name="vpn_mode_dns">DNS VPN</string>
+    <string name="section_blackout_rescue">Blackout Rescue &amp; Harvesting</string>
+    <string name="action_harvest">Smart Harvest</string>
+    <string name="action_harvest_subtitle">GitHub → Telegram → Fallback</string>
+    <string name="action_dns_blackout">DNS Blackout VPN</string>
+    <string name="action_dns_blackout_subtitle">WhiteDNS / DoH last-resort</string>
+    <string name="action_ip_scout">IP &amp; DNS Scout</string>
+    <string name="action_ip_scout_subtitle">Scan clean edge IPs &amp; DNS</string>
+    <string name="action_troubleshoot">Troubleshooter</string>
+    <string name="action_troubleshoot_subtitle">7-layer rescue diagnostics</string>
+
+    <string name="rescue_title">Blackout Rescue &amp; Harvester</string>
+    <string name="rescue_subtitle">Resilient GitHub → Telegram harvesting, Emergency DNS Blackout VPN (DoH / WhiteDNS / SlipNet), Clean IP Scout &amp; 7-layer troubleshooter.</string>
+    <string name="rescue_harvester_title">1. Smart 5-Stage Config Harvester</string>
+    <string name="rescue_harvester_hint">Tries GitHub raw + jsDelivr mirror first, then Telegram public channels, then detects installed fallback VPNs or guides temporary bootstrap config.</string>
+    <string name="rescue_btn_harvest">Run Smart Harvest (GitHub → Telegram)</string>
+    <string name="rescue_btn_pick_configs">Harvested Pool</string>
+    <string name="rescue_btn_bootstrap">Temporary Base Config</string>
+
+    <string name="rescue_dns_vpn_title">2. Emergency DNS Blackout VPN (WhiteDNS / DoH)</string>
+    <string name="rescue_dns_vpn_hint">Last-resort full DNS VPN for hard internet blackouts &amp; DNS poisoning. Intercepts device DNS via TUN and resolves over encrypted DoH with protected clean-UDP fallback.</string>
+    <string name="rescue_dns_tunnel_hint">Optional SlipNet / DNS Tunnel domain (e.g. t.example.com)</string>
+    <string name="rescue_btn_activate_dns_vpn">Activate Emergency DNS Blackout VPN</string>
+
+    <string name="rescue_scout_title">3. Clean IP Range &amp; DNS Scout</string>
+    <string name="rescue_scout_hint">Probes clean Cloudflare/CDN IPv4 ranges and unpoisoned UDP DNS / DoH servers right on your phone. Tap any result to apply or auto-patch your VLESS config.</string>
+    <string name="rescue_btn_scout_ips">Scout Clean Edge IPs</string>
+    <string name="rescue_btn_scout_dns">Scout Clean DNS / DoH</string>
+
+    <string name="rescue_troubleshoot_title">4. Smart Connectivity Troubleshooter</string>
+    <string name="rescue_troubleshoot_hint">Tests Clean DNS, DoH, GitHub Direct, jsDelivr Mirror, Telegram, AI Studio &amp; Google Flow, then builds a tailored rescue plan.</string>
+    <string name="rescue_btn_troubleshoot">Run 7-Layer Diagnostics</string>
+
+    <string name="rescue_fallbacks_title">5. Fallback VPNs &amp; Circumvention Tools</string>
+    <string name="rescue_fallbacks_hint">Installed tools launch in 1 tap so you can bootstrap internet access and re-harvest. Missing tools open their official GitHub repository.</string>
+    <string name="rescue_log_title">Live Rescue &amp; Diagnostic Log</string>
+    <string name="rescue_log_empty">Run Smart Harvest, IP Scout, or Troubleshooter to see live stage-by-stage results.</string>
 </resources>
