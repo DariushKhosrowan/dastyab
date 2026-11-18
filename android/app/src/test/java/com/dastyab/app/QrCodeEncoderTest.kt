@@ -10,7 +10,7 @@ class QrCodeEncoderTest {
 
     @Test
     fun encodesShortTextIntoVersion1Matrix() {
-        val qr = QrCodeEncoder.encode("https://dastyab.dev")
+        val qr = QrCodeEncoder.encode("dastyab.dev")
         assertNotNull(qr)
         assertEquals(1, qr!!.version)
         assertEquals(21, qr.size)
