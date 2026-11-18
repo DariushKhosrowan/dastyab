@@ -36,6 +36,10 @@ import kotlin.concurrent.thread
 
 /** Runs the APK's bundled CLI with private app storage for its state.
  * Android's sandbox and available system tools limit which CLI features can run.
+ *
+ * The main screen is simple and modern: big tap buttons for the most common
+ * actions, no typing required. The raw command input lives in an "Advanced"
+ * section that is hidden by default.
  */
 class MainActivity : Activity() {
     private lateinit var status: TextView
@@ -47,6 +51,20 @@ class MainActivity : Activity() {
     private lateinit var statusDot: View
     private lateinit var historySpinner: Spinner
     private lateinit var binary: File
+
+    // Simple action buttons (main screen)
+    private lateinit var btnSimpleAistudio: Button
+    private lateinit var btnSimpleVerify: Button
+    private lateinit var btnSimpleAccounts: Button
+    private lateinit var btnSimpleProfiles: Button
+    private lateinit var btnSimpleTokens: Button
+    private lateinit var btnSimpleScan: Button
+
+    // Advanced section toggle
+    private lateinit var btnShowAdvanced: Button
+    private lateinit var btnHideAdvanced: Button
+    private lateinit var advancedSection: LinearLayout
+
     private val handler = Handler(Looper.getMainLooper())
     private val uiLock = Any()
     private var destroyed = false // Protected by uiLock, including callback enqueue/removal.
@@ -77,24 +95,60 @@ class MainActivity : Activity() {
         statusDot = findViewById(R.id.statusDot)
         historySpinner = findViewById(R.id.historySpinner)
         binary = File(applicationInfo.nativeLibraryDir, "libdastyab.so")
+
+        // Simple action buttons
+        btnSimpleAistudio = findViewById(R.id.btnSimpleAistudio)
+        btnSimpleVerify = findViewById(R.id.btnSimpleVerify)
+        btnSimpleAccounts = findViewById(R.id.btnSimpleAccounts)
+        btnSimpleProfiles = findViewById(R.id.btnSimpleProfiles)
+        btnSimpleTokens = findViewById(R.id.btnSimpleTokens)
+        btnSimpleScan = findViewById(R.id.btnSimpleScan)
+
+        // Advanced section toggle
+        btnShowAdvanced = findViewById(R.id.btnShowAdvanced)
+        btnHideAdvanced = findViewById(R.id.btnHideAdvanced)
+        advancedSection = findViewById(R.id.advancedSection)
+
         CommandHistory.init(filesDir)
         applyPersistedSettings()
+
         val version = try {
             packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown"
         } catch (_: Exception) { "unknown" }
         findViewById<TextView>(R.id.tvVersion).text = getString(R.string.version_format, version)
         savedInstanceState?.getString("pendingOutput")?.let { applyFormattedOutput(it) }
 
-        buildQuickButtons(R.id.quickButtons, listOf("--help", "--version", "verify --help",
-            "accounts --help", "scan --help", "deploy --help", "configs --help", "doctor --help"))
-        buildQuickButtons(R.id.quickButtonsProfiles, listOf("profiles --help", "profile-create --help",
-            "profile-import --help", "profile-export --help", "token-add --help",
-            "token-list --help", "backup --help", "export --help"))
-        setupHistorySpinner()
+        // ── Simple action taps (no typing) ──
+        btnSimpleAistudio.setOnClickListener {
+            if (operation.get() == null) handleAistudio("https://aistudio.google.com/")
+        }
+        btnSimpleVerify.setOnClickListener {
+            if (operation.get() == null) runSimple("verify", listOf("verify"))
+        }
+        btnSimpleAccounts.setOnClickListener {
+            if (operation.get() == null) runSimple("accounts", listOf("accounts"))
+        }
+        btnSimpleProfiles.setOnClickListener {
+            if (operation.get() == null) runSimple("profiles", listOf("profiles"))
+        }
+        btnSimpleTokens.setOnClickListener {
+            if (operation.get() == null) runSimple("token-list", listOf("token-list"))
+        }
+        btnSimpleScan.setOnClickListener {
+            if (operation.get() == null) runSimple("scan", listOf("scan"))
+        }
+
+        // ── Advanced toggle ──
+        btnShowAdvanced.setOnClickListener { showAdvanced() }
+        btnHideAdvanced.setOnClickListener { hideAdvanced() }
+
+        // ── Run / cancel ──
         btnRun.setOnClickListener { runTyped() }
         btnCancel.setOnClickListener { cancelCurrentOperation() }
+
         findViewById<Button>(R.id.btnClear).setOnClickListener { output.text = "" }
         findViewById<Button>(R.id.btnRetry).visibility = View.GONE
+
         findViewById<Button>(R.id.btnViewLogs).setOnClickListener {
             openActivity(LogViewerActivity::class.java)
         }
@@ -104,7 +158,7 @@ class MainActivity : Activity() {
             text = "Releases"
             setOnClickListener {
                 try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DastYab/dastyab/releases")))
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Dastyab/dastyab/releases")))
                 } catch (_: android.content.ActivityNotFoundException) {
                     postStatus("No browser available to open releases")
                 }
@@ -135,6 +189,13 @@ class MainActivity : Activity() {
                     }.setPositiveButton(android.R.string.ok, null).show()
             }
         }
+
+        buildQuickButtons(R.id.quickButtons, listOf("--help", "--version", "verify --help",
+            "accounts --help", "scan --help", "deploy --help", "configs --help", "doctor --help"))
+        buildQuickButtons(R.id.quickButtonsProfiles, listOf("profiles --help", "profile-create --help",
+            "profile-import --help", "profile-export --help", "token-add --help",
+            "token-list --help", "backup --help", "export --help"))
+        setupHistorySpinner()
         setBusy(false)
         evaluateBinaryState()
     }
@@ -142,6 +203,46 @@ class MainActivity : Activity() {
     private fun openActivity(type: Class<out Activity>) {
         try { startActivity(Intent(this, type)) }
         catch (_: android.content.ActivityNotFoundException) { postStatus("Screen unavailable") }
+    }
+
+    /** Show the advanced (raw command) section. */
+    private fun showAdvanced() {
+        advancedSection.visibility = View.VISIBLE
+        btnShowAdvanced.visibility = View.GONE
+    }
+
+    /** Hide the advanced (raw command) section. */
+    private fun hideAdvanced() {
+        advancedSection.visibility = View.GONE
+        btnShowAdvanced.visibility = View.VISIBLE
+    }
+
+    /** Run a predefined simple action command (no typing). */
+    private fun runSimple(label: String, args: List<String>) {
+        CommandHistory.add(label)
+        setupHistorySpinner()
+        applyFormattedOutput("\n\$ dastyab ${args.joinToString(" ")}\n---\n")
+        setBusy(true)
+        postStatus("Running…")
+        setStatusDot(DotState.ORANGE)
+
+        // Android compatibility check before running the binary.
+        when (val verdict = CommandCompat.check(args)) {
+            is CommandCompat.Verdict.OpenAistudio -> {
+                handleAistudio(verdict.url)
+                return
+            }
+            is CommandCompat.Verdict.Blocked -> {
+                postStatus(CommandCompat.blockedTitle(verdict))
+                postOutput(CommandCompat.blockedMessage(verdict) + "\n")
+                setStatusDot(DotState.RED)
+                setBusy(false)
+                return
+            }
+            CommandCompat.Verdict.RunNative -> { /* proceed */ }
+        }
+
+        runCommand(args, label)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -182,7 +283,43 @@ class MainActivity : Activity() {
             evaluateBinaryState()
             return
         }
+        // Android compatibility: some CLI subcommands need external helpers
+        // (Python, xray, curl) that don't exist on Android. Handle or block
+        // them with a friendly message instead of a cryptic "Permission denied".
+        when (val verdict = CommandCompat.check(args)) {
+            is CommandCompat.Verdict.OpenAistudio -> {
+                handleAistudio(verdict.url)
+                return
+            }
+            is CommandCompat.Verdict.Blocked -> {
+                postStatus(CommandCompat.blockedTitle(verdict))
+                postOutput(CommandCompat.blockedMessage(verdict) + "\n")
+                setStatusDot(DotState.RED)
+                setBusy(false)
+                return
+            }
+            CommandCompat.Verdict.RunNative -> { /* proceed to run the binary */ }
+        }
         runCommand(args, text)
+    }
+
+    /** Open Google AI Studio in the system browser. Works on Android without
+     * Python, xray, or any tunnel — AI Studio is reachable directly from most
+     * connections (sign in + API all work from your IP). */
+    private fun handleAistudio(url: String) {
+        postOutput("Opening Google AI Studio in your browser…\n")
+        postStatus("Opening AI Studio…")
+        setStatusDot(DotState.ORANGE)
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            postOutput("✓ AI Studio opened. Sign in with your Google account — no tunnel or Python needed.\n")
+            postStatus("AI Studio opened in browser")
+            setStatusDot(DotState.GREEN)
+        } catch (_: android.content.ActivityNotFoundException) {
+            postOutput("✗ No browser available. Open AI Studio manually: $url\n")
+            postStatus("No browser available")
+            setStatusDot(DotState.RED)
+        }
     }
 
     private fun buildQuickButtons(containerId: Int, commands: List<String>) {
@@ -369,7 +506,7 @@ class MainActivity : Activity() {
             }
             if (color != null) spans.setSpan(ForegroundColorSpan(color), offset, offset + line.length,
                 Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            if (Regex("^---\\s*exit code\\s+-?\\d+\\s*---$", RegexOption.IGNORE_CASE).matches(line.trim())) {
+            if (Regex("^---\\s*exit code\\s+-?\\d+\s*---$", RegexOption.IGNORE_CASE).matches(line.trim())) {
                 spans.setSpan(StyleSpan(Typeface.BOLD), offset, offset + line.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             Regex("https?://[^\\s]+").findAll(line).forEach { match ->

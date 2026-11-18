@@ -13,6 +13,31 @@
     <string name="error_args_too_long">Arguments too long — maximum 4096 characters</string>
     <string name="error_invalid_args">Invalid characters in arguments</string>
     <string name="error_unsafe_args">Arguments contain unsafe path separators</string>
+
+    <string name="section_quick_actions">Quick actions</string>
+    <string name="action_open_aistudio">Open AI Studio</string>
+    <string name="action_verify">Verify</string>
+    <string name="action_accounts">Accounts</string>
+    <string name="action_profiles">Profiles</string>
+    <string name="action_tokens">Tokens</string>
+    <string name="action_scan">Scan</string>
+
+    <!-- Output / Advanced sections -->
+    <string name="section_output">Output</string>
+    <string name="section_advanced">Advanced</string>
+    <string name="btn_show_advanced">Advanced / run custom command</string>
+    <string name="btn_hide_advanced">Hide advanced</string>
+
+    <!-- Open AI Studio button -->
+    <string name="btn_open_aistudio">Open Google AI Studio</string>
+    <string name="aistudio_opening">Opening Google AI Studio in your browser…</string>
+    <string name="aistudio_opened">✓ AI Studio opened. Sign in with your Google account — no tunnel or Python needed.</string>
+    <string name="aistudio_no_browser">✗ No browser available. Open AI Studio manually: https://aistudio.google.com/</string>
+
+    <!-- Commands that cannot run on Android (need external helpers like Python/xray/curl) -->
+    <string name="cmd_not_available_title">Command not available on Android</string>
+    <string name="cmd_not_available_flow">The &#8216;flow&#8217; command needs xray and curl, which aren&#8217;t available on Android.</string>
+    <string name="cmd_not_available_hint">Try &#8216;verify&#8217;, &#8216;accounts&#8217;, &#8216;profiles&#8217;, or &#8216;token-list&#8217; instead.</string>
     <string name="btn_cancel">Cancel</string>
     <string name="hint_args">Args (e.g. verify, scan, token-list, accounts, deploy)</string>
     <string name="btn_run">Run</string>
