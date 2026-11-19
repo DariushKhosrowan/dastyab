@@ -293,6 +293,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut DastYabApp) -> Option<TokensAction> {
             .auto_shrink([false, false])
             .max_height(220.0)
             .show(ui, |ui| {
+                use PendingDialogAction::DeleteTokenHistoryEvent as DeleteEvent;
                 for e in shown {
                     let (label, color) = ledger_kind(&e.kind);
                     egui::Frame::new()
@@ -322,10 +323,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut DastYabApp) -> Option<TokensAction> {
                                             .on_hover_text("Delete this token-history event")
                                             .clicked()
                                         {
-                                            let act =
-                                                PendingDialogAction::DeleteTokenHistoryEvent(
-                                                    e.id.clone(),
-                                                );
+                                            let act = DeleteEvent(e.id.clone());
                                             app.pending_action = Some(act);
                                             app.dialog = Some(dialogs::confirm(
                                                 "Delete token-history event",

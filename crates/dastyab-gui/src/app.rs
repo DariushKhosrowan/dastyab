@@ -168,8 +168,10 @@ pub struct DastYabApp {
     // async bridge
     pub tx: bridge::Tx,
     rx: bridge::Rx,
-    running: Vec<String>, // task names currently in flight
-    log_lines: Vec<String>, // live log pane (capped at 5000)
+    // task names currently in flight
+    running: Vec<String>,
+    // live log pane (capped at 5000)
+    log_lines: Vec<String>,
     // view-model cache (Phase 3.2/3.3)
     pub state: GuiState,
     /// Which streams the History view shows.
@@ -3427,6 +3429,7 @@ impl DastYabApp {
                     .color(GOLD_DIM),
                 );
             } else {
+                use PendingDialogAction::RestoreBackupIntoCurrent as RestoreHere;
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .max_height(220.0)
@@ -3535,10 +3538,7 @@ impl DastYabApp {
                                                     .on_hover_text("Overwrite THIS profile from this snapshot")
                                                     .clicked()
                                                 {
-                                                    use PendingDialogAction as Pda;
-                                                    let act = Pda::RestoreBackupIntoCurrent(
-                                                        b.path.clone(),
-                                                    );
+                                                    let act = RestoreHere(b.path.clone());
                                                     self.pending_action = Some(act);
                                                     self.dialog = Some(dialogs::confirm(
                                                         "Restore into current profile",
@@ -6003,7 +6003,8 @@ mod tests {
         // vanish instantly if the app had been open past the TTL. A fresh
         // write (hash mismatch) must reset the timer and keep the note.
         let mut text = "Deploy failed: brand new".to_string();
-        let mut hash = 0u64; // never seen → treated as a fresh write
+        // never seen → treated as a fresh write
+        let mut hash = 0u64;
         // stale "startup" anchor
         let mut since = std::time::Instant::now() - std::time::Duration::from_secs(200);
         DastYabApp::expire_status_note(&mut text, &mut hash, &mut since, true, 90);
