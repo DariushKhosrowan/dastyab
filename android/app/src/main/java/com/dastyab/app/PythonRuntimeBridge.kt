@@ -152,6 +152,11 @@ object PythonRuntimeBridge {
         onChunk: (String) -> Unit,
         processHolder: AtomicReference<Process?>
     ): Int {
+        val compat = CommandCompat.check(args)
+        if (compat is CommandCompat.Verdict.Blocked) {
+            onChunk("${CommandCompat.blockedTitle(compat)}\n${CommandCompat.blockedMessage(compat)}\n")
+            return 2
+        }
         if (!binary.isFile || !binary.canExecute()) {
             onChunk("dastyab: native binary not executable on this device\n")
             return 127

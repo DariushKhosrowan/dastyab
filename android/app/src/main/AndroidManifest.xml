@@ -63,6 +63,11 @@
             android:label="Network Power Toolbox"
             android:theme="@style/DastyabTheme" />
         <activity
+            android:name=".CloudflareWorkerActivity"
+            android:exported="true"
+            android:label="Cloudflare Worker &amp; Config Studio"
+            android:theme="@style/DastyabTheme" />
+        <activity
             android:name=".LogViewerActivity"
             android:exported="false"
             android:label="View Logs"

@@ -521,6 +521,56 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- Simple Row 3: Cloudflare Worker Deploy & Config / Clean-IP Studio -->
+            <LinearLayout
+                android:id="@+id/btnSimpleCfStudio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="16dp"
+                android:layout_marginBottom="14dp">
+
+                <LinearLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:layout_marginEnd="14dp"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_action_deploy"
+                        android:contentDescription="@string/simple_card_cf_studio" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_cf_studio"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary"
+                        android:paddingBottom="2dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_cf_studio_sub"
+                        android:textSize="12sp"
+                        android:textColor="@color/colorTextSecondary" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- Simple Bottom Quick Links -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -936,13 +986,13 @@
                         android:layout_width="21dp"
                         android:layout_height="21dp"
                         android:src="@drawable/ic_action_deploy"
-                        android:contentDescription="@string/action_deploy" />
+                        android:contentDescription="@string/action_cf_studio" />
                 </LinearLayout>
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/action_deploy"
+                    android:text="@string/action_cf_studio"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/colorTextPrimary"
@@ -952,7 +1002,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/action_deploy_subtitle"
+                    android:text="@string/action_cf_studio_subtitle"
                     android:textSize="12sp"
                     android:textColor="@color/colorTextSecondary" />
             </LinearLayout>

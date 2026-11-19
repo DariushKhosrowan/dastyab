@@ -1,0 +1,1109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="28dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/header_card_background"
+            android:padding="18dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/cf_studio_title"
+                android:textSize="21sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorAccent" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/cf_studio_subtitle"
+                android:textSize="12sp"
+                android:textColor="@color/colorTextSecondary"
+                android:paddingTop="4dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="12dp">
+
+                <Spinner
+                    android:id="@+id/spStudioProfile"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/input_bg"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnStudioNewProfile"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="+ Profile"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnStudioRefresh"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Refresh"
+                    style="@style/DastyabChip" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/cfProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:indeterminate="true"
+                android:visibility="gone"
+                android:paddingTop="10dp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="12dp" />
+
+        <!-- 1. Profile, API Token & Account -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/cf_section_token"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorAccent"
+                android:paddingBottom="6dp" />
+
+            <TextView
+                android:id="@+id/tvTokenStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No Cloudflare API token saved yet in this profile."
+                android:textSize="12sp"
+                android:textColor="@color/colorTextSecondary"
+                android:paddingBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="8dp">
+
+                <EditText
+                    android:id="@+id/etTokenLabel"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Token label (default)"
+                    android:text="default"
+                    android:textSize="13sp"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="textNoSuggestions" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnPasteToken"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Paste Token"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/etApiToken"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Paste Cloudflare API Token (Edit Cloudflare Workers)"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:textColor="@color/colorTextPrimary"
+                android:textColorHint="@color/colorTextSecondary"
+                android:background="@drawable/input_bg"
+                android:padding="11dp"
+                android:inputType="textNoSuggestions" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="10dp">
+
+                <Button
+                    android:id="@+id/btnSaveVerifyToken"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.3"
+                    android:text="@string/cf_btn_save_verify"
+                    style="@style/DastyabButtonPrimary" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnListAccounts"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Accounts"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="8dp">
+
+                <Button
+                    android:id="@+id/btnCfVerifyOnly"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Verify"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnCfTokenList"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Tokens"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnCfZones"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Zones"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnCfAnalytics"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Analytics"
+                    style="@style/DastyabChip" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="12dp" />
+
+        <!-- 2. Deploy Worker or Bring Existing Worker -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/cf_section_worker"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorAccent"
+                android:paddingBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="10dp">
+
+                <Button
+                    android:id="@+id/btnModeDeployNew"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Deploy New Worker"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnModeExistingWorker"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Use Existing Worker"
+                    style="@style/DastyabChip" />
+            </LinearLayout>
+
+            <!-- Deploy New Worker Panel -->
+            <LinearLayout
+                android:id="@+id/panelDeployNew"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none"
+                    android:paddingBottom="6dp">
+
+                    <LinearLayout
+                        android:id="@+id/llAccountChips"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+                <EditText
+                    android:id="@+id/etDeployAccountId"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Account ID (optional — auto-selects saved account)"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="textNoSuggestions" />
+
+                <EditText
+                    android:id="@+id/etDeployWorkerName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="Worker script name (optional, e.g. dastyab-edge)"
+                    android:textSize="13sp"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="textNoSuggestions" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp">
+
+                    <Button
+                        android:id="@+id/btnPresetStandard"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="standard"
+                        style="@style/DastyabChip" />
+
+                    <Button
+                        android:id="@+id/btnPresetGaming"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="gaming"
+                        style="@style/DastyabChip" />
+
+                    <Button
+                        android:id="@+id/btnPresetMaxCompat"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="max-compat"
+                        style="@style/DastyabChip" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvPresetDesc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="10dp" />
+
+                <Button
+                    android:id="@+id/btnDeployWorker"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/cf_btn_deploy_worker"
+                    style="@style/DastyabButtonPrimary" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingTop="8dp">
+
+                    <Button
+                        android:id="@+id/btnMultiWorkerDeploy"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Multi-Worker x2"
+                        style="@style/DastyabButton" />
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="0dp" />
+
+                    <Button
+                        android:id="@+id/btnRotateWorkerSig"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Multi-Worker Status"
+                        style="@style/DastyabButton" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Use Existing Worker Panel -->
+            <LinearLayout
+                android:id="@+id/panelExistingWorker"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <EditText
+                    android:id="@+id/etExistingWorkerHost"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Worker host (e.g. myworker.sub.workers.dev or cdn.domain.com)"
+                    android:textSize="13sp"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="textUri" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingTop="8dp">
+
+                    <EditText
+                        android:id="@+id/etExistingWorkerUuid"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="UUID (blank = auto-generate)"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/colorTextPrimary"
+                        android:textColorHint="@color/colorTextSecondary"
+                        android:background="@drawable/input_bg"
+                        android:padding="11dp"
+                        android:inputType="textNoSuggestions" />
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="0dp" />
+
+                    <Button
+                        android:id="@+id/btnGenUuid"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Gen UUID"
+                        style="@style/DastyabButton" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="10dp">
+
+                    <EditText
+                        android:id="@+id/etExistingWorkerPath"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="/"
+                        android:hint="WS Path (/)"
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/colorTextPrimary"
+                        android:textColorHint="@color/colorTextSecondary"
+                        android:background="@drawable/input_bg"
+                        android:padding="11dp"
+                        android:inputType="textNoSuggestions" />
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="0dp" />
+
+                    <EditText
+                        android:id="@+id/etExistingWorkerPort"
+                        android:layout_width="96dp"
+                        android:layout_height="wrap_content"
+                        android:text="443"
+                        android:hint="Port"
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/colorTextPrimary"
+                        android:textColorHint="@color/colorTextSecondary"
+                        android:background="@drawable/input_bg"
+                        android:padding="11dp"
+                        android:inputType="number" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnBuildFromExistingWorker"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/cf_btn_build_existing"
+                    style="@style/DastyabButtonPrimary" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="12dp" />
+
+        <!-- 3. Clean IP Discovery & Pool -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/cf_section_cleanip"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorAccent"
+                android:paddingBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tvCleanIpStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Saved Clean IPs: 0"
+                android:textSize="12sp"
+                android:textColor="@color/colorTextSecondary"
+                android:paddingBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnFindCleanRust"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/cf_btn_find_rust"
+                    style="@style/DastyabButtonPrimary" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnScoutCleanDevice"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/cf_btn_scout_device"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="10dp">
+
+                <EditText
+                    android:id="@+id/etCustomCleanIp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Add Clean IP / IP:port (104.16.1.1:443)"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="textNoSuggestions" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnAddCustomCleanIp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="+ Add"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingTop="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:id="@+id/llCleanIpChips"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnBatchCleanConfigs"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Apply Top 5 Clean IPs"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnListCleanIpsCli"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="CleanIP Ledger"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="12dp" />
+
+        <!-- 4. Config Editor, Clean-IP Patcher & Export -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/cf_section_editor"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorAccent"
+                android:paddingBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tvEditorBaseStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Select a deployed/saved config below, paste a vless:// link, or deploy a worker above."
+                android:textSize="12sp"
+                android:textColor="@color/colorTextSecondary"
+                android:paddingBottom="8dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:id="@+id/llHistoryConfigChips"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="10dp">
+
+                <Button
+                    android:id="@+id/btnPasteVlessConfig"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Paste vless://"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnLoadActiveVpnConfig"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Active VPN"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnResetWorkerHost"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Restore Host"
+                    style="@style/DastyabChip" />
+            </LinearLayout>
+
+            <!-- Server Address / Clean IP + Port -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/etEditAddress"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Server Address / Clean IP"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="textNoSuggestions" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <EditText
+                    android:id="@+id/etEditPort"
+                    android:layout_width="86dp"
+                    android:layout_height="wrap_content"
+                    android:text="443"
+                    android:hint="Port"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="number" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/etEditSni"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="SNI (worker hostname preserved when using Clean IP)"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:textColor="@color/colorTextPrimary"
+                android:textColorHint="@color/colorTextSecondary"
+                android:background="@drawable/input_bg"
+                android:padding="11dp"
+                android:inputType="textNoSuggestions" />
+
+            <EditText
+                android:id="@+id/etEditHost"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="Host header (worker hostname)"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:textColor="@color/colorTextPrimary"
+                android:textColorHint="@color/colorTextSecondary"
+                android:background="@drawable/input_bg"
+                android:padding="11dp"
+                android:inputType="textNoSuggestions" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="8dp">
+
+                <EditText
+                    android:id="@+id/etEditPath"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="/"
+                    android:hint="WS Path (/)"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="textNoSuggestions" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <EditText
+                    android:id="@+id/etEditFp"
+                    android:layout_width="110dp"
+                    android:layout_height="wrap_content"
+                    android:text="chrome"
+                    android:hint="uTLS fp"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="textNoSuggestions" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/etEditUuid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="UUID"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:textColor="@color/colorTextPrimary"
+                android:textColorHint="@color/colorTextSecondary"
+                android:background="@drawable/input_bg"
+                android:padding="11dp"
+                android:inputType="textNoSuggestions" />
+
+            <EditText
+                android:id="@+id/etEditRemark"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="Remark / Label (e.g. clean-104.16.1.1)"
+                android:textSize="13sp"
+                android:textColor="@color/colorTextPrimary"
+                android:textColorHint="@color/colorTextSecondary"
+                android:background="@drawable/input_bg"
+                android:padding="11dp"
+                android:inputType="text" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="10dp">
+
+                <Button
+                    android:id="@+id/btnTestHandshake"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/cf_btn_test_handshake"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnSaveActivateVpn"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.2"
+                    android:text="@string/cf_btn_save_activate"
+                    style="@style/DastyabButtonPrimary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="8dp">
+
+                <Button
+                    android:id="@+id/btnStudioQr"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="QR Code"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnRefreshExport"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Render Export"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+
+            <!-- Export Format Switcher -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="12dp"
+                android:paddingBottom="8dp">
+
+                <Button
+                    android:id="@+id/btnFmtLink"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="vless://"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnFmtV2rayN"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="v2rayN"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnFmtSingBox"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="sing-box"
+                    style="@style/DastyabChip" />
+
+                <Button
+                    android:id="@+id/btnFmtClash"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Clash"
+                    style="@style/DastyabChip" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvExportPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minLines="4"
+                android:maxLines="14"
+                android:text="Edit fields above or choose a config to preview vless://, v2rayN, sing-box, or Clash."
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textColor="@color/colorTextPrimary"
+                android:background="@color/colorOutputBg"
+                android:padding="12dp"
+                android:textIsSelectable="true" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="8dp">
+
+                <Button
+                    android:id="@+id/btnCopyExport"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/btn_copy"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnShareExport"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/btn_share"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnCliExport"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Rust Export"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="12dp" />
+
+        <!-- 5. Linux Power CLI & Live Console -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/cf_section_linux"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorAccent"
+                android:paddingBottom="10dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingBottom="10dp">
+
+                <LinearLayout
+                    android:id="@+id/llLinuxCliChips"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="10dp">
+
+                <EditText
+                    android:id="@+id/etStudioCliArgs"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="dastyab args (e.g. routes list, sni-spoof scan)"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textColorHint="@color/colorTextSecondary"
+                    android:background="@drawable/input_bg"
+                    android:padding="11dp"
+                    android:inputType="textNoSuggestions"
+                    android:imeOptions="actionSend" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnStudioRunCli"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Run"
+                    style="@style/DastyabButtonPrimary" />
+
+                <Button
+                    android:id="@+id/btnStudioCancelCli"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="Stop"
+                    android:visibility="gone"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvStudioConsole"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minLines="5"
+                android:text="@string/cf_console_empty"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textColor="@color/colorTextPrimary"
+                android:background="@color/colorOutputBg"
+                android:padding="12dp"
+                android:textIsSelectable="true" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="8dp">
+
+                <Button
+                    android:id="@+id/btnStudioClearConsole"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/btn_clear"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnStudioCopyConsole"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/btn_copy"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
+
+        <Button
+            android:id="@+id/btnStudioBack"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@android:string/cancel"
+            style="@style/DastyabButton" />
+    </LinearLayout>
+</ScrollView>

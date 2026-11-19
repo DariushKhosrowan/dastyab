@@ -87,7 +87,8 @@ class MainActivityTest {
             TunnelSettingsActivity::class.java,
             BlackoutRescueActivity::class.java,
             VpnLayersActivity::class.java,
-            NetworkToolboxActivity::class.java
+            NetworkToolboxActivity::class.java,
+            CloudflareWorkerActivity::class.java
         )
         for (cls in targets) {
             ActivityScenario.launch<Activity>(Intent(context, cls)).use { scenario ->

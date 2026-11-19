@@ -298,6 +298,9 @@ class MainActivity : Activity() {
         findViewById<View>(R.id.btnSimpleOneClickBlackout).setOnClickListener {
             openRescueHub(BlackoutRescueActivity.ACTION_DNS_VPN)
         }
+        findViewById<View>(R.id.btnSimpleCfStudio).setOnClickListener {
+            openActivity(CloudflareWorkerActivity::class.java)
+        }
         findViewById<Button>(R.id.btnSimpleProxyPort).setOnClickListener {
             GoogleAccessSheet.show(this) { refreshVpnCard() }
         }
@@ -376,7 +379,7 @@ class MainActivity : Activity() {
             true
         }
         btnSimpleDeploy.setOnClickListener {
-            if (operation.get() == null) runSimple("deploy --preset standard", listOf("deploy", "--preset", "standard"))
+            openActivity(CloudflareWorkerActivity::class.java)
         }
         btnSimpleAutopilot.setOnClickListener {
             if (operation.get() == null) runSimple("autopilot status", listOf("autopilot", "status"))

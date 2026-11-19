@@ -113,21 +113,41 @@ object CleanEndpointScout {
     }
 
     /**
-     * Rewrites the host portion of a `vless://uuid@oldHost:port?...` URI with a discovered
-     * Clean Edge IP while preserving the original SNI/Host header so CDN routing continues working.
+     * Rewrites the host (and optional port) portion of a `vless://uuid@oldHost:port?...` URI
+     * with a discovered Clean Edge IP while preserving the original SNI/Host header so CDN
+     * routing continues working.
      */
     fun patchVlessWithCleanIp(vlessUri: String, cleanIp: String): String? {
-        if (!TunnelConfig.isValidIpv4(cleanIp)) return null
-        val parsed = TunnelConfig.parseVlessUri(vlessUri) ?: return null
-        val atIdx = vlessUri.indexOf('@')
-        if (atIdx < 0) return null
-        val afterAt = vlessUri.substring(atIdx + 1)
-        val queryOrFragIdx = afterAt.indexOfAny(charArrayOf('?', '#'))
-        val authority = if (queryOrFragIdx >= 0) afterAt.substring(0, queryOrFragIdx) else afterAt
-        val suffix = if (queryOrFragIdx >= 0) afterAt.substring(queryOrFragIdx) else ""
-        val colonIdx = authority.lastIndexOf(':')
-        val portPart = if (colonIdx >= 0) authority.substring(colonIdx) else ":${parsed.port}"
-        return vlessUri.substring(0, atIdx + 1) + cleanIp.trim() + portPart + suffix
+        val parsedConfig = WorkerConfigStudio.parseVless(vlessUri) ?: return null
+        val patched = parsedConfig.applyCleanIp(cleanIp, newName = parsedConfig.name) ?: return null
+        return patched.toVlessUri()
+    }
+
+    /**
+     * Tests a real TCP + TLS handshake against [connectIp]:[port] while sending [sniHost]
+     * in the TLS SNI extension (so Cloudflare Workers edge routing is tested end-to-end).
+     * Returns latency in milliseconds, or `-1L` on failure.
+     */
+    fun probeTlsWithSni(connectIp: String, port: Int, sniHost: String, timeoutMs: Int = 2500): Long {
+        val cleanSni = sniHost.trim()
+        if (cleanSni.isEmpty()) return probeTcpLatency(connectIp, port, timeoutMs)
+        val start = System.nanoTime()
+        return try {
+            val factory = javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory
+            (factory.createSocket() as javax.net.ssl.SSLSocket).use { socket ->
+                socket.soTimeout = timeoutMs
+                if (android.os.Build.VERSION.SDK_INT >= 24 || android.os.Build.VERSION.SDK_INT == 0) {
+                    val params = socket.sslParameters
+                    params.serverNames = listOf(javax.net.ssl.SNIHostName(cleanSni))
+                    socket.sslParameters = params
+                }
+                socket.connect(InetSocketAddress(connectIp.trim(), port), timeoutMs)
+                socket.startHandshake()
+            }
+            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start).coerceAtLeast(1L)
+        } catch (_: Exception) {
+            -1L
+        }
     }
 
     /** Scouts clean edge IPs across curated (or custom) CIDRs on TCP port 443. */

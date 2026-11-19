@@ -330,4 +330,25 @@
     <string name="terminal_hint_command">dastyab flow best  |  python3 -c "print(1+1)"</string>
     <string name="terminal_chips_flow">الگوریتم‌های لینوکسی Flow و AI Studio</string>
     <string name="terminal_chips_shell">دستورات پایتون ۳ و محیط لینوکس</string>
+
+    <!-- v3.3.0: استودیو ورکر کلودفلر و ویرایش کانفیگ با IP تمیز -->
+    <string name="action_cf_studio">استودیو ورکر کلودفلر</string>
+    <string name="action_cf_studio_subtitle">استقرار ورکر، ویرایش کانفیگ و IP تمیز</string>
+    <string name="simple_card_cf_studio">استودیو ورکر کلودفلر</string>
+    <string name="simple_card_cf_studio_sub">دیپلوی ورکر و IP تمیز</string>
+    <string name="cf_studio_title">استودیو ورکر کلودفلر و کانفیگ</string>
+    <string name="cf_studio_subtitle">تمام امکانات نسخه لینوکس روی اندروید: مدیریت توکن و اکانت کلودفلر، استقرار ورکر VLESS یا اتصال ورکر آماده، یافتن IP تمیز، ویرایش SNI/Host و خروجی vless://، v2rayN، sing-box و Clash.</string>
+    <string name="cf_section_token">۱. پروفایل، توکن API و حساب کلودفلر</string>
+    <string name="cf_section_worker">۲. استقرار ورکر جدید یا استفاده از ورکر آماده</string>
+    <string name="cf_section_cleanip">۳. کشف و استخر IP تمیز کلودفلر</string>
+    <string name="cf_section_editor">۴. ویرایشگر کانفیگ، اعمال IP تمیز و خروجی</string>
+    <string name="cf_section_linux">۵. دستورات لینوکسی کلودفلر و کنسول زنده</string>
+    <string name="cf_btn_save_verify">ذخیره و بررسی توکن</string>
+    <string name="cf_btn_deploy_worker">استقرار ورکر روی کلودفلر</string>
+    <string name="cf_btn_build_existing">ساخت کانفیگ پایه</string>
+    <string name="cf_btn_find_rust">یافتن IP با هسته Rust (۳)</string>
+    <string name="cf_btn_scout_device">اسکن سریع روی گوشی</string>
+    <string name="cf_btn_test_handshake">تست اتصال TLS + SNI</string>
+    <string name="cf_btn_save_activate">ذخیره و فعال‌سازی VPN</string>
+    <string name="cf_console_empty">خروجی دستورات، تأیید توکن، آدرس ورکر و گزارش تست IP تمیز اینجا نمایش داده می‌شود.</string>
 </resources>

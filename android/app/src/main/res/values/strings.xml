@@ -345,4 +345,25 @@
     <string name="terminal_hint_command">dastyab flow best  |  python3 -c "print(1+1)"</string>
     <string name="terminal_chips_flow">Linux Flow &amp; AI Studio Algorithms (CPython)</string>
     <string name="terminal_chips_shell">Python 3 &amp; Linux Environment</string>
+
+    <!-- v3.3.0: Cloudflare Worker Deploy & Config / Clean-IP Studio -->
+    <string name="action_cf_studio">CF Worker Studio</string>
+    <string name="action_cf_studio_subtitle">Deploy Worker, edit configs &amp; clean IPs</string>
+    <string name="simple_card_cf_studio">CF Worker Studio</string>
+    <string name="simple_card_cf_studio_sub">Deploy worker &amp; clean IPs</string>
+    <string name="cf_studio_title">Cloudflare Worker &amp; Config Studio</string>
+    <string name="cf_studio_subtitle">Full Linux CLI parity on Android: manage Cloudflare tokens &amp; accounts, deploy VLESS workers or connect existing workers, discover clean IPs, edit SNI/Host/endpoints live, and export vless://, v2rayN, sing-box &amp; Clash.</string>
+    <string name="cf_section_token">1. Profile, API Token &amp; Account</string>
+    <string name="cf_section_worker">2. Deploy Worker or Use Existing Worker</string>
+    <string name="cf_section_cleanip">3. Clean IP Discovery &amp; Pool</string>
+    <string name="cf_section_editor">4. Config Editor, Clean-IP Patcher &amp; Export</string>
+    <string name="cf_section_linux">5. Linux Power CLI &amp; Live Console</string>
+    <string name="cf_btn_save_verify">Save &amp; Verify Token</string>
+    <string name="cf_btn_deploy_worker">Deploy Worker to Cloudflare</string>
+    <string name="cf_btn_build_existing">Build Base Config</string>
+    <string name="cf_btn_find_rust">Rust E2E Find (3)</string>
+    <string name="cf_btn_scout_device">Fast Device Scout</string>
+    <string name="cf_btn_test_handshake">Test TLS + SNI</string>
+    <string name="cf_btn_save_activate">Save &amp; Activate VPN</string>
+    <string name="cf_console_empty">Command output, token verification, worker URLs, and clean-IP probe logs appear here.</string>
 </resources>
