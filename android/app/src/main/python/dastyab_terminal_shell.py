@@ -3,6 +3,7 @@
 Handles:
   • `dastyab flow ...` / `dastyab-flow.py ...`  -> in-process Linux `dastyab_flow` module
   • `dastyab aistudio ...` / `dastyab-aistudio.py ...` -> in-process Linux `dastyab_aistudio` module
+  • `pip list | check | show | install [--recommended] | uninstall` -> runtime pure-Python installer
   • `python3 -c ...`, `python3 <script.py>`, `python3 -m <mod>`, `python3 --version`
   • `dastyab <native-subcommand>` -> delegates to `libdastyab.so` via host callback
   • Linux shell built-ins (`pwd`, `cd`, `ls`, `cat`, `head`, `tail`, `grep`, `wc`,
@@ -23,6 +24,7 @@ import time
 import dastyab_android_shim as _shim
 import dastyab_aistudio
 import dastyab_flow
+import dastyab_pip
 
 _SHELL_LOCK = threading.Lock()
 _STOP_EVENT = threading.Event()
@@ -80,6 +82,7 @@ def init_env(home_dir, tmp_dir, native_lib_dir="", extra_env=None):
 
     if _CWD is None or not os.path.isdir(_CWD):
         _CWD = home_dir
+    dastyab_pip.ensure_site_packages_on_path()
     _ENV_INITIALIZED = True
     return prof
 
@@ -154,6 +157,11 @@ def prompt_path():
     if cwd.startswith(home + "/"):
         return "~" + cwd[len(home):]
     return cwd
+
+
+def get_packages_summary():
+    dastyab_pip.ensure_site_packages_on_path()
+    return json.dumps(dastyab_pip.get_packages_summary())
 
 
 def request_stop():
@@ -282,6 +290,9 @@ def _dispatch(prog, args, native_cli_cb, event_cb):
         print(f"[dastyab] Native CLI subcommand queued: dastyab {' '.join(args)}")
         return 0
 
+    if base in ("pip", "pip3"):
+        return dastyab_pip.main(args)
+
     if base in ("python3", "python"):
         return _run_python(args)
 
@@ -360,6 +371,8 @@ def _dispatch(prog, args, native_cli_cb, event_cb):
         for name in args:
             if name in ("python3", "python"):
                 print(sys.executable or "/usr/bin/python3 (embedded CPython 3.11)")
+            elif name in ("pip", "pip3"):
+                print(f"~/.dastyab/bin/pip (dastyab_pip -> {dastyab_pip.site_packages_dir()})")
             elif name == "dastyab":
                 print(os.path.join(os.environ.get("DASTYAB_NATIVE_DIR", "/app/bin"), "libdastyab.so"))
             elif name in ("dastyab-flow.py", "dastyab-aistudio.py"):
@@ -393,6 +406,7 @@ def _dispatch(prog, args, native_cli_cb, event_cb):
 
 
 def _run_python(args):
+    dastyab_pip.ensure_site_packages_on_path()
     if not args or args[0] in ("--version", "-V"):
         print(f"Python {platform.python_version()}")
         return 0
@@ -417,6 +431,8 @@ def _run_python(args):
             print("python3: option -m requires a module name")
             return 2
         mod = args[1]
+        if mod in ("pip", "pip3"):
+            return dastyab_pip.main(args[2:])
         saved_argv = sys.argv
         sys.argv = [mod] + args[2:]
         try:
@@ -605,8 +621,17 @@ def _print_help():
         "  dastyab aistudio verify                     Check AI Studio routes + pool\n"
         "  dastyab aistudio start                      Start AI Studio tunnel + browser\n"
         "\n"
+        "Python Package Manager (pip -> ~/.dastyab/site-packages):\n"
+        "  pip list                                    List bundled & user-installed packages\n"
+        "  pip check                                   Verify core & recommended imports\n"
+        "  pip install --recommended                   Install all recommended pure-Python pkgs\n"
+        "  pip install <pkg> [<pkg2>...]               Install pure-Python packages from PyPI\n"
+        "  pip install -r <requirements.txt>           Install packages from requirements file\n"
+        "  pip show <pkg>  |  pip uninstall [-y] <pkg> Inspect or remove user packages\n"
+        "\n"
         "Python & Native CLI:\n"
         "  python3 --version                           Show embedded CPython version\n"
+        "  python3 -m pip <args>                       Invoke runtime pip via python3 -m\n"
         "  python3 -c \"<code...>\"                      Execute Python 3 code directly\n"
         "  python3 <script.py> [args]                  Run any .py script inside profile\n"
         "  dastyab <subcommand>                        Run native Rust dastyab CLI\n"

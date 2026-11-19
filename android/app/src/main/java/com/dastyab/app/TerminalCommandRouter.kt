@@ -38,6 +38,9 @@ object TerminalCommandRouter {
     )
 
     val LINUX_PYTHON_PRESETS: List<QuickPreset> = listOf(
+        QuickPreset("pip list", "pip list"),
+        QuickPreset("pip --recommended", "pip install --recommended"),
+        QuickPreset("pip check", "pip check"),
         QuickPreset("python3 --version", "python3 --version"),
         QuickPreset("ssl & arch test", "python3 -c \"import sys, ssl, platform; print(sys.version); print(ssl.OPENSSL_VERSION, platform.machine())\""),
         QuickPreset("ls ~/.dastyab", "ls -la ~/.dastyab/profiles/default"),
@@ -188,5 +191,18 @@ object TerminalCommandRouter {
                 }
             }
         }
+    }
+
+    /** Formats a safe `pip install ...` command from user-entered package specs, or null if empty/invalid. */
+    fun buildPipInstallCommand(rawPackages: String?): String? {
+        val tokens = rawPackages
+            .orEmpty()
+            .split(',', ' ', '\n', '\t')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        if (tokens.isEmpty()) return null
+        val pkgRegex = Regex("^[A-Za-z0-9][A-Za-z0-9._\\-\\[\\]=<>!~]*$")
+        if (tokens.any { !it.matches(pkgRegex) }) return null
+        return "pip install " + tokens.joinToString(" ")
     }
 }

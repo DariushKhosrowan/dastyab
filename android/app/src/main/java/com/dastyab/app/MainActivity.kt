@@ -1166,6 +1166,9 @@ class MainActivity : DastyabActivity() {
                 }
             }
         }
+        findViewById<Button>(R.id.btnTerminalPackages).setOnClickListener {
+            showTerminalPackagesDialog()
+        }
         findViewById<Button>(R.id.btnTerminalOpenAiStudio).setOnClickListener {
             launchGoogleServiceViaVpn(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
         }
@@ -1180,6 +1183,85 @@ class MainActivity : DastyabActivity() {
                 false
             }
         }
+    }
+
+    private fun showTerminalPackagesDialog() {
+        appendTerminalOutput("[pip] Inspecting bundled & user Python packages…\n")
+        thread(isDaemon = true, name = "dastyab-pip-summary") {
+            val raw = PythonRuntimeBridge.getPipSummaryJson(this)
+            val doc = runCatching { JSONObject(raw) }.getOrNull() ?: JSONObject()
+            val total = doc.optInt("total_installed", 0)
+            val missingArr = doc.optJSONArray("missing_recommended")
+            val missingList = buildList {
+                if (missingArr != null) {
+                    for (i in 0 until missingArr.length()) {
+                        val s = missingArr.optString(i, "")
+                        if (s.isNotBlank()) add(s)
+                    }
+                }
+            }
+            val recArr = doc.optJSONArray("recommended")
+            val statusLines = StringBuilder()
+            if (recArr != null) {
+                for (i in 0 until recArr.length()) {
+                    val item = recArr.optJSONObject(i) ?: continue
+                    val mark = if (item.optBoolean("installed", false)) "✓" else "✗"
+                    val name = item.optString("name", "")
+                    val ver = item.optString("version", "")
+                    val src = item.optString("source", "")
+                    val detail = if (ver.isNotBlank()) "$ver ($src)" else "not installed"
+                    statusLines.append("$mark $name — $detail\n")
+                }
+            }
+            postUi {
+                val summary = if (statusLines.isNotEmpty()) {
+                    "Installed distributions: $total\n" +
+                        "Missing recommended: ${if (missingList.isEmpty()) "None (all ready)" else missingList.joinToString(", ")}\n\n" +
+                        statusLines.toString().trimEnd()
+                } else {
+                    "Manage Python packages in ~/.dastyab/site-packages.\n" +
+                        "Note: Core pure-Python packages (requests, certifi, PySocks, dnspython, beautifulsoup4) are pre-bundled; tap below to install/update all recommended packages or install custom PyPI packages."
+                }
+                UiSafety.safeShowDialog(
+                    this,
+                    AlertDialog.Builder(this)
+                        .setTitle("Python Packages (pip)")
+                        .setMessage(summary)
+                        .setPositiveButton("Install All Recommended") { _, _ ->
+                            runTerminalCommand("pip install --recommended")
+                        }
+                        .setNeutralButton("Install Custom…") { _, _ ->
+                            showCustomPipInstallDialog()
+                        }
+                        .setNegativeButton("pip check") { _, _ ->
+                            runTerminalCommand("pip check")
+                        }
+                )
+            }
+        }
+    }
+
+    private fun showCustomPipInstallDialog() {
+        val input = EditText(this).apply {
+            hint = "pyyaml httpx rich colorama"
+            setSingleLine(true)
+        }
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle("pip install <packages>")
+                .setMessage("Enter pure-Python PyPI package name(s) separated by spaces or commas:")
+                .setView(input)
+                .setPositiveButton("Install") { _, _ ->
+                    val cmd = TerminalCommandRouter.buildPipInstallCommand(input.text.toString())
+                    if (cmd == null) {
+                        Toast.makeText(this, "Enter valid PyPI package names", Toast.LENGTH_SHORT).show()
+                    } else {
+                        runTerminalCommand(cmd)
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
     }
 
     private fun buildTerminalPresetChips(containerId: Int, presets: List<TerminalCommandRouter.QuickPreset>) {
@@ -1212,7 +1294,7 @@ class MainActivity : DastyabActivity() {
                 tvTerminalPromptHeader.text = TerminalCommandRouter.formatPrompt(cwd).trimEnd()
                 appendTerminalOutput(
                     "Ready: $ver | Synced $synced node(s) to ~/.dastyab/profiles/default/\n" +
-                        "Run `dastyab flow best`, `dastyab flow start`, `dastyab aistudio verify`, or `python3 -c \"...\"`.\n\n"
+                        "Run `dastyab flow best`, `dastyab flow start`, `dastyab aistudio verify`, `pip install --recommended`, or `python3 -c \"...\"`.\n\n"
                 )
             }
         }

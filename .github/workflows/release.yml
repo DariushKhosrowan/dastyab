@@ -90,6 +90,7 @@ jobs:
           cp dastyab-aistudio.py dist/ 2>/dev/null || true
           cp dastyab-aistudio-cleanip.py dist/ 2>/dev/null || true
           cp dastyab-aistudio.sh dist/ 2>/dev/null || true
+          cp dastyab-flow.py dist/ 2>/dev/null || true
           if [ "${{ matrix.deb }}" = "true" ]; then
             deb_file=$(ls target/debian/*_${{ matrix.arch }}.deb 2>/dev/null | head -n1)
             if [ -z "$deb_file" ]; then
@@ -123,7 +124,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all release assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true

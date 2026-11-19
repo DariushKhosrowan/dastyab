@@ -92,6 +92,16 @@ object PythonRuntimeBridge {
         }.getOrDefault("~")
     }
 
+    fun getPipSummaryJson(context: Context): String {
+        if (!ensureStarted(context)) return "{}"
+        return runCatching {
+            Python.getInstance()
+                .getModule("dastyab_terminal_shell")
+                .callAttr("get_packages_summary")
+                .toString()
+        }.getOrDefault("{}")
+    }
+
     fun syncProfile(context: Context): Int {
         if (!ensureStarted(context)) return 0
         return runCatching {

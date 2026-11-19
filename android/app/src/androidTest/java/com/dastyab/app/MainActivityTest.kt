@@ -102,4 +102,16 @@ class MainActivityTest {
             }
         }
     }
+
+    @Test
+    fun terminalModeSwitchesAndExposesPackagesButton() {
+        activityRule.scenario.onActivity { activity ->
+            val tabTerminal = activity.findViewById<Button>(R.id.btnTabTerminal)
+            val btnPackages = activity.findViewById<Button>(R.id.btnTerminalPackages)
+            assertNotNull("btnTabTerminal must exist", tabTerminal)
+            assertNotNull("btnTerminalPackages must exist", btnPackages)
+            tabTerminal.performClick()
+            assertTrue("MainActivity must stay alive after opening Terminal Mode", UiSafety.isActivityAlive(activity))
+        }
+    }
 }

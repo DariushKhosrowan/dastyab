@@ -131,6 +131,19 @@ chaquopy {
                 ?: System.getenv("PYTHON")
                 ?: "python3"
         )
+        pip {
+            // Core pure-Python packages pre-bundled across all 4 ABIs.
+            // charset-normalizer <3.0 stays pure-Python (avoids 3.x mypyc C extensions on 32-bit ABIs).
+            install("certifi==2024.8.30")
+            install("charset-normalizer==2.1.1")
+            install("idna==3.10")
+            install("urllib3==2.2.3")
+            install("requests==2.32.3")
+            install("PySocks==1.7.1")
+            install("dnspython==2.7.0")
+            install("soupsieve==2.6")
+            install("beautifulsoup4==4.12.3")
+        }
     }
 }
 

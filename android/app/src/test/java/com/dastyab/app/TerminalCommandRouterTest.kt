@@ -83,4 +83,17 @@ class TerminalCommandRouterTest {
         assertEquals("OPEN_BROWSER", ev!!.kind)
         assertTrue(ev.payloadJson.contains("flow.google.com"))
     }
+
+    @Test
+    fun buildPipInstallCommand_sanitizesAndFormatsPackages() {
+        assertNull(TerminalCommandRouter.buildPipInstallCommand("   "))
+        assertNull(TerminalCommandRouter.buildPipInstallCommand("pkg; rm -rf /"))
+        assertEquals(
+            "pip install requests>=2.28 pyyaml PySocks",
+            TerminalCommandRouter.buildPipInstallCommand("requests>=2.28, pyyaml  PySocks")
+        )
+        assertTrue(
+            TerminalCommandRouter.LINUX_PYTHON_PRESETS.any { it.command == "pip install --recommended" }
+        )
+    }
 }

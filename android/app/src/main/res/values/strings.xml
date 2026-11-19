@@ -336,6 +336,7 @@
     <string name="terminal_title">Linux Python Core</string>
     <string name="terminal_subtitle">Embedded CPython 3.11 executing the exact Linux dastyab-flow.py &amp; dastyab-aistudio.py algorithms, plus python3 &amp; Linux shell built-ins.</string>
     <string name="terminal_btn_sync">Sync Nodes</string>
+    <string name="terminal_btn_packages">Packages (pip)</string>
     <string name="terminal_btn_open_flow">Open Flow</string>
     <string name="terminal_btn_open_ai">Open AI Studio</string>
     <string name="terminal_btn_stop">Ctrl+C</string>
