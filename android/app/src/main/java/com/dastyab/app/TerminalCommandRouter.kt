@@ -1,14 +1,11 @@
 package com.dastyab.app
 
-import org.json.JSONArray
-import org.json.JSONObject
-
 /**
  * TerminalCommandRouter — pure-Kotlin command normalization, prompt formatting,
  * profile node serialization, and IPC event parsing for Terminal Mode.
  *
- * Intentionally contains zero Android/JNI dependencies so it is 100% testable
- * on the plain JVM (`testDebugUnitTest`).
+ * Intentionally contains zero Android/JNI dependencies (including no `org.json.*`
+ * Android stubs) so it is 100% testable on the plain JVM (`testDebugUnitTest`).
  */
 object TerminalCommandRouter {
 
@@ -84,9 +81,9 @@ object TerminalCommandRouter {
             val t = h.trim()
             if (t.startsWith("vless://", ignoreCase = true)) merged.add(t)
         }
-        val arr = JSONArray()
-        merged.take(150).forEach { arr.put(it) }
-        return arr.toString()
+        return merged.take(150).joinToString(prefix = "[", postfix = "]", separator = ",") {
+            "\"${escapeJson(it)}\""
+        }
     }
 
     fun buildRouteSyncJson(
@@ -97,18 +94,21 @@ object TerminalCommandRouter {
         upstreamHost: String,
         upstreamPort: Int
     ): String {
-        val obj = JSONObject()
-        obj.put("external_vpn_active", externalVpnActive)
-        obj.put("dastyab_vpn_active", dastyabVpnActive)
+        val fields = mutableListOf(
+            "\"external_vpn_active\":$externalVpnActive",
+            "\"dastyab_vpn_active\":$dastyabVpnActive"
+        )
         if (bridgePort != null && bridgePort > 0) {
-            obj.put("bridge_port", bridgePort)
+            fields.add("\"bridge_port\":$bridgePort")
         }
         if (upstreamScheme != TunnelConfig.ProxyScheme.DIRECT && upstreamPort in 1..65535) {
-            obj.put("upstream_scheme", upstreamScheme.name.lowercase())
-            obj.put("upstream_host", TunnelConfig.sanitizeProxyHost(upstreamHost))
-            obj.put("upstream_port", upstreamPort)
+            val scheme = escapeJson(upstreamScheme.name.lowercase())
+            val host = escapeJson(TunnelConfig.sanitizeProxyHost(upstreamHost))
+            fields.add("\"upstream_scheme\":\"$scheme\"")
+            fields.add("\"upstream_host\":\"$host\"")
+            fields.add("\"upstream_port\":$upstreamPort")
         }
-        return obj.toString()
+        return fields.joinToString(prefix = "{", postfix = "}", separator = ",")
     }
 
     fun parseEventLine(line: String?): HostEvent? {
@@ -124,7 +124,69 @@ object TerminalCommandRouter {
     }
 
     fun parseCliArgsJson(json: String): List<String> {
-        val arr = JSONArray(json)
-        return List(arr.length()) { idx -> arr.optString(idx, "") }.filter { it.isNotEmpty() }
+        val trimmed = json.trim()
+        if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return emptyList()
+        val out = mutableListOf<String>()
+        var i = 1
+        val end = trimmed.length - 1
+        while (i < end) {
+            while (i < end && (trimmed[i].isWhitespace() || trimmed[i] == ',')) i++
+            if (i >= end) break
+            if (trimmed[i] != '"') return emptyList()
+            i++ // skip opening quote
+            val sb = StringBuilder()
+            var closed = false
+            while (i < end) {
+                val c = trimmed[i++]
+                if (c == '"') {
+                    closed = true
+                    break
+                }
+                if (c == '\\') {
+                    if (i >= end) return emptyList()
+                    when (val esc = trimmed[i++]) {
+                        '"', '\\', '/' -> sb.append(esc)
+                        'b' -> sb.append('\b')
+                        'f' -> sb.append('\u000C')
+                        'n' -> sb.append('\n')
+                        'r' -> sb.append('\r')
+                        't' -> sb.append('\t')
+                        'u' -> {
+                            if (i + 4 > end) return emptyList()
+                            val hex = trimmed.substring(i, i + 4)
+                            val code = hex.toIntOrNull(16) ?: return emptyList()
+                            sb.append(code.toChar())
+                            i += 4
+                        }
+                        else -> sb.append(esc)
+                    }
+                } else {
+                    sb.append(c)
+                }
+            }
+            if (!closed) return emptyList()
+            val item = sb.toString()
+            if (item.isNotEmpty()) out.add(item)
+        }
+        return out
+    }
+
+    internal fun escapeJson(value: String): String = buildString(value.length + 8) {
+        for (ch in value) {
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (ch.code < 0x20) {
+                    append("\\u%04x".format(ch.code))
+                } else {
+                    append(ch)
+                }
+            }
+        }
     }
 }

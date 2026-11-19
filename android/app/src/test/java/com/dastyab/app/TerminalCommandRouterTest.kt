@@ -45,6 +45,32 @@ class TerminalCommandRouterTest {
         assertTrue(json.contains("1.2.3.4:443"))
         assertTrue(json.contains("5.6.7.8:443"))
         assertFalse(json.contains("http://invalid"))
+        assertTrue(json.startsWith("[") && json.endsWith("]"))
+    }
+
+    @Test
+    fun buildRouteSyncJson_serializesWithoutAndroidJsonStubs() {
+        val json = TerminalCommandRouter.buildRouteSyncJson(
+            externalVpnActive = false,
+            dastyabVpnActive = true,
+            bridgePort = 10850,
+            upstreamScheme = TunnelConfig.ProxyScheme.SOCKS5,
+            upstreamHost = "127.0.0.1",
+            upstreamPort = 10808
+        )
+        assertTrue(json.contains("\"external_vpn_active\":false"))
+        assertTrue(json.contains("\"dastyab_vpn_active\":true"))
+        assertTrue(json.contains("\"bridge_port\":10850"))
+        assertTrue(json.contains("\"upstream_scheme\":\"socks5\""))
+        assertTrue(json.contains("\"upstream_host\":\"127.0.0.1\""))
+        assertTrue(json.contains("\"upstream_port\":10808"))
+    }
+
+    @Test
+    fun parseCliArgsJson_parsesEscapedArgsOnPlainJvm() {
+        val parsed = TerminalCommandRouter.parseCliArgsJson("""["scan","--preset","standard","\"quoted\""]""")
+        assertEquals(listOf("scan", "--preset", "standard", "\"quoted\""), parsed)
+        assertEquals(emptyList<String>(), TerminalCommandRouter.parseCliArgsJson("[]"))
     }
 
     @Test
