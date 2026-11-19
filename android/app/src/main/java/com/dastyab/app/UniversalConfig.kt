@@ -45,6 +45,18 @@ object UniversalConfig {
         }
     }
 
+    private val SUPPORTED_PROTOCOLS = setOf(
+        "vless", "vmess", "trojan", "ss", "ssr",
+        "hysteria2", "hysteria", "hy2", "tuic",
+        "juicity", "anytls", "naive+https", "naive+quic", "naive",
+        "wireguard", "wg", "warp", "amneziawg",
+        "openvpn", "ovpn",
+        "npv4", "npvs", "npvt", "npv", "napsternetv",
+        "socks5", "socks4", "socks", "ssh",
+        "sn", "dnstt", "slipnet",
+        "mtproto"
+    )
+
     private val SUPPORTED_SCHEME_PATTERN = listOf(
         "vless", "vmess", "trojan", "ss", "ssr",
         "hysteria2", "hysteria", "hy2", "tuic",
@@ -398,7 +410,7 @@ object UniversalConfig {
         }
 
         val proto = protocolOf(trimmed)
-        if (proto == "unknown") return null
+        if (proto !in SUPPORTED_PROTOCOLS) return null
 
         // VLESS
         if (proto == "vless") {
@@ -459,9 +471,17 @@ object UniversalConfig {
         if (proto in setOf("npv", "npv4", "npvs", "npvt", "napsternetv")) {
             val label = trimmed.substringAfter('#', "").let { decodePercent(it) }
             val body = trimmed.substringAfter("://").substringBefore('#')
-            val authorityHostPort = parseAuthorityHostPort(trimmed)
-            if (authorityHostPort != null) {
-                return ParsedEndpoint(trimmed, proto, Family.NAPSTERNETV, authorityHostPort.first, authorityHostPort.second, label)
+            val authoritySegment = body.substringBefore('?').substringBefore('/')
+            if (authoritySegment.contains('@') || authoritySegment.contains(':')) {
+                val hostPortPart = if (authoritySegment.contains('@')) {
+                    authoritySegment.substringAfterLast('@')
+                } else {
+                    authoritySegment
+                }
+                val direct = splitHostPort(hostPortPart)
+                if (direct != null) {
+                    return ParsedEndpoint(trimmed, proto, Family.NAPSTERNETV, direct.first, direct.second, label)
+                }
             }
             val decoded = tryDecodeBase64(body.substringBefore('?'))
             if (decoded != null) {
@@ -475,11 +495,23 @@ object UniversalConfig {
                 val host = extractJsonString(decoded, "add")
                     ?: extractJsonString(decoded, "host")
                     ?: extractJsonString(decoded, "server")
-                val port = extractJsonPort(decoded, "port") ?: 443
+                    ?: extractJsonString(decoded, "address")
+                val port = extractJsonPort(decoded, "port")
+                    ?: extractJsonPort(decoded, "serverPort")
+                    ?: 443
                 if (!host.isNullOrBlank()) {
-                    val ps = extractJsonString(decoded, "ps") ?: extractJsonString(decoded, "remark") ?: label
+                    val ps = extractJsonString(decoded, "ps")
+                        ?: extractJsonString(decoded, "remarks")
+                        ?: extractJsonString(decoded, "remark")
+                        ?: extractJsonString(decoded, "name")
+                        ?: extractJsonString(decoded, "tag")
+                        ?: label
                     return ParsedEndpoint(trimmed, proto, Family.NAPSTERNETV, host, port, ps)
                 }
+            }
+            val authorityHostPort = parseAuthorityHostPort(trimmed)
+            if (authorityHostPort != null) {
+                return ParsedEndpoint(trimmed, proto, Family.NAPSTERNETV, authorityHostPort.first, authorityHostPort.second, label)
             }
             return null
         }

@@ -22,6 +22,7 @@
 
 pub mod profiles;
 
+use std::cell::RefCell;
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -60,7 +61,7 @@ pub fn home_dir() -> Option<PathBuf> {
 
 // Thread-local override so parallel tests never clobber each other.
 std::thread_local! {
-    static MEM_DIR_OVERRIDE: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+    static MEM_DIR_OVERRIDE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
 /// Set the base directory (used by tests to avoid touching the real home).

@@ -111,6 +111,7 @@ class UniversalConfigTest {
         assertEquals(443, mt.port)
 
         assertNull(UniversalConfig.parse("https://example.com/not-a-proxy"))
+        assertNull(UniversalConfig.parse("http://example.com/not-a-proxy"))
     }
 
     @Test
@@ -184,6 +185,14 @@ class UniversalConfigTest {
         assertNotNull(npvs)
         assertEquals(UniversalConfig.Family.NAPSTERNETV, npvs!!.family)
         assertEquals(8443, npvs.port)
+
+        val npvUnpaddedJson = """{"address":"addr.example.com","serverPort":9443,"remarks":"UnpaddedNpv"}"""
+        val npvUnpaddedB64 = encodeBase64(npvUnpaddedJson).trimEnd('=')
+        val npvUnpadded = UniversalConfig.parse("npv4://$npvUnpaddedB64")
+        assertNotNull(npvUnpadded)
+        assertEquals("addr.example.com", npvUnpadded!!.host)
+        assertEquals(9443, npvUnpadded.port)
+        assertEquals("UnpaddedNpv", npvUnpadded.label)
     }
 
     private fun encodeBase64(text: String): String {

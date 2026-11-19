@@ -26,6 +26,7 @@
 use base64::Engine;
 
 /// Proxy URI schemes the node store / harvester understand.
+#[rustfmt::skip]
 pub const SUPPORTED_SCHEMES: &[&str] = &[
     "vless",
     "vmess",
@@ -191,7 +192,8 @@ fn parse_userinfo_host(out: &mut ProxyUri, rest: &str, split_at: usize) -> bool 
     true
 }
 
-/// For schemes where userinfo before `@` is optional (`wireguard`, `wg`, `warp`, `socks5`, `sn`, `dnstt`).
+/// For schemes where userinfo before `@` is optional
+/// (`wireguard`, `wg`, `warp`, `socks5`, `sn`, `dnstt`).
 fn parse_optional_userinfo_host(out: &mut ProxyUri, rest: &str) -> bool {
     if rest.contains('@') {
         return parse_userinfo_host(out, rest, 1);
@@ -203,7 +205,8 @@ fn parse_optional_userinfo_host(out: &mut ProxyUri, rest: &str) -> bool {
     true
 }
 
-/// NapsternetV (`npv://`, `npv4://`, `napsternetv://`) supports both authority URIs and Base64 JSON blobs.
+/// NapsternetV (`npv://`, `npv4://`, `napsternetv://`) supports both authority URIs
+/// and Base64 JSON blobs.
 fn parse_napsternet(out: &mut ProxyUri, rest: &str) -> bool {
     if rest.contains('@') && parse_userinfo_host(out, rest, 1) {
         return true;
@@ -263,7 +266,8 @@ fn parse_napsternet(out: &mut ProxyUri, rest: &str) -> bool {
     false
 }
 
-/// Telegram MTProto links (`tg://proxy?server=...&port=...&secret=...` or `https://t.me/proxy?...`).
+/// Telegram MTProto links (`tg://proxy?server=...&port=...&secret=...`
+/// or `https://t.me/proxy?...`).
 fn parse_mtproto(raw: &str) -> Option<ProxyUri> {
     let lower = raw.to_ascii_lowercase();
     let query = if lower.starts_with("tg://proxy?") {
@@ -469,7 +473,11 @@ mod tests {
 
     #[test]
     fn vless_roundtrip() {
-        let u = ProxyUri::parse("vless://06ef598c-1555-4887-b3f9-08214a2f6792@104.17.72.206:443?encryption=none&type=ws#my-node").unwrap();
+        let link = concat!(
+            "vless://06ef598c-1555-4887-b3f9-08214a2f6792@",
+            "104.17.72.206:443?encryption=none&type=ws#my-node"
+        );
+        let u = ProxyUri::parse(link).unwrap();
         assert_eq!(u.scheme, "vless");
         assert_eq!(u.host, "104.17.72.206");
         assert_eq!(u.port, 443);
@@ -479,7 +487,11 @@ mod tests {
 
     #[test]
     fn trojan_parses() {
-        let u = ProxyUri::parse("trojan://secret-password@ali.example.com:8443?security=tls&sni=ali.example.com#trojan-node").unwrap();
+        let link = concat!(
+            "trojan://secret-password@ali.example.com:8443",
+            "?security=tls&sni=ali.example.com#trojan-node"
+        );
+        let u = ProxyUri::parse(link).unwrap();
         assert_eq!(u.scheme, "trojan");
         assert_eq!(u.host, "ali.example.com");
         assert_eq!(u.port, 8443);
@@ -498,7 +510,11 @@ mod tests {
 
     #[test]
     fn tuic_uses_uuid_before_colon() {
-        let u = ProxyUri::parse("tuic://413a66e9-b05b-4ae6-a9eb-6d28204a28f4:tok@138.68.53.88:7780?congestion_control=bbr#tuic").unwrap();
+        let link = concat!(
+            "tuic://413a66e9-b05b-4ae6-a9eb-6d28204a28f4:tok@",
+            "138.68.53.88:7780?congestion_control=bbr#tuic"
+        );
+        let u = ProxyUri::parse(link).unwrap();
         assert_eq!(u.id, "413a66e9-b05b-4ae6-a9eb-6d28204a28f4");
         assert_eq!(u.port, 7780);
     }
@@ -531,9 +547,13 @@ mod tests {
         assert_eq!(u.port, 19999);
         assert_eq!(u.alias, "London");
     }
+
     #[test]
     fn vmess_base64_json() {
-        let json = r#"{"v":"2","ps":"vmess-telegram","add":"192.168.1.100","port":"443","id":"7748b328-f0e8-40ab-b2e3-9a1c2c22d111","aid":"0"}"#;
+        let json = concat!(
+            r#"{"v":"2","ps":"vmess-telegram","add":"192.168.1.100","#,
+            r#""port":"443","id":"7748b328-f0e8-40ab-b2e3-9a1c2c22d111","aid":"0"}"#
+        );
         let b64 = base64::engine::general_purpose::STANDARD.encode(json);
         let u = ProxyUri::parse(&format!("vmess://{b64}")).unwrap();
         assert_eq!(u.scheme, "vmess");
@@ -580,7 +600,11 @@ mod tests {
 
     #[test]
     fn parses_wireguard_napsternet_hy2_and_mtproto() {
-        let wg = ProxyUri::parse("wireguard://privKey==@162.159.192.1:2408?publickey=pubKey==#WARP").unwrap();
+        let wg_link = concat!(
+            "wireguard://privKey==@162.159.192.1:2408",
+            "?publickey=pubKey==#WARP"
+        );
+        let wg = ProxyUri::parse(wg_link).unwrap();
         assert_eq!(wg.scheme, "wireguard");
         assert_eq!(wg.host, "162.159.192.1");
         assert_eq!(wg.port, 2408);
@@ -592,7 +616,10 @@ mod tests {
         assert_eq!(wg6.host, "2606:4700:d0::a29f:c001");
         assert_eq!(wg6.port, 2408);
 
-        let npv_json = r#"{"server":"npv.example.com","port":8443,"uuid":"abc-123","remarks":"NPV-Fast"}"#;
+        let npv_json = concat!(
+            r#"{"server":"npv.example.com","port":8443,"#,
+            r#""uuid":"abc-123","remarks":"NPV-Fast"}"#
+        );
         let npv_b64 = base64::engine::general_purpose::STANDARD.encode(npv_json);
         let npv = ProxyUri::parse(&format!("npv4://{npv_b64}")).unwrap();
         assert_eq!(npv.scheme, "npv4");
@@ -601,7 +628,8 @@ mod tests {
         assert_eq!(npv.id, "abc-123");
         assert_eq!(npv.alias, "NPV-Fast");
 
-        let hy2 = ProxyUri::parse("hy2://tok@hy.example.com:443?sni=hy.example.com#Hy2Node").unwrap();
+        let hy2_link = "hy2://tok@hy.example.com:443?sni=hy.example.com#Hy2Node";
+        let hy2 = ProxyUri::parse(hy2_link).unwrap();
         assert_eq!(hy2.scheme, "hy2");
         assert_eq!(hy2.port, 443);
 
@@ -611,7 +639,8 @@ mod tests {
         assert_eq!(mt.port, 443);
         assert_eq!(mt.id, "dd00001111");
 
-        let ovpn = ProxyUri::parse("openvpn://198.51.100.77:1194?proto=tcp&dev=tun#OpenVPN-TCP").unwrap();
+        let ovpn_link = "openvpn://198.51.100.77:1194?proto=tcp&dev=tun#OpenVPN-TCP";
+        let ovpn = ProxyUri::parse(ovpn_link).unwrap();
         assert_eq!(ovpn.scheme, "openvpn");
         assert_eq!(ovpn.host, "198.51.100.77");
         assert_eq!(ovpn.port, 1194);

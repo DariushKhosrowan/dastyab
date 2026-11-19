@@ -15,6 +15,7 @@ pub struct CFErrorTemplate {
 }
 
 /// Error codes we know how to explain. (code → template)
+#[rustfmt::skip]
 pub const KNOWN_CODES: &[(u32, CFErrorTemplate)] = &[
     (10000, CFErrorTemplate { title: "Authentication failure", fix: "The API token was rejected. Re-enter it (or create a new one in the Cloudflare dashboard)." }),
     (9109, CFErrorTemplate { title: "Cloudflare account deactivated", fix: "Your Cloudflare account is currently deactivated (CF error 9109) — this is an account-level block, not a token problem. Reactivate it at dash.cloudflare.com, then retry the deploy." }),

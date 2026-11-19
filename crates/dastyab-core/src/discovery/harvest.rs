@@ -266,11 +266,16 @@ pub fn extract_proxy_links(body: &str) -> Vec<String> {
 }
 
 /// Supported VPN config file extensions for channel / GitHub file harvesting.
+#[rustfmt::skip]
 pub const VPN_CONFIG_FILE_EXTENSIONS: &[&str] = &[
     "ovpn", "openvpn", "npvs", "npv4", "npv", "npvt", "hc", "ehi", "custom", "costum",
     "dark", "hat", "tls", "nm", "conf", "wg", "sks", "sip", "inp", "json", "yaml", "yml",
     "sub",
 ];
+
+fn is_config_url_delim(c: char) -> bool {
+    c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | ')' | ']')
+}
 
 /// Extract direct downloadable VPN config file URLs (`.ovpn`, `.openvpn`, `.npvs`, `.hc`, `.custom`, etc.)
 /// from Telegram HTML previews or plain text feeds.
@@ -280,9 +285,7 @@ pub fn extract_config_file_urls(body: &str) -> Vec<String> {
     for scheme in ["https://", "http://"] {
         for (pos, _) in body.match_indices(scheme) {
             let slice = &body[pos..];
-            let end = slice
-                .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | ')' | ']'))
-                .unwrap_or(slice.len());
+            let end = slice.find(is_config_url_delim).unwrap_or(slice.len());
             let candidate = slice[..end].replace("&amp;", "&");
             let path_no_query = candidate.split(['?', '#']).next().unwrap_or(&candidate);
             let lower = path_no_query.to_ascii_lowercase();
@@ -528,6 +531,7 @@ pub fn discovery_enabled() -> bool {
 /// share-links (so the refill net is not hardcoded to a fixed set). Ordered
 /// roughly by historical reliability; `discover_channel_yields` rank them by
 /// *live* yield.
+#[rustfmt::skip]
 pub const DISCOVER_CANDIDATE_CHANNELS: &[&str] = &[
     "whitedns",
     "FarazV2ray",

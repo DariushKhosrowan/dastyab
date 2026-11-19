@@ -93,9 +93,24 @@ pub fn show(ui: &mut egui::Ui, app: &mut DastYabApp) -> Option<MultilayerAction>
         ui.add_space(4.0);
         egui::Grid::new("ml-mode-grid").num_columns(3).spacing([12.0, 4.0]).show(ui, |ui| {
             let modes = [
-                ("chrome", "Chrome (AI Studio)", "Use the tunnel only for DastYab's dedicated Chrome. Your login session is persisted between runs."),
-                ("proxy", "Local proxy", "Expose a SOCKS5 proxy on 127.0.0.1 — any app can point at it."),
-                ("device", "Whole device", "Route the whole device via the environment proxy (best-effort system-wide)."),
+                (
+                    "chrome",
+                    "Chrome (AI Studio)",
+                    concat!(
+                        "Use the tunnel only for DastYab's dedicated Chrome. ",
+                        "Your login session is persisted between runs."
+                    ),
+                ),
+                (
+                    "proxy",
+                    "Local proxy",
+                    "Expose a SOCKS5 proxy on 127.0.0.1 — any app can point at it.",
+                ),
+                (
+                    "device",
+                    "Whole device",
+                    "Route the whole device via the environment proxy (best-effort system-wide).",
+                ),
             ];
             for (id, label, desc) in modes {
                 let selected = app.ml_mode == id;

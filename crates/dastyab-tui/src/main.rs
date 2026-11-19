@@ -61,7 +61,7 @@ fn run_app(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
                     Constraint::Length(3), // title bar
                     Constraint::Length(1), // tab strip
                     Constraint::Length(1), // separator
-                    Constraint::Min(0),    // body
+                    Constraint::Min(0), // body
                 ])
                 .split(area);
 

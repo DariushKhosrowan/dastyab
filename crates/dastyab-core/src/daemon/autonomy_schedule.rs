@@ -77,7 +77,7 @@ pub fn action_digest(codes: &[&str]) -> [u8; 32] {
 pub fn regression_events(old: Option<[u8; 32]>, new: [u8; 32]) -> bool {
     match old {
         Some(old) => old != new, // dirty→dirty with different set is still a change
-        None => false,           // first audit: nothing to regress from
+        None => false, // first audit: nothing to regress from
     }
 }
 

@@ -5,13 +5,16 @@
 //! * Profiles — list/create/switch profiles, manage tokens & settings.
 //! * Tools — security audit, backup/restore, client-format export.
 
+use dastyab_core::backup::import_profile_from_file;
 use dastyab_core::scanner::{scan_many, scan_once, ScanParams};
 use dastyab_core::store::profiles::{
     add_token, create_profile, delete_profile, list_profiles, load_profile, remember_clean_ip,
-    remember_vless, rename_profile, save_config, set_active_profile, ProfileConfig, VlessRecord,
+    remember_vless, rename_profile, save_config, set_active_profile, set_last_deployed_base_link,
+    ProfileConfig, VlessRecord,
 };
 use dastyab_core::vless::VlessProfile;
 use dastyab_core::worker::generate_uuid;
+use dastyab_core::worker_tunnel::resolve_deployed_base_link;
 use dastyab_core::CFError;
 use eframe::egui;
 
@@ -165,7 +168,7 @@ pub struct DastYabApp {
     // async bridge
     pub tx: bridge::Tx,
     rx: bridge::Rx,
-    running: Vec<String>,   // task names currently in flight
+    running: Vec<String>, // task names currently in flight
     log_lines: Vec<String>, // live log pane (capped at 5000)
     // view-model cache (Phase 3.2/3.3)
     pub state: GuiState,
@@ -451,7 +454,11 @@ impl DastYabApp {
                 "Protection is on — refinding the best clean IP and keeping your configs healthy."
                     .to_string()
             } else {
-                "Autopilot is off. Flip the switch to auto-find the best clean IP, export configs, and keep them healthy.".to_string()
+                concat!(
+                    "Autopilot is off. Flip the switch to auto-find the best clean IP, ",
+                    "export configs, and keep them healthy."
+                )
+                .to_string()
             },
             autopilot_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             last_cause: None,
@@ -1729,8 +1736,11 @@ impl DastYabApp {
                     Some(PendingDialogAction::RestoreBackupIntoCurrent(path_str)) => {
                         if let DialogPayload::Confirm = payload {
                             if self.profile_id == "default" && path_str.contains("-default-") {
-                                self.note =
-                                    "Refusing to overwrite the default profile with a default-profile backup.".to_string();
+                                self.note = concat!(
+                                    "Refusing to overwrite the default profile ",
+                                    "with a default-profile backup."
+                                )
+                                .to_string();
                             } else {
                                 match dastyab_core::store::profiles::overwrite_profile_from_bundle(
                                     &self.profile_id,
@@ -2717,9 +2727,11 @@ impl DastYabApp {
                             params.count, params.workers
                         ));
                         bridge::spawn("scan", self.tx.clone(), async move {
+                            use dastyab_core::scanner::rewrite_vless_with_endpoint;
+                            use dastyab_core::worker_tunnel::resolve_deployed_base_link;
                             match scan_once(&link, &params).await {
                                 Ok(Some(ep)) => {
-                                    let new_link = dastyab_core::scanner::rewrite_vless_with_endpoint(&link, &ep);
+                                    let new_link = rewrite_vless_with_endpoint(&link, &ep);
                                     let _ = remember_clean_ip(&pid, &ep);
                                     // Learn the found clean IP as a seed so
                                     // future scans + autopilot bias toward its
@@ -2745,11 +2757,8 @@ impl DastYabApp {
                                     // cleared/trimmed (deploy-once →
                                     // configure-many). Only set when absent or
                                     // when this is a fresher non-clean worker link.
-                                    if let Some(base) =
-                                        dastyab_core::worker_tunnel::resolve_deployed_base_link(&pid)
-                                    {
-                                        let _ = dastyab_core::store::profiles::
-                                            set_last_deployed_base_link(&pid, &base);
+                                    if let Some(base) = resolve_deployed_base_link(&pid) {
+                                        let _ = set_last_deployed_base_link(&pid, &base);
                                     }
                                     Ok::<String, CFError>(format!(
                                         "Found working IP: {ep} — learned as a seed; link updated in profile."
@@ -2764,7 +2773,10 @@ impl DastYabApp {
                             }
                         });
                     }
-                    None => self.note = "No deployed config to scan against — deploy first.".to_string(),
+                    None => {
+                        let msg = "No deployed config to scan against — deploy first.";
+                        self.note = msg.to_string();
+                    }
                 }
             }
 
@@ -2811,11 +2823,8 @@ impl DastYabApp {
                                         let _ =
                                             dastyab_core::cf::ips::learn_clean_ip(&pid, ep);
                                     }
-                                    if let Some(base) =
-                                        dastyab_core::worker_tunnel::resolve_deployed_base_link(&pid)
-                                    {
-                                        let _ = dastyab_core::store::profiles::
-                                            set_last_deployed_base_link(&pid, &base);
+                                    if let Some(base) = resolve_deployed_base_link(&pid) {
+                                        let _ = set_last_deployed_base_link(&pid, &base);
                                     }
                                     Ok::<String, CFError>(format!(
                                         "{} — {} (learned as seeds)",
@@ -3508,9 +3517,8 @@ impl DastYabApp {
                                                     .on_hover_text("Restore this snapshot into a new profile")
                                                     .clicked()
                                                 {
-                                                    match dastyab_core::backup::import_profile_from_file(
-                                                        std::path::Path::new(&b.path),
-                                                    ) {
+                                                    let p = std::path::Path::new(&b.path);
+                                                    match import_profile_from_file(p) {
                                                         Ok(pid) => {
                                                             self.backup_output = format!(
                                                                 "✓ Restored into new profile '{pid}'."
@@ -3527,11 +3535,11 @@ impl DastYabApp {
                                                     .on_hover_text("Overwrite THIS profile from this snapshot")
                                                     .clicked()
                                                 {
-                                                    self.pending_action = Some(
-                                                        PendingDialogAction::RestoreBackupIntoCurrent(
-                                                            b.path.clone(),
-                                                        ),
+                                                    use PendingDialogAction as Pda;
+                                                    let act = Pda::RestoreBackupIntoCurrent(
+                                                        b.path.clone(),
                                                     );
+                                                    self.pending_action = Some(act);
                                                     self.dialog = Some(dialogs::confirm(
                                                         "Restore into current profile",
                                                         format!(
@@ -4155,11 +4163,12 @@ impl DastYabApp {
                                     true,
                                 ) {
                                     Ok(outcome) => {
+                                        use dastyab_core::bootstrap::DaemonInstallOutcome;
                                         let status_txt = match outcome {
-                                            dastyab_core::bootstrap::DaemonInstallOutcome::Installed => {
+                                            DaemonInstallOutcome::Installed => {
                                                 "installed and started"
                                             }
-                                            dastyab_core::bootstrap::DaemonInstallOutcome::AlreadyInstalled => {
+                                            DaemonInstallOutcome::AlreadyInstalled => {
                                                 "started (already installed)"
                                             }
                                         };
@@ -4167,7 +4176,8 @@ impl DastYabApp {
                                             format!("Daemon {status_txt} — boot autostart armed.");
                                     }
                                     Err(e) => {
-                                        self.daemon_note = format!("Daemon install failed: {}", e.brief());
+                                        let msg = format!("Daemon install failed: {}", e.brief());
+                                        self.daemon_note = msg;
                                     }
                                 }
                             }
@@ -4531,7 +4541,11 @@ fn create_configs_from_ip(profile_id: &str, endpoint: &str) -> Result<(usize, St
     // can create configs from any clean IP without ever redeploying.
     let base_link = dastyab_core::worker_tunnel::resolve_deployed_base_link(profile_id)
         .ok_or_else(|| {
-            "No deployed worker link yet — deploy once, then you can point configs at any clean IP without redeploying.".to_string()
+            concat!(
+                "No deployed worker link yet — deploy once, then you can point configs ",
+                "at any clean IP without redeploying."
+            )
+            .to_string()
         })?;
     // The resolved base link must parse to a worker with a non-empty host; a
     // malformed legacy record (empty host) would silently render broken configs
@@ -5990,7 +6004,8 @@ mod tests {
         // write (hash mismatch) must reset the timer and keep the note.
         let mut text = "Deploy failed: brand new".to_string();
         let mut hash = 0u64; // never seen → treated as a fresh write
-        let mut since = std::time::Instant::now() - std::time::Duration::from_secs(200); // stale "startup" anchor
+        // stale "startup" anchor
+        let mut since = std::time::Instant::now() - std::time::Duration::from_secs(200);
         DastYabApp::expire_status_note(&mut text, &mut hash, &mut since, true, 90);
         assert_eq!(
             text, "Deploy failed: brand new",

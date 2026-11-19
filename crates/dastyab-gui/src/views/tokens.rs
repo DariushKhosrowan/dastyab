@@ -14,7 +14,7 @@ use dastyab_core::store::profiles::{
 };
 use eframe::egui;
 
-use crate::app::DastYabApp;
+use crate::app::{DastYabApp, PendingDialogAction};
 use crate::bridge;
 use crate::dialogs;
 use crate::views::{
@@ -220,8 +220,15 @@ pub fn show(ui: &mut egui::Ui, app: &mut DastYabApp) -> Option<TokensAction> {
                         String::new(),
                         "all",
                     );
-                    for k in ["added", "removed", "made_active", "verified", "rotated", "auto_rotate"]
-                    {
+                    let kinds = [
+                        "added",
+                        "removed",
+                        "made_active",
+                        "verified",
+                        "rotated",
+                        "auto_rotate",
+                    ];
+                    for k in kinds {
                         ui.selectable_value(
                             &mut app.token_history_filter,
                             k.to_string(),
@@ -246,8 +253,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut DastYabApp) -> Option<TokensAction> {
                         ));
                     }
                     ui.ctx().copy_text(buf.clone());
-                    app.note =
-                        format!("Exported {} token-history events to clipboard.", app.state.token_ledger.len());
+                    let count = app.state.token_ledger.len();
+                    app.note = format!("Exported {count} token-history events to clipboard.");
                 }
                 if ui
                     .button("🗑 Clear ledger")
@@ -315,11 +322,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut DastYabApp) -> Option<TokensAction> {
                                             .on_hover_text("Delete this token-history event")
                                             .clicked()
                                         {
-                                            app.pending_action = Some(
-                                                crate::app::PendingDialogAction::DeleteTokenHistoryEvent(
+                                            let act =
+                                                PendingDialogAction::DeleteTokenHistoryEvent(
                                                     e.id.clone(),
-                                                ),
-                                            );
+                                                );
+                                            app.pending_action = Some(act);
                                             app.dialog = Some(dialogs::confirm(
                                                 "Delete token-history event",
                                                 "Delete this ledger event? Tokens themselves are not touched.",
