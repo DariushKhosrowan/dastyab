@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/colorBackground"
+    android:background="?attr/dastyabBackground"
     android:fillViewport="true">
 
     <LinearLayout
@@ -28,14 +28,14 @@
                 android:text="@string/toolbox_title"
                 android:textSize="22sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent" />
+                android:textColor="?attr/dastyabAccent" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/toolbox_subtitle"
                 android:textSize="13sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="4dp" />
 
             <ProgressBar
@@ -66,7 +66,7 @@
                 android:text="@string/toolbox_target_label"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="8dp" />
 
             <EditText
@@ -75,8 +75,8 @@
                 android:layout_height="wrap_content"
                 android:hint="@string/toolbox_host_hint"
                 android:text="aistudio.google.com"
-                android:textColor="@color/colorTextPrimary"
-                android:textColorHint="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
                 android:textSize="13sp"
                 android:background="@drawable/input_bg"
                 android:padding="12dp"
@@ -95,7 +95,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="AI Studio"
+                    android:text="@string/toolbox_preset_aistudio"
                     style="@style/DastyabChip" />
 
                 <Button
@@ -103,7 +103,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Flow"
+                    android:text="@string/toolbox_preset_flow"
                     style="@style/DastyabChip" />
 
                 <Button
@@ -111,7 +111,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="GitHub"
+                    android:text="@string/toolbox_preset_github"
                     style="@style/DastyabChip" />
 
                 <Button
@@ -119,7 +119,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Telegram"
+                    android:text="@string/toolbox_preset_telegram"
                     style="@style/DastyabChip" />
             </LinearLayout>
 
@@ -232,7 +232,7 @@
                 android:text="@string/toolbox_output_empty"
                 android:textSize="12sp"
                 android:fontFamily="monospace"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:textIsSelectable="true" />
         </LinearLayout>
 

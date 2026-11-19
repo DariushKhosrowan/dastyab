@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/colorBackground"
+    android:background="?attr/dastyabBackground"
     android:fillViewport="true">
 
     <LinearLayout
@@ -28,14 +28,14 @@
                 android:text="@string/cf_studio_title"
                 android:textSize="21sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent" />
+                android:textColor="?attr/dastyabAccent" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/cf_studio_subtitle"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="4dp" />
 
             <LinearLayout
@@ -62,14 +62,14 @@
                     android:id="@+id/btnStudioNewProfile"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="+ Profile"
+                    android:text="@string/cf_btn_new_profile"
                     style="@style/DastyabChip" />
 
                 <Button
                     android:id="@+id/btnStudioRefresh"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Refresh"
+                    android:text="@string/cf_btn_refresh"
                     style="@style/DastyabChip" />
             </LinearLayout>
 
@@ -101,16 +101,16 @@
                 android:text="@string/cf_section_token"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="6dp" />
 
             <TextView
                 android:id="@+id/tvTokenStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No Cloudflare API token saved yet in this profile."
+                android:text="@string/cf_token_status_empty"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="10dp" />
 
             <LinearLayout
@@ -124,11 +124,11 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:hint="Token label (default)"
+                    android:hint="@string/cf_hint_token_label"
                     android:text="default"
                     android:textSize="13sp"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="textNoSuggestions" />
@@ -141,7 +141,7 @@
                     android:id="@+id/btnPasteToken"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Paste Token"
+                    android:text="@string/cf_btn_paste_token"
                     style="@style/DastyabButton" />
             </LinearLayout>
 
@@ -149,11 +149,11 @@
                 android:id="@+id/etApiToken"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Paste Cloudflare API Token (Edit Cloudflare Workers)"
+                android:hint="@string/cf_hint_api_token"
                 android:textSize="13sp"
                 android:fontFamily="monospace"
-                android:textColor="@color/colorTextPrimary"
-                android:textColorHint="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
                 android:background="@drawable/input_bg"
                 android:padding="11dp"
                 android:inputType="textNoSuggestions" />
@@ -181,7 +181,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Accounts"
+                    android:text="@string/cf_btn_accounts"
                     style="@style/DastyabButton" />
             </LinearLayout>
 
@@ -196,7 +196,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Verify"
+                    android:text="@string/cf_btn_verify"
                     style="@style/DastyabChip" />
 
                 <Button
@@ -204,7 +204,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Tokens"
+                    android:text="@string/cf_btn_tokens"
                     style="@style/DastyabChip" />
 
                 <Button
@@ -212,7 +212,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Zones"
+                    android:text="@string/cf_btn_zones"
                     style="@style/DastyabChip" />
 
                 <Button
@@ -220,7 +220,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Analytics"
+                    android:text="@string/cf_btn_analytics"
                     style="@style/DastyabChip" />
             </LinearLayout>
         </LinearLayout>
@@ -243,7 +243,7 @@
                 android:text="@string/cf_section_worker"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="10dp" />
 
             <LinearLayout
@@ -257,7 +257,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Deploy New Worker"
+                    android:text="@string/cf_btn_mode_deploy"
                     style="@style/DastyabChip" />
 
                 <Button
@@ -265,7 +265,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Use Existing Worker"
+                    android:text="@string/cf_btn_mode_existing"
                     style="@style/DastyabChip" />
             </LinearLayout>
 
@@ -293,11 +293,11 @@
                     android:id="@+id/etDeployAccountId"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Account ID (optional — auto-selects saved account)"
+                    android:hint="@string/cf_hint_account_id"
                     android:textSize="13sp"
                     android:fontFamily="monospace"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="textNoSuggestions" />
@@ -307,10 +307,10 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:hint="Worker script name (optional, e.g. dastyab-edge)"
+                    android:hint="@string/cf_hint_worker_name"
                     android:textSize="13sp"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="textNoSuggestions" />
@@ -351,7 +351,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:textSize="11sp"
-                    android:textColor="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextSecondary"
                     android:paddingTop="6dp"
                     android:paddingBottom="10dp" />
 
@@ -373,7 +373,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Multi-Worker x2"
+                        android:text="@string/cf_btn_multi_worker"
                         style="@style/DastyabButton" />
 
                     <View
@@ -385,7 +385,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Multi-Worker Status"
+                        android:text="@string/cf_btn_multi_status"
                         style="@style/DastyabButton" />
                 </LinearLayout>
             </LinearLayout>
@@ -402,10 +402,10 @@
                     android:id="@+id/etExistingWorkerHost"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Worker host (e.g. myworker.sub.workers.dev or cdn.domain.com)"
+                    android:hint="@string/cf_hint_existing_host"
                     android:textSize="13sp"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="textUri" />
@@ -421,11 +421,11 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:hint="UUID (blank = auto-generate)"
+                        android:hint="@string/cf_hint_existing_uuid"
                         android:textSize="12sp"
                         android:fontFamily="monospace"
-                        android:textColor="@color/colorTextPrimary"
-                        android:textColorHint="@color/colorTextSecondary"
+                        android:textColor="?attr/dastyabTextPrimary"
+                        android:textColorHint="?attr/dastyabTextSecondary"
                         android:background="@drawable/input_bg"
                         android:padding="11dp"
                         android:inputType="textNoSuggestions" />
@@ -438,7 +438,7 @@
                         android:id="@+id/btnGenUuid"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Gen UUID"
+                        android:text="@string/cf_btn_gen_uuid"
                         style="@style/DastyabButton" />
                 </LinearLayout>
 
@@ -455,11 +455,11 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="/"
-                        android:hint="WS Path (/)"
+                        android:hint="@string/cf_hint_ws_path"
                         android:textSize="13sp"
                         android:fontFamily="monospace"
-                        android:textColor="@color/colorTextPrimary"
-                        android:textColorHint="@color/colorTextSecondary"
+                        android:textColor="?attr/dastyabTextPrimary"
+                        android:textColorHint="?attr/dastyabTextSecondary"
                         android:background="@drawable/input_bg"
                         android:padding="11dp"
                         android:inputType="textNoSuggestions" />
@@ -473,11 +473,11 @@
                         android:layout_width="96dp"
                         android:layout_height="wrap_content"
                         android:text="443"
-                        android:hint="Port"
+                        android:hint="@string/cf_hint_port"
                         android:textSize="13sp"
                         android:fontFamily="monospace"
-                        android:textColor="@color/colorTextPrimary"
-                        android:textColorHint="@color/colorTextSecondary"
+                        android:textColor="?attr/dastyabTextPrimary"
+                        android:textColorHint="?attr/dastyabTextSecondary"
                         android:background="@drawable/input_bg"
                         android:padding="11dp"
                         android:inputType="number" />
@@ -510,16 +510,16 @@
                 android:text="@string/cf_section_cleanip"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="4dp" />
 
             <TextView
                 android:id="@+id/tvCleanIpStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Saved Clean IPs: 0"
+                android:text="@string/cf_cleanip_status_zero"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="10dp" />
 
             <LinearLayout
@@ -559,11 +559,11 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:hint="Add Clean IP / IP:port (104.16.1.1:443)"
+                    android:hint="@string/cf_hint_custom_cleanip"
                     android:textSize="12sp"
                     android:fontFamily="monospace"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="textNoSuggestions" />
@@ -576,7 +576,7 @@
                     android:id="@+id/btnAddCustomCleanIp"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="+ Add"
+                    android:text="@string/cf_btn_add_cleanip"
                     style="@style/DastyabButton" />
             </LinearLayout>
 
@@ -604,7 +604,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Apply Top 5 Clean IPs"
+                    android:text="@string/cf_btn_apply_top5"
                     style="@style/DastyabButton" />
 
                 <View
@@ -616,7 +616,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="CleanIP Ledger"
+                    android:text="@string/cf_btn_cleanip_ledger"
                     style="@style/DastyabButton" />
             </LinearLayout>
         </LinearLayout>
@@ -639,16 +639,16 @@
                 android:text="@string/cf_section_editor"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="4dp" />
 
             <TextView
                 android:id="@+id/tvEditorBaseStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Select a deployed/saved config below, paste a vless:// link, or deploy a worker above."
+                android:text="@string/cf_editor_status_empty"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="8dp" />
 
             <HorizontalScrollView
@@ -675,7 +675,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Paste vless://"
+                    android:text="@string/cf_btn_paste_vless"
                     style="@style/DastyabChip" />
 
                 <Button
@@ -683,7 +683,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Active VPN"
+                    android:text="@string/cf_btn_active_vpn"
                     style="@style/DastyabChip" />
 
                 <Button
@@ -691,7 +691,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Restore Host"
+                    android:text="@string/cf_btn_restore_host"
                     style="@style/DastyabChip" />
             </LinearLayout>
 
@@ -706,11 +706,11 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:hint="Server Address / Clean IP"
+                    android:hint="@string/cf_hint_edit_address"
                     android:textSize="13sp"
                     android:fontFamily="monospace"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="textNoSuggestions" />
@@ -724,11 +724,11 @@
                     android:layout_width="86dp"
                     android:layout_height="wrap_content"
                     android:text="443"
-                    android:hint="Port"
+                    android:hint="@string/cf_hint_port"
                     android:textSize="13sp"
                     android:fontFamily="monospace"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="number" />
@@ -739,11 +739,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="SNI (worker hostname preserved when using Clean IP)"
+                android:hint="@string/cf_hint_edit_sni"
                 android:textSize="13sp"
                 android:fontFamily="monospace"
-                android:textColor="@color/colorTextPrimary"
-                android:textColorHint="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
                 android:background="@drawable/input_bg"
                 android:padding="11dp"
                 android:inputType="textNoSuggestions" />
@@ -753,11 +753,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="Host header (worker hostname)"
+                android:hint="@string/cf_hint_edit_host"
                 android:textSize="13sp"
                 android:fontFamily="monospace"
-                android:textColor="@color/colorTextPrimary"
-                android:textColorHint="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
                 android:background="@drawable/input_bg"
                 android:padding="11dp"
                 android:inputType="textNoSuggestions" />
@@ -774,11 +774,11 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="/"
-                    android:hint="WS Path (/)"
+                    android:hint="@string/cf_hint_ws_path"
                     android:textSize="13sp"
                     android:fontFamily="monospace"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="textNoSuggestions" />
@@ -792,11 +792,11 @@
                     android:layout_width="110dp"
                     android:layout_height="wrap_content"
                     android:text="chrome"
-                    android:hint="uTLS fp"
+                    android:hint="@string/cf_hint_fp"
                     android:textSize="13sp"
                     android:fontFamily="monospace"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="textNoSuggestions" />
@@ -807,11 +807,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="UUID"
+                android:hint="@string/cf_hint_uuid"
                 android:textSize="12sp"
                 android:fontFamily="monospace"
-                android:textColor="@color/colorTextPrimary"
-                android:textColorHint="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
                 android:background="@drawable/input_bg"
                 android:padding="11dp"
                 android:inputType="textNoSuggestions" />
@@ -821,10 +821,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="Remark / Label (e.g. clean-104.16.1.1)"
+                android:hint="@string/cf_hint_remark"
                 android:textSize="13sp"
-                android:textColor="@color/colorTextPrimary"
-                android:textColorHint="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
                 android:background="@drawable/input_bg"
                 android:padding="11dp"
                 android:inputType="text" />
@@ -867,7 +867,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="QR Code"
+                    android:text="@string/cf_btn_qr_code"
                     style="@style/DastyabButton" />
 
                 <View
@@ -879,7 +879,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Render Export"
+                    android:text="@string/cf_btn_render_export"
                     style="@style/DastyabButton" />
             </LinearLayout>
 
@@ -930,11 +930,11 @@
                 android:layout_height="wrap_content"
                 android:minLines="4"
                 android:maxLines="14"
-                android:text="Edit fields above or choose a config to preview vless://, v2rayN, sing-box, or Clash."
+                android:text="@string/cf_export_preview_hint"
                 android:textSize="11sp"
                 android:fontFamily="monospace"
-                android:textColor="@color/colorTextPrimary"
-                android:background="@color/colorOutputBg"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:background="?attr/dastyabOutputBg"
                 android:padding="12dp"
                 android:textIsSelectable="true" />
 
@@ -973,7 +973,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Rust Export"
+                    android:text="@string/cf_btn_rust_export"
                     style="@style/DastyabButton" />
             </LinearLayout>
         </LinearLayout>
@@ -996,7 +996,7 @@
                 android:text="@string/cf_section_linux"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="10dp" />
 
             <HorizontalScrollView
@@ -1023,11 +1023,11 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:hint="dastyab args (e.g. routes list, sni-spoof scan)"
+                    android:hint="@string/cf_hint_cli_args"
                     android:textSize="12sp"
                     android:fontFamily="monospace"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextPrimary"
+                    android:textColorHint="?attr/dastyabTextSecondary"
                     android:background="@drawable/input_bg"
                     android:padding="11dp"
                     android:inputType="textNoSuggestions"
@@ -1041,7 +1041,7 @@
                     android:id="@+id/btnStudioRunCli"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Run"
+                    android:text="@string/btn_run"
                     style="@style/DastyabButtonPrimary" />
 
                 <Button
@@ -1049,7 +1049,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
-                    android:text="Stop"
+                    android:text="@string/cf_btn_stop"
                     android:visibility="gone"
                     style="@style/DastyabButton" />
             </LinearLayout>
@@ -1062,8 +1062,8 @@
                 android:text="@string/cf_console_empty"
                 android:textSize="11sp"
                 android:fontFamily="monospace"
-                android:textColor="@color/colorTextPrimary"
-                android:background="@color/colorOutputBg"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:background="?attr/dastyabOutputBg"
                 android:padding="12dp"
                 android:textIsSelectable="true" />
 

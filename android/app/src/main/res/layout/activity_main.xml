@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/colorBackground"
+    android:background="?attr/dastyabBackground"
     android:fillViewport="true">
 
     <LinearLayout
@@ -43,7 +43,7 @@
                     android:text="@string/app_name"
                     android:textSize="26sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorAccent"
+                    android:textColor="?attr/dastyabAccent"
                     android:letterSpacing="0.02" />
 
                 <TextView
@@ -58,7 +58,7 @@
                     android:paddingBottom="3dp"
                     android:textSize="11sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorChipText" />
+                    android:textColor="?attr/dastyabChipText" />
             </LinearLayout>
 
             <Button
@@ -76,13 +76,27 @@
                 style="@style/DastyabChip" />
 
             <Button
+                android:id="@+id/btnThemeToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:minWidth="46dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:text="@string/theme_badge_dark"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/theme_toggle_desc"
+                style="@style/DastyabChip" />
+
+            <Button
                 android:id="@+id/btnLangToggle"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
                 android:minWidth="46dp"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
-                android:text="فا"
+                android:text="@string/lang_badge_default"
                 android:textSize="12sp"
                 android:textStyle="bold"
                 android:contentDescription="@string/lang_toggle_desc"
@@ -119,14 +133,14 @@
                 android:layout_weight="1"
                 android:text="@string/status_checking"
                 android:textSize="14sp"
-                android:textColor="@color/colorTextPrimary" />
+                android:textColor="?attr/dastyabTextPrimary" />
 
             <TextView
                 android:id="@+id/statusBadge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="11sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:text="" />
         </LinearLayout>
 
@@ -246,7 +260,7 @@
                                 android:text="@string/simple_hero_disconnected"
                                 android:textSize="19sp"
                                 android:textStyle="bold"
-                                android:textColor="@color/colorTextPrimary" />
+                                android:textColor="?attr/dastyabTextPrimary" />
                         </LinearLayout>
 
                         <TextView
@@ -256,7 +270,7 @@
                             android:text="@string/reachability_idle"
                             android:textSize="12sp"
                             android:textStyle="bold"
-                            android:textColor="@color/colorAccent"
+                            android:textColor="?attr/dastyabAccent"
                             android:paddingTop="4dp" />
                     </LinearLayout>
                 </LinearLayout>
@@ -267,7 +281,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/simple_hero_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextSecondary"
                     android:paddingTop="10dp"
                     android:paddingBottom="14dp" />
 
@@ -328,10 +342,60 @@
                 android:textSize="13sp"
                 android:textStyle="bold"
                 android:textAllCaps="true"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:letterSpacing="0.08"
                 android:paddingStart="4dp"
                 android:paddingBottom="10dp" />
+
+            <!-- Simple Row 0: 1-Tap Lantern / External VPN Autopilot -->
+            <LinearLayout
+                android:id="@+id/btnSimpleLanternAutopilot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/card_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="16dp"
+                android:layout_marginBottom="10dp">
+
+                <LinearLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:layout_marginEnd="14dp"
+                    android:background="@drawable/icon_badge_bg">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_action_autopilot"
+                        android:contentDescription="@string/simple_card_lantern_autopilot" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_lantern_autopilot"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="?attr/dastyabTextPrimary"
+                        android:paddingBottom="2dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/simple_card_lantern_autopilot_sub"
+                        android:textSize="12sp"
+                        android:textColor="?attr/dastyabTextSecondary" />
+                </LinearLayout>
+            </LinearLayout>
 
             <!-- Simple Row 1: AI Studio + Google Flow -->
             <LinearLayout
@@ -369,7 +433,7 @@
                         android:text="@string/simple_card_aistudio"
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorTextPrimary"
+                        android:textColor="?attr/dastyabTextPrimary"
                         android:paddingTop="10dp"
                         android:paddingBottom="2dp" />
 
@@ -378,7 +442,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/simple_card_aistudio_sub"
                         android:textSize="12sp"
-                        android:textColor="@color/colorTextSecondary" />
+                        android:textColor="?attr/dastyabTextSecondary" />
                 </LinearLayout>
 
                 <View
@@ -414,7 +478,7 @@
                         android:text="@string/simple_card_flow"
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorTextPrimary"
+                        android:textColor="?attr/dastyabTextPrimary"
                         android:paddingTop="10dp"
                         android:paddingBottom="2dp" />
 
@@ -423,7 +487,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/simple_card_flow_sub"
                         android:textSize="12sp"
-                        android:textColor="@color/colorTextSecondary" />
+                        android:textColor="?attr/dastyabTextSecondary" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -463,7 +527,7 @@
                         android:text="@string/simple_card_refresh"
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorTextPrimary"
+                        android:textColor="?attr/dastyabTextPrimary"
                         android:paddingTop="10dp"
                         android:paddingBottom="2dp" />
 
@@ -472,7 +536,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/simple_card_refresh_sub"
                         android:textSize="12sp"
-                        android:textColor="@color/colorTextSecondary" />
+                        android:textColor="?attr/dastyabTextSecondary" />
                 </LinearLayout>
 
                 <View
@@ -508,7 +572,7 @@
                         android:text="@string/simple_card_blackout"
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorTextPrimary"
+                        android:textColor="?attr/dastyabTextPrimary"
                         android:paddingTop="10dp"
                         android:paddingBottom="2dp" />
 
@@ -517,7 +581,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/simple_card_blackout_sub"
                         android:textSize="12sp"
-                        android:textColor="@color/colorTextSecondary" />
+                        android:textColor="?attr/dastyabTextSecondary" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -559,7 +623,7 @@
                         android:text="@string/simple_card_cf_studio"
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorTextPrimary"
+                        android:textColor="?attr/dastyabTextPrimary"
                         android:paddingBottom="2dp" />
 
                     <TextView
@@ -567,7 +631,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/simple_card_cf_studio_sub"
                         android:textSize="12sp"
-                        android:textColor="@color/colorTextSecondary" />
+                        android:textColor="?attr/dastyabTextSecondary" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -628,7 +692,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:textAllCaps="true"
-            android:textColor="@color/colorTextSecondary"
+            android:textColor="?attr/dastyabTextSecondary"
             android:letterSpacing="0.08"
             android:paddingStart="4dp"
             android:paddingBottom="10dp" />
@@ -685,7 +749,7 @@
                             android:text="@string/vpn_status_disconnected"
                             android:textSize="16sp"
                             android:textStyle="bold"
-                            android:textColor="@color/colorTextPrimary" />
+                            android:textColor="?attr/dastyabTextPrimary" />
                     </LinearLayout>
 
                     <TextView
@@ -693,7 +757,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:textSize="12sp"
-                        android:textColor="@color/colorTextSecondary"
+                        android:textColor="?attr/dastyabTextSecondary"
                         android:paddingTop="2dp" />
 
                     <TextView
@@ -703,7 +767,7 @@
                         android:text="@string/reachability_idle"
                         android:textSize="11sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorAccent"
+                        android:textColor="?attr/dastyabAccent"
                         android:paddingTop="4dp" />
                 </LinearLayout>
             </LinearLayout>
@@ -860,7 +924,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:textAllCaps="true"
-            android:textColor="@color/colorTextSecondary"
+            android:textColor="?attr/dastyabTextSecondary"
             android:letterSpacing="0.08"
             android:paddingStart="4dp"
             android:paddingBottom="10dp" />
@@ -901,7 +965,7 @@
                     android:text="@string/action_open_aistudio"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -910,7 +974,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_open_aistudio_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -946,7 +1010,7 @@
                     android:text="@string/action_open_flow"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -955,7 +1019,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_open_flow_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -995,7 +1059,7 @@
                     android:text="@string/action_cf_studio"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1004,7 +1068,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_cf_studio_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -1040,7 +1104,7 @@
                     android:text="@string/action_autopilot"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1049,7 +1113,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_autopilot_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1061,7 +1125,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:textAllCaps="true"
-            android:textColor="@color/colorTextSecondary"
+            android:textColor="?attr/dastyabTextSecondary"
             android:letterSpacing="0.08"
             android:paddingStart="4dp"
             android:paddingBottom="10dp" />
@@ -1102,7 +1166,7 @@
                     android:text="@string/action_harvest"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1111,7 +1175,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_harvest_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -1147,7 +1211,7 @@
                     android:text="@string/action_dns_blackout"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1156,7 +1220,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_dns_blackout_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1196,7 +1260,7 @@
                     android:text="@string/action_ip_scout"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1205,7 +1269,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_ip_scout_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -1241,7 +1305,7 @@
                     android:text="@string/action_troubleshoot"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1250,7 +1314,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_troubleshoot_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1290,7 +1354,7 @@
                     android:text="@string/action_vpn_layers"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1299,7 +1363,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_vpn_layers_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -1335,7 +1399,7 @@
                     android:text="@string/action_edit_sources"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1344,7 +1408,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_edit_sources_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1386,14 +1450,14 @@
                     android:text="@string/action_toolbox"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary" />
+                    android:textColor="?attr/dastyabTextPrimary" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/action_toolbox_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1405,7 +1469,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:textAllCaps="true"
-            android:textColor="@color/colorTextSecondary"
+            android:textColor="?attr/dastyabTextSecondary"
             android:letterSpacing="0.08"
             android:paddingStart="4dp"
             android:paddingBottom="10dp" />
@@ -1446,7 +1510,7 @@
                     android:text="@string/action_verify"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1455,7 +1519,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_verify_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -1491,7 +1555,7 @@
                     android:text="@string/action_accounts"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1500,7 +1564,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_accounts_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1540,7 +1604,7 @@
                     android:text="@string/action_profiles"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1549,7 +1613,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_profiles_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -1585,7 +1649,7 @@
                     android:text="@string/action_tokens"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1594,7 +1658,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_tokens_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1634,7 +1698,7 @@
                     android:text="@string/action_scan"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1643,7 +1707,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_scan_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -1679,7 +1743,7 @@
                     android:text="@string/action_configs"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1688,7 +1752,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_configs_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1728,7 +1792,7 @@
                     android:text="@string/action_security"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1737,7 +1801,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_security_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -1773,7 +1837,7 @@
                     android:text="@string/action_doctor"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1782,7 +1846,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_doctor_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1822,7 +1886,7 @@
                     android:text="@string/action_backup"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1831,7 +1895,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_backup_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
 
             <View
@@ -1867,7 +1931,7 @@
                     android:text="@string/action_zones"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="10dp"
                     android:paddingBottom="2dp" />
 
@@ -1876,7 +1940,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_zones_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary" />
+                    android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1889,7 +1953,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:textAllCaps="true"
-            android:textColor="@color/colorTextSecondary"
+            android:textColor="?attr/dastyabTextSecondary"
             android:letterSpacing="0.08"
             android:paddingStart="4dp"
             android:paddingBottom="10dp" />
@@ -1926,7 +1990,7 @@
                     android:text="@string/output_empty_title"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorTextPrimary"
+                    android:textColor="?attr/dastyabTextPrimary"
                     android:paddingTop="12dp" />
 
                 <TextView
@@ -1934,7 +1998,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/output_empty_subtitle"
                     android:textSize="13sp"
-                    android:textColor="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextSecondary"
                     android:gravity="center"
                     android:paddingTop="4dp" />
             </LinearLayout>
@@ -1949,16 +2013,16 @@
                 android:fontFamily="monospace"
                 android:textSize="12sp"
                 android:lineSpacingExtra="3dp"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:padding="16dp"
-                android:background="@color/colorOutputBg"
+                android:background="?attr/dastyabOutputBg"
                 android:scrollbars="vertical"
                 android:visibility="gone" />
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/colorDivider" />
+                android:background="?attr/dastyabDivider" />
 
             <Button
                 android:id="@+id/btnClear"
@@ -1967,7 +2031,7 @@
                 android:text="@string/btn_clear"
                 style="@style/DastyabButton"
                 android:background="@android:color/transparent"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:textSize="13sp"
                 android:paddingTop="12dp"
                 android:paddingBottom="12dp" />
@@ -1984,7 +2048,7 @@
             android:layout_height="wrap_content"
             android:text="@string/btn_show_advanced"
             style="@style/DastyabButton"
-            android:textColor="@color/colorAccent" />
+            android:textColor="?attr/dastyabAccent" />
 
         <!-- ============ ADVANCED SECTION (collapsible card) ============ -->
         <LinearLayout
@@ -2012,7 +2076,7 @@
                     android:text="@string/section_advanced"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:textColor="@color/colorAccent" />
+                    android:textColor="?attr/dastyabAccent" />
 
                 <Button
                     android:id="@+id/btnHideAdvanced"
@@ -2021,7 +2085,7 @@
                     android:text="@string/btn_hide_advanced"
                     style="@style/DastyabButton"
                     android:background="@android:color/transparent"
-                    android:textColor="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextSecondary"
                     android:textSize="13sp"
                     android:minHeight="36dp"
                     android:paddingStart="10dp"
@@ -2033,7 +2097,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/colorDivider" />
+                android:background="?attr/dastyabDivider" />
 
             <EditText
                 android:id="@+id/argsInput"
@@ -2049,8 +2113,8 @@
                 android:paddingTop="13dp"
                 android:paddingBottom="13dp"
                 android:background="@drawable/input_bg"
-                android:textColor="@color/colorTextPrimary"
-                android:textColorHint="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
                 android:layout_marginStart="16dp"
                 android:layout_marginEnd="16dp"
                 android:layout_marginTop="14dp"
@@ -2081,7 +2145,7 @@
                     android:text="@string/btn_cancel"
                     style="@style/DastyabButton"
                     android:background="@drawable/btn_danger_bg"
-                    android:textColor="@color/colorStatusError"
+                    android:textColor="?attr/dastyabStatusError"
                     android:visibility="gone"
                     android:layout_marginStart="8dp" />
 
@@ -2121,7 +2185,7 @@
                 android:textStyle="bold"
                 android:textAllCaps="true"
                 android:letterSpacing="0.06"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:layout_marginStart="16dp"
                 android:layout_marginEnd="16dp"
                 android:layout_marginBottom="8dp" />
@@ -2185,7 +2249,7 @@
                         android:text="@string/terminal_title"
                         android:textSize="17sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorAccent" />
+                        android:textColor="?attr/dastyabAccent" />
 
                     <TextView
                         android:id="@+id/tvTerminalRuntimeBadge"
@@ -2199,7 +2263,7 @@
                         android:text="CPython 3.11"
                         android:textSize="11sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorChipText" />
+                        android:textColor="?attr/dastyabChipText" />
                 </LinearLayout>
 
                 <TextView
@@ -2207,7 +2271,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/terminal_subtitle"
                     android:textSize="12sp"
-                    android:textColor="@color/colorTextSecondary"
+                    android:textColor="?attr/dastyabTextSecondary"
                     android:paddingTop="6dp"
                     android:paddingBottom="10dp" />
 
@@ -2265,7 +2329,7 @@
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:textAllCaps="true"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:letterSpacing="0.06"
                 android:paddingStart="4dp"
                 android:paddingBottom="6dp" />
@@ -2289,7 +2353,7 @@
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:textAllCaps="true"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:letterSpacing="0.06"
                 android:paddingStart="4dp"
                 android:paddingBottom="6dp" />
@@ -2333,7 +2397,7 @@
                         android:text="dastyab@android:~$"
                         android:textSize="12sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorAccent" />
+                        android:textColor="?attr/dastyabAccent" />
 
                     <Button
                         android:id="@+id/btnTerminalStop"
@@ -2342,7 +2406,7 @@
                         android:text="@string/terminal_btn_stop"
                         android:textSize="11sp"
                         android:background="@drawable/btn_danger_bg"
-                        android:textColor="@color/colorStatusError"
+                        android:textColor="?attr/dastyabStatusError"
                         android:visibility="gone"
                         android:layout_marginEnd="6dp"
                         android:paddingStart="10dp"
@@ -2369,13 +2433,13 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/colorDivider" />
+                    android:background="?attr/dastyabDivider" />
 
                 <ScrollView
                     android:id="@+id/terminalOutputScroll"
                     android:layout_width="match_parent"
                     android:layout_height="320dp"
-                    android:background="@color/colorOutputBg"
+                    android:background="?attr/dastyabOutputBg"
                     android:nestedScrollingEnabled="true">
 
                     <TextView
@@ -2386,7 +2450,7 @@
                         android:fontFamily="monospace"
                         android:textSize="12sp"
                         android:lineSpacingExtra="3dp"
-                        android:textColor="@color/colorTextPrimary"
+                        android:textColor="?attr/dastyabTextPrimary"
                         android:padding="12dp" />
                 </ScrollView>
 
@@ -2401,7 +2465,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/colorDivider" />
+                    android:background="?attr/dastyabDivider" />
 
                 <!-- Interactive Shell Prompt Row -->
                 <LinearLayout
@@ -2418,7 +2482,7 @@
                         android:text="$ "
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:textColor="@color/colorAccent"
+                        android:textColor="?attr/dastyabAccent"
                         android:paddingStart="4dp"
                         android:paddingEnd="4dp" />
 
@@ -2437,8 +2501,8 @@
                         android:paddingTop="10dp"
                         android:paddingBottom="10dp"
                         android:background="@drawable/input_bg"
-                        android:textColor="@color/colorTextPrimary"
-                        android:textColorHint="@color/colorTextSecondary" />
+                        android:textColor="?attr/dastyabTextPrimary"
+                        android:textColorHint="?attr/dastyabTextSecondary" />
 
                     <Button
                         android:id="@+id/btnTerminalRun"

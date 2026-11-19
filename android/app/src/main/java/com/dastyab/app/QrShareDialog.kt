@@ -54,7 +54,7 @@ object QrShareDialog {
         val preview = TextView(context).apply {
             text = if (trimmed.length > 90) trimmed.take(90) + "…" else trimmed
             textSize = 11f
-            setTextColor(context.getColor(R.color.colorTextSecondary))
+            setTextColor(ThemeManager.resolveColor(context, R.attr.dastyabTextSecondary, R.color.colorTextSecondary))
             gravity = Gravity.CENTER
         }
         container.addView(preview)

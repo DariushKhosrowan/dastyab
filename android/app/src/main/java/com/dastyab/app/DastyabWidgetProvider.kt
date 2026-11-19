@@ -42,13 +42,13 @@ class DastyabWidgetProvider : AppWidgetProvider() {
             } else {
                 null
             }
-            val layerName = layer?.name ?: "Smart Tunnel"
+            val layerName = layer?.name ?: localized.getString(R.string.tunnel_mode_smart_label)
 
             when (status.state) {
                 DastyabVpnService.State.CONNECTED -> {
                     views.setImageViewResource(R.id.widgetStatusDot, R.drawable.status_dot_green)
                     views.setTextViewText(R.id.widgetTitle, localized.getString(R.string.vpn_status_connected))
-                    views.setTextViewText(R.id.widgetSubtitle, "$layerName · ${status.mode.label}")
+                    views.setTextViewText(R.id.widgetSubtitle, "$layerName · ${status.mode.localizedLabel(localized)}")
                     views.setTextViewText(R.id.widgetBtnToggle, localized.getString(R.string.vpn_btn_disconnect))
                 }
                 DastyabVpnService.State.CONNECTING -> {

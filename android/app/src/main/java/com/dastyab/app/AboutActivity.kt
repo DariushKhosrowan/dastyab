@@ -19,6 +19,7 @@ class AboutActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_about)
 
         DastyabLogger.i("AboutActivity", "onCreate")

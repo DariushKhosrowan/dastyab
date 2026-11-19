@@ -33,10 +33,13 @@ object DomainDnsDialog {
 
         val rules = DomainDnsRules.load(context)
 
+        val textPrimary = ThemeManager.resolveColor(context, R.attr.dastyabTextPrimary, R.color.colorTextPrimary)
+        val textSecondary = ThemeManager.resolveColor(context, R.attr.dastyabTextSecondary, R.color.colorTextSecondary)
+
         val cbIran = CheckBox(context).apply {
             text = context.getString(R.string.dns_rules_iran_bypass)
             isChecked = rules.iranBypassEnabled
-            setTextColor(context.getColor(R.color.colorTextPrimary))
+            setTextColor(textPrimary)
             setOnCheckedChangeListener { _, isChecked ->
                 DomainDnsRules.setIranBypassEnabled(context, isChecked)
                 onChanged?.invoke()
@@ -47,7 +50,7 @@ object DomainDnsDialog {
         val tvHint = TextView(context).apply {
             text = context.getString(R.string.dns_rules_iran_hint, DomainDnsRules.BUILTIN_IRAN_DOMAINS.size)
             textSize = 12f
-            setTextColor(context.getColor(R.color.colorTextSecondary))
+            setTextColor(textSecondary)
             setPadding(0, (4 * density).toInt(), 0, (12 * density).toInt())
         }
         root.addView(tvHint)
@@ -60,16 +63,22 @@ object DomainDnsDialog {
 
         val tvSummary = TextView(context).apply {
             textSize = 12f
-            setTextColor(context.getColor(R.color.colorTextSecondary))
+            setTextColor(textSecondary)
             setPadding(0, (10 * density).toInt(), 0, (10 * density).toInt())
         }
 
         fun refreshSummary() {
             val r = DomainDnsRules.load(context)
-            val bypassText = if (r.customBypassDomains.isEmpty()) "None" else r.customBypassDomains.joinToString(", ")
-            val forceText = if (r.customForceDohDomains.isEmpty()) "None" else r.customForceDohDomains.joinToString(", ")
-            tvSummary.text = "Custom Local Bypass (${r.customBypassDomains.size}): $bypassText\n" +
-                "Custom Force-DoH (${r.customForceDohDomains.size}): $forceText"
+            val none = context.getString(R.string.dns_rules_none)
+            val bypassText = if (r.customBypassDomains.isEmpty()) none else r.customBypassDomains.joinToString(", ")
+            val forceText = if (r.customForceDohDomains.isEmpty()) none else r.customForceDohDomains.joinToString(", ")
+            tvSummary.text = context.getString(
+                R.string.dns_rules_summary_format,
+                r.customBypassDomains.size,
+                bypassText,
+                r.customForceDohDomains.size,
+                forceText
+            )
         }
         refreshSummary()
 
@@ -87,9 +96,9 @@ object DomainDnsDialog {
                     etDomain.setText("")
                     refreshSummary()
                     onChanged?.invoke()
-                    Toast.makeText(context, "Added to Local Bypass", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.dns_rules_added_bypass, input.trim()), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(context, "Enter a valid domain (e.g. bank.ir)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.dns_rules_invalid_bypass), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -102,9 +111,9 @@ object DomainDnsDialog {
                     etDomain.setText("")
                     refreshSummary()
                     onChanged?.invoke()
-                    Toast.makeText(context, "Added to Force-DoH", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.dns_rules_added_doh, input.trim()), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(context, "Enter a valid domain (e.g. aistudio.google.com)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.dns_rules_invalid_doh), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -131,7 +140,7 @@ object DomainDnsDialog {
                 val cur = DomainDnsRules.load(context)
                 DomainDnsRules.save(context, cur.copy(customBypassDomains = emptySet(), customForceDohDomains = emptySet()))
                 onChanged?.invoke()
-                Toast.makeText(context, "Cleared custom DNS rules", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.dns_rules_cleared_custom), Toast.LENGTH_SHORT).show()
             }
         UiSafety.safeShowDialog(context, builder)
     }

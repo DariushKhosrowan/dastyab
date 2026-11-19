@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@drawable/header_card_background"
+    android:background="@drawable/widget_card_background"
     android:paddingStart="14dp"
     android:paddingEnd="14dp"
     android:paddingTop="10dp"
@@ -59,6 +59,6 @@
         android:textSize="12sp"
         android:textStyle="bold"
         android:textColor="@color/colorBackground"
-        android:background="@drawable/btn_primary_bg" />
+        android:background="@drawable/widget_btn_primary_bg" />
 
 </LinearLayout>

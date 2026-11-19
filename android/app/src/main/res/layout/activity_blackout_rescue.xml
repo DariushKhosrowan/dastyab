@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/colorBackground"
+    android:background="?attr/dastyabBackground"
     android:fillViewport="true">
 
     <LinearLayout
@@ -28,14 +28,14 @@
                 android:text="@string/rescue_title"
                 android:textSize="22sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent" />
+                android:textColor="?attr/dastyabAccent" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/rescue_subtitle"
                 android:textSize="13sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="4dp" />
 
             <ProgressBar
@@ -66,7 +66,7 @@
                 android:text="@string/rescue_harvester_title"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent" />
+                android:textColor="?attr/dastyabAccent" />
 
             <TextView
                 android:id="@+id/tvHarvestSummary"
@@ -74,7 +74,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/rescue_harvester_hint"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="4dp"
                 android:paddingBottom="10dp" />
 
@@ -131,14 +131,14 @@
                 android:text="@string/rescue_dns_vpn_title"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent" />
+                android:textColor="?attr/dastyabAccent" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/rescue_dns_vpn_hint"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="4dp"
                 android:paddingBottom="10dp" />
 
@@ -157,8 +157,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:hint="@string/rescue_dns_tunnel_hint"
-                android:textColor="@color/colorTextPrimary"
-                android:textColorHint="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
                 android:textSize="13sp"
                 android:background="@drawable/input_bg"
                 android:padding="12dp"
@@ -191,14 +191,14 @@
                 android:text="@string/rescue_scout_title"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent" />
+                android:textColor="?attr/dastyabAccent" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/rescue_scout_hint"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="4dp"
                 android:paddingBottom="10dp" />
 
@@ -247,7 +247,7 @@
                 android:text="@string/rescue_troubleshoot_title"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent" />
+                android:textColor="?attr/dastyabAccent" />
 
             <TextView
                 android:id="@+id/tvDiagnosisHeadline"
@@ -255,7 +255,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/rescue_troubleshoot_hint"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="4dp"
                 android:paddingBottom="10dp" />
 
@@ -285,14 +285,14 @@
                 android:text="@string/rescue_fallbacks_title"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent" />
+                android:textColor="?attr/dastyabAccent" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/rescue_fallbacks_hint"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="4dp"
                 android:paddingBottom="10dp" />
 
@@ -321,7 +321,7 @@
                 android:text="@string/rescue_log_title"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="8dp" />
 
             <TextView
@@ -331,7 +331,7 @@
                 android:text="@string/rescue_log_empty"
                 android:textSize="12sp"
                 android:fontFamily="monospace"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:textIsSelectable="true" />
         </LinearLayout>
 

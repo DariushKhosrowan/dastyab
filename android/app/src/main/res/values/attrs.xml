@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="dastyabPrimary" format="color" />
+    <attr name="dastyabPrimaryDark" format="color" />
+    <attr name="dastyabAccent" format="color" />
+    <attr name="dastyabBackground" format="color" />
+    <attr name="dastyabSurface" format="color" />
+    <attr name="dastyabSurfaceElevated" format="color" />
+    <attr name="dastyabCardBorder" format="color" />
+    <attr name="dastyabCardBorderAccent" format="color" />
+    <attr name="dastyabCardPressed" format="color" />
+    <attr name="dastyabHeaderStart" format="color" />
+    <attr name="dastyabHeaderEnd" format="color" />
+    <attr name="dastyabBadgeBg" format="color" />
+    <attr name="dastyabBadgeBorder" format="color" />
+    <attr name="dastyabTextPrimary" format="color" />
+    <attr name="dastyabTextSecondary" format="color" />
+    <attr name="dastyabChipBg" format="color" />
+    <attr name="dastyabChipText" format="color" />
+    <attr name="dastyabOutputBg" format="color" />
+    <attr name="dastyabDivider" format="color" />
+    <attr name="dastyabButtonPrimary" format="color" />
+    <attr name="dastyabButtonPrimaryText" format="color" />
+    <attr name="dastyabButtonSecondary" format="color" />
+    <attr name="dastyabButtonSecondaryText" format="color" />
+    <attr name="dastyabStatusReady" format="color" />
+    <attr name="dastyabStatusError" format="color" />
+    <attr name="dastyabStatusWarning" format="color" />
+    <attr name="dastyabDangerBg" format="color" />
+    <attr name="dastyabDangerBorder" format="color" />
+</resources>

@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -77,7 +76,8 @@ class InAppBrowserActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: "Google AI Studio"
+        ThemeManager.applyTheme(this)
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: getString(R.string.browser_default_aistudio)
         initialUrl = intent.getStringExtra(EXTRA_URL) ?: CommandCompat.AISTUDIO_URL
 
         try {
@@ -181,7 +181,11 @@ class InAppBrowserActivity : Activity() {
                 } else {
                     CommandCompat.FLOW_URL
                 }
-                val nextTitle = if (nextUrl == CommandCompat.AISTUDIO_URL) "Google AI Studio" else "Google Flow"
+                val nextTitle = if (nextUrl == CommandCompat.AISTUDIO_URL) {
+                    getString(R.string.browser_default_aistudio)
+                } else {
+                    getString(R.string.browser_default_flow)
+                }
                 initialUrl = nextUrl
                 tvTitle.text = nextTitle
                 applyProxyAndLoad(nextUrl)
@@ -206,7 +210,7 @@ class InAppBrowserActivity : Activity() {
             val opened = UiSafety.safeStartActivity(this, Intent(Intent.ACTION_VIEW, Uri.parse(initialUrl)))
             Toast.makeText(
                 this,
-                if (opened) "System WebView unavailable; opened in browser." else getString(R.string.aistudio_no_browser),
+                if (opened) getString(R.string.browser_webview_fallback) else getString(R.string.aistudio_no_browser),
                 Toast.LENGTH_LONG
             ).show()
             finish()
@@ -218,8 +222,8 @@ class InAppBrowserActivity : Activity() {
 
     private fun checkUnsupportedRedirect(url: String?) {
         if (url != null && url.contains("unsupported-country", ignoreCase = true)) {
-            tvRouteStatus.text = "GEO-BLOCKED (unsupported country) — Tap 'Proxy / VPN' to switch to Lantern or v2rayNG"
-            tvRouteStatus.setTextColor(Color.rgb(0xF8, 0x71, 0x71))
+            tvRouteStatus.text = getString(R.string.browser_geo_blocked)
+            tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusError, R.color.colorStatusError))
         }
     }
 
@@ -256,7 +260,7 @@ class InAppBrowserActivity : Activity() {
             if (httpProxyPort != null) {
                 Toast.makeText(
                     this,
-                    "This WebView version lacks per-app proxy override; use DastYab VPN + Proxy Chain or Chrome.",
+                    getString(R.string.browser_proxy_unsupported),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -281,14 +285,15 @@ class InAppBrowserActivity : Activity() {
             runOnUiThread {
                 if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
                 if (egress == null) {
-                    tvRouteStatus.text = "${route.routeLabel} · Tap 'Geo Check' to verify IP"
-                    tvRouteStatus.setTextColor(Color.rgb(0xFB, 0xBF, 0x24))
+                    tvRouteStatus.text = getString(R.string.browser_geo_check_hint, route.routeLabel)
+                    tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusWarning, R.color.colorStatusWarning))
                 } else {
                     val ok = GeoBypassEngine.isFlowCountrySupported(egress.countryCode)
-                    val mark = if (ok) "✓ Supported" else "✗ Geo-Blocked"
+                    val mark = if (ok) getString(R.string.browser_geo_supported) else getString(R.string.browser_geo_blocked_short)
                     tvRouteStatus.text = "${route.routeLabel} · ${egress.countryCode} ($mark · ${egress.ip})"
                     tvRouteStatus.setTextColor(
-                        if (ok) Color.rgb(0x4A, 0xDE, 0x80) else Color.rgb(0xF8, 0x71, 0x71)
+                        if (ok) ThemeManager.resolveColor(this, R.attr.dastyabStatusReady, R.color.colorStatusReady)
+                        else ThemeManager.resolveColor(this, R.attr.dastyabStatusError, R.color.colorStatusError)
                     )
                 }
             }
@@ -342,7 +347,7 @@ class InAppBrowserActivity : Activity() {
                 }
             )
             if (precomputed != null && this::tvRouteStatus.isInitialized) {
-                tvRouteStatus.text = "${precomputed.routeLabel} · Checking egress country…"
+                tvRouteStatus.text = getString(R.string.browser_checking_country, precomputed.routeLabel)
             }
         } catch (_: Throwable) {
         }

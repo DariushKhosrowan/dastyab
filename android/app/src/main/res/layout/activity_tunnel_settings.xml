@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/colorBackground"
+    android:background="?attr/dastyabBackground"
     android:padding="16dp">
 
     <LinearLayout
@@ -17,7 +17,7 @@
             android:text="@string/tunnel_settings_title"
             android:textSize="24sp"
             android:textStyle="bold"
-            android:textColor="@color/colorAccent"
+            android:textColor="?attr/dastyabAccent"
             android:paddingBottom="4dp" />
 
         <TextView
@@ -25,7 +25,7 @@
             android:layout_height="wrap_content"
             android:text="@string/tunnel_settings_subtitle"
             android:textSize="13sp"
-            android:textColor="@color/colorTextSecondary"
+            android:textColor="?attr/dastyabTextSecondary"
             android:paddingBottom="16dp" />
 
         <!-- Routing Mode Card -->
@@ -42,7 +42,7 @@
                 android:text="@string/tunnel_mode_label"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="8dp" />
 
             <Spinner
@@ -55,7 +55,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="8dp" />
 
             <CheckBox
@@ -63,7 +63,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_bypass_lan"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:paddingTop="10dp" />
 
             <CheckBox
@@ -71,7 +71,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_auto_vpn_google"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:paddingTop="6dp" />
 
             <CheckBox
@@ -79,7 +79,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_watchdog_enabled"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:paddingTop="6dp" />
 
             <CheckBox
@@ -87,7 +87,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_auto_connect_boot"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:paddingTop="6dp" />
 
             <Button
@@ -117,7 +117,7 @@
                 android:text="@string/tunnel_proxy_header"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="8dp" />
 
             <TextView
@@ -125,7 +125,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_proxy_mode_label"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="4dp" />
 
             <Spinner
@@ -138,7 +138,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingTop="6dp"
                 android:paddingBottom="10dp" />
 
@@ -147,7 +147,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_upstream_scheme_label"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="4dp" />
 
             <Spinner
@@ -168,7 +168,7 @@
                     android:layout_width="0dp"
                     android:layout_height="34dp"
                     android:layout_weight="1"
-                    android:text="v2rayNG :10809"
+                    android:text="@string/tunnel_preset_v2ray_http"
                     android:textSize="10sp"
                     style="@style/DastyabChip" />
 
@@ -177,7 +177,7 @@
                     android:layout_width="0dp"
                     android:layout_height="34dp"
                     android:layout_weight="1"
-                    android:text="v2ray SOCKS :10808"
+                    android:text="@string/tunnel_preset_v2ray_socks"
                     android:textSize="10sp"
                     style="@style/DastyabChip" />
 
@@ -186,7 +186,7 @@
                     android:layout_width="0dp"
                     android:layout_height="34dp"
                     android:layout_weight="1"
-                    android:text="Neko :2080"
+                    android:text="@string/tunnel_preset_nekobox"
                     android:textSize="10sp"
                     style="@style/DastyabChip" />
             </LinearLayout>
@@ -196,7 +196,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_upstream_host_label"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="4dp" />
 
             <EditText
@@ -208,7 +208,7 @@
                 android:textSize="14sp"
                 android:padding="12dp"
                 android:background="@drawable/input_bg"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:layout_marginBottom="10dp" />
 
             <TextView
@@ -216,7 +216,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_upstream_port_label"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="4dp" />
 
             <EditText
@@ -228,7 +228,7 @@
                 android:textSize="14sp"
                 android:padding="12dp"
                 android:background="@drawable/input_bg"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:layout_marginBottom="10dp" />
 
             <TextView
@@ -236,7 +236,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_local_bridge_port_label"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="4dp" />
 
             <EditText
@@ -248,7 +248,7 @@
                 android:textSize="14sp"
                 android:padding="12dp"
                 android:background="@drawable/input_bg"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:layout_marginBottom="6dp" />
 
             <CheckBox
@@ -256,7 +256,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_auto_start_bridge"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:paddingBottom="8dp" />
 
             <Button
@@ -293,7 +293,7 @@
                 android:text="@string/tunnel_split_header"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="4dp" />
 
             <TextView
@@ -302,7 +302,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_split_none"
                 android:textSize="13sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="12dp" />
 
             <Button
@@ -331,7 +331,7 @@
                 android:text="@string/tunnel_vless_header"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="8dp" />
 
             <EditText
@@ -346,8 +346,8 @@
                 android:textSize="12sp"
                 android:padding="12dp"
                 android:background="@drawable/input_bg"
-                android:textColor="@color/colorTextPrimary"
-                android:textColorHint="@color/colorTextSecondary" />
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary" />
 
             <TextView
                 android:id="@+id/tvVlessStatus"
@@ -355,7 +355,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_vless_none"
                 android:textSize="12sp"
-                android:textColor="@color/colorChipText"
+                android:textColor="?attr/dastyabChipText"
                 android:paddingTop="8dp"
                 android:paddingBottom="10dp" />
 
@@ -385,7 +385,7 @@
                 android:text="@string/tunnel_network_header"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorAccent"
+                android:textColor="?attr/dastyabAccent"
                 android:paddingBottom="10dp" />
 
             <TextView
@@ -393,7 +393,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_dns_primary"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="4dp" />
 
             <EditText
@@ -405,7 +405,7 @@
                 android:textSize="14sp"
                 android:padding="12dp"
                 android:background="@drawable/input_bg"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:layout_marginBottom="10dp" />
 
             <TextView
@@ -413,7 +413,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_dns_secondary"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="4dp" />
 
             <EditText
@@ -425,7 +425,7 @@
                 android:textSize="14sp"
                 android:padding="12dp"
                 android:background="@drawable/input_bg"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:layout_marginBottom="10dp" />
 
             <TextView
@@ -433,7 +433,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/tunnel_mtu_label"
                 android:textSize="12sp"
-                android:textColor="@color/colorTextSecondary"
+                android:textColor="?attr/dastyabTextSecondary"
                 android:paddingBottom="4dp" />
 
             <EditText
@@ -445,7 +445,7 @@
                 android:textSize="14sp"
                 android:padding="12dp"
                 android:background="@drawable/input_bg"
-                android:textColor="@color/colorTextPrimary" />
+                android:textColor="?attr/dastyabTextPrimary" />
         </LinearLayout>
 
         <View

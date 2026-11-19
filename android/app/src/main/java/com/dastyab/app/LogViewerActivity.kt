@@ -35,6 +35,7 @@ class LogViewerActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_log_viewer)
 
         listLogs = findViewById(R.id.listLogs)
@@ -79,7 +80,7 @@ class LogViewerActivity : Activity() {
     }
 
     private fun loadFileContentAsync(file: File) {
-        tvLogContent.text = "Loading ${file.name}…"
+        tvLogContent.text = getString(R.string.log_loading_file, file.name)
         thread(isDaemon = true, name = "dastyab-log-reader") {
             val content = readTailSafely(file, MAX_LOG_PREVIEW_BYTES)
             UiSafety.safePostUi(this, handler) {
@@ -90,7 +91,7 @@ class LogViewerActivity : Activity() {
 
     private fun readTailSafely(file: File, maxBytes: Int): String {
         return try {
-            if (!file.isFile) return "(Log file no longer exists)"
+            if (!file.isFile) return getString(R.string.log_file_missing)
             val len = file.length()
             if (len <= maxBytes) {
                 file.readText(Charsets.UTF_8)
@@ -100,11 +101,12 @@ class LogViewerActivity : Activity() {
                     val buf = ByteArray(maxBytes)
                     val read = raf.read(buf)
                     val tail = if (read > 0) String(buf, 0, read, Charsets.UTF_8) else ""
-                    "... (showing last ${maxBytes / 1024} KB of ${len / 1024} KB) ...\n$tail"
+                    val header = getString(R.string.log_tail_header, maxBytes / 1024, (len / 1024).toInt())
+                    "[… $header …]\n\n$tail"
                 }
             }
         } catch (t: Throwable) {
-            "Unable to read ${file.name}: ${t.message ?: t.javaClass.simpleName}"
+            getString(R.string.log_read_error, file.name, t.message ?: t.javaClass.simpleName)
         }
     }
 

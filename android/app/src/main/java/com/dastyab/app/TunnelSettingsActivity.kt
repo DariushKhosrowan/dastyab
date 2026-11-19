@@ -58,6 +58,7 @@ class TunnelSettingsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_tunnel_settings)
 
         spinnerMode = findViewById(R.id.spinnerTunnelMode)
@@ -88,12 +89,12 @@ class TunnelSettingsActivity : Activity() {
         val adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_item,
-            modes.map { it.label }
+            modes.map { it.localizedLabel(this) }
         )
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerMode.adapter = adapter
         spinnerMode.setSelection(modes.indexOf(settings.mode).coerceAtLeast(0))
-        tvModeHint.text = settings.mode.subtitle
+        tvModeHint.text = settings.mode.localizedSubtitle(this)
 
         spinnerMode.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(
@@ -102,7 +103,7 @@ class TunnelSettingsActivity : Activity() {
                 position: Int,
                 id: Long
             ) {
-                tvModeHint.text = modes[position].subtitle
+                tvModeHint.text = modes[position].localizedSubtitle(this@TunnelSettingsActivity)
             }
 
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
@@ -111,11 +112,11 @@ class TunnelSettingsActivity : Activity() {
         val accessAdapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_item,
-            accessModes.map { it.label }
+            accessModes.map { it.localizedLabel(this) }
         ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         spinnerGoogleAccessMode.adapter = accessAdapter
         spinnerGoogleAccessMode.setSelection(accessModes.indexOf(settings.googleAccessMode).coerceAtLeast(0))
-        tvGoogleAccessModeHint.text = settings.googleAccessMode.subtitle
+        tvGoogleAccessModeHint.text = settings.googleAccessMode.localizedSubtitle(this)
         spinnerGoogleAccessMode.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(
                 parent: android.widget.AdapterView<*>?,
@@ -123,7 +124,7 @@ class TunnelSettingsActivity : Activity() {
                 position: Int,
                 id: Long
             ) {
-                tvGoogleAccessModeHint.text = accessModes[position].subtitle
+                tvGoogleAccessModeHint.text = accessModes[position].localizedSubtitle(this@TunnelSettingsActivity)
             }
 
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
@@ -132,7 +133,7 @@ class TunnelSettingsActivity : Activity() {
         val schemeAdapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_item,
-            proxySchemes.map { it.label }
+            proxySchemes.map { it.localizedLabel(this) }
         ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         spinnerUpstreamScheme.adapter = schemeAdapter
         spinnerUpstreamScheme.setSelection(proxySchemes.indexOf(settings.upstreamProxyScheme).coerceAtLeast(0))
@@ -156,13 +157,13 @@ class TunnelSettingsActivity : Activity() {
         btnToggleLocalBridge.setOnClickListener {
             if (LocalProxyService.isRunning()) {
                 LocalProxyService.stop(this)
-                Toast.makeText(this, "Local proxy port stopped", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.tunnel_local_bridge_stopped), Toast.LENGTH_SHORT).show()
             } else {
                 saveSettingsFromUi(finishAfter = false, silentToast = true)
                 LocalProxyService.startSafely(this)
                 Toast.makeText(
                     this,
-                    "Started Local Proxy Port on 127.0.0.1:${etLocalBridgePort.text.toString().trim()}",
+                    getString(R.string.tunnel_local_bridge_started, etLocalBridgePort.text.toString().trim()),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -177,7 +178,7 @@ class TunnelSettingsActivity : Activity() {
             )
             val uri = GeoBypassEngine.formatV2rayNgSocksUri("127.0.0.1", port)
             UiSafety.copyTextSafely(this, "DastYab Local Proxy URI", uri)
-            Toast.makeText(this, "Copied: $uri", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.tunnel_copied_prefix, uri), Toast.LENGTH_LONG).show()
         }
 
         etVlessUri.setText(settings.vlessUri)
@@ -228,7 +229,7 @@ class TunnelSettingsActivity : Activity() {
         spinnerUpstreamScheme.setSelection(proxySchemes.indexOf(scheme).coerceAtLeast(0))
         etUpstreamHost.setText(host)
         etUpstreamPort.setText(port.toString())
-        Toast.makeText(this, "Preset loaded: ${scheme.name} $host:$port", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.tunnel_preset_loaded, scheme.name, host, port), Toast.LENGTH_SHORT).show()
     }
 
     private fun refreshBridgeToggleButton() {
@@ -248,9 +249,9 @@ class TunnelSettingsActivity : Activity() {
         }
         val parsed = TunnelConfig.parseVlessUri(uri)
         tvVlessStatus.text = if (parsed != null) {
-            "✓ Parsed: ${parsed.summary()} · SNI: ${parsed.sni}"
+            getString(R.string.tunnel_vless_parsed, "${parsed.summary()} · SNI: ${parsed.sni}")
         } else {
-            "✗ Invalid vless:// link format"
+            getString(R.string.tunnel_vless_invalid)
         }
     }
 

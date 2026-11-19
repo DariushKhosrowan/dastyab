@@ -116,6 +116,7 @@ class CloudflareWorkerActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_cloudflare_worker)
         binary = File(applicationInfo.nativeLibraryDir, "libdastyab.so")
 
@@ -184,7 +185,7 @@ class CloudflareWorkerActivity : Activity() {
         findViewById<Button>(R.id.btnStudioBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.btnStudioRefresh).setOnClickListener {
             reloadProfileState(loadInitialEditorConfig = false)
-            Toast.makeText(this, "Reloaded ~/.dastyab profile state", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cf_toast_reloaded), Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.btnStudioNewProfile).setOnClickListener { showCreateProfileDialog() }
 
@@ -272,10 +273,10 @@ class CloudflareWorkerActivity : Activity() {
             val uri = TunnelConfig.load(this).vlessUri
             val parsed = WorkerConfigStudio.parseVless(uri)
             if (parsed == null) {
-                Toast.makeText(this, "No active VLESS config set in VPN settings yet.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.cf_toast_no_active_vpn), Toast.LENGTH_SHORT).show()
             } else {
                 populateEditor(parsed, isBaseWorker = false)
-                Toast.makeText(this, "Loaded active VPN config", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.cf_toast_loaded_active_vpn), Toast.LENGTH_SHORT).show()
             }
         }
         findViewById<Button>(R.id.btnResetWorkerHost).setOnClickListener {
@@ -293,7 +294,7 @@ class CloudflareWorkerActivity : Activity() {
         findViewById<Button>(R.id.btnStudioQr).setOnClickListener {
             val cfg = readConfigFromEditor()
             if (cfg == null) {
-                Toast.makeText(this, "Fill in UUID and Address first.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.cf_toast_fill_uuid_addr), Toast.LENGTH_SHORT).show()
             } else {
                 QrShareDialog.show(this, "QR · ${cfg.name}", cfg.toVlessUri())
             }
@@ -384,24 +385,26 @@ class CloudflareWorkerActivity : Activity() {
         val summary = WorkerConfigStudio.loadProfileSummary(filesDir, activeProfileId)
         currentSummary = summary
 
+        val textSecondary = ThemeManager.resolveColor(this, R.attr.dastyabTextSecondary, R.color.colorTextSecondary)
+
         // Token status
         tvTokenStatus.text = if (summary.tokens.isEmpty()) {
-            "No Cloudflare API token saved in '${summary.profileName}'. Paste your Workers token below or switch to 'Use Existing Worker'."
+            getString(R.string.cf_token_status_profile_empty, summary.profileName)
         } else {
             val active = summary.tokens.firstOrNull { it.isActive } ?: summary.tokens.first()
             val accInfo = if (summary.accounts.isNotEmpty()) {
-                " · ${summary.accounts.size} account(s): ${summary.accounts.joinToString { it.workersDevSuffix() }}"
+                " · ${summary.accounts.size}: ${summary.accounts.joinToString { it.workersDevSuffix() }}"
             } else ""
-            "Active token: '${active.label}' (${active.maskedToken}) · ${summary.tokens.size} saved$accInfo"
+            getString(R.string.cf_token_status_active, active.label, active.maskedToken, summary.tokens.size, accInfo)
         }
 
         // Account chips
         llAccountChips.removeAllViews()
         if (summary.accounts.isEmpty()) {
             llAccountChips.addView(TextView(this).apply {
-                text = "Tap Accounts after saving token to auto-populate Account IDs."
+                text = getString(R.string.cf_accounts_empty_hint)
                 textSize = 11f
-                setTextColor(getColor(R.color.colorTextSecondary))
+                setTextColor(textSecondary)
             })
         } else {
             summary.accounts.forEach { acc ->
@@ -411,7 +414,7 @@ class CloudflareWorkerActivity : Activity() {
                     text = chipLabel
                     setOnClickListener {
                         etDeployAccountId.setText(acc.id)
-                        Toast.makeText(this@CloudflareWorkerActivity, "Selected account ${acc.id.take(8)}…", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@CloudflareWorkerActivity, getString(R.string.cf_toast_selected_account, acc.id.take(8)), Toast.LENGTH_SHORT).show()
                     }
                 })
             }
@@ -422,13 +425,13 @@ class CloudflareWorkerActivity : Activity() {
         }
 
         // Clean IP pool chips
-        tvCleanIpStatus.text = "Saved Clean IPs (${summary.cleanIps.size}) — tap to apply to config, long-press to test/remove"
+        tvCleanIpStatus.text = getString(R.string.cf_cleanip_status_count, summary.cleanIps.size)
         llCleanIpChips.removeAllViews()
         if (summary.cleanIps.isEmpty()) {
             llCleanIpChips.addView(TextView(this).apply {
-                text = "No clean IPs saved yet — run Rust E2E Find or Fast Device Scout above."
+                text = getString(R.string.cf_cleanip_empty_hint)
                 textSize = 11f
-                setTextColor(getColor(R.color.colorTextSecondary))
+                setTextColor(textSecondary)
             })
         } else {
             summary.cleanIps.forEach { ep ->
@@ -509,19 +512,19 @@ class CloudflareWorkerActivity : Activity() {
 
     private fun showCreateProfileDialog() {
         val input = EditText(this).apply {
-            hint = "New profile name (e.g. work, gaming)"
+            hint = getString(R.string.cf_dialog_profile_hint)
             setSingleLine(true)
         }
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("Create Profile")
+                .setTitle(getString(R.string.cf_dialog_profile_title))
                 .setView(input)
-                .setPositiveButton("Create") { _, _ ->
+                .setPositiveButton(getString(R.string.cf_btn_create)) { _, _ ->
                     val name = input.text.toString().trim()
                     val args = WorkerConfigStudio.buildProfileCreateArgs(name)
                     if (args == null) {
-                        Toast.makeText(this, "Enter a profile name.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.cf_toast_enter_profile_name), Toast.LENGTH_SHORT).show()
                     } else {
                         runNativeCli(args) {
                             val newest = WorkerConfigStudio.listProfiles(filesDir)
@@ -545,7 +548,7 @@ class CloudflareWorkerActivity : Activity() {
                     reloadProfileState(loadInitialEditorConfig = false)
                 }
             } else {
-                Toast.makeText(this, "Paste your Cloudflare API token first.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.cf_toast_paste_token_first), Toast.LENGTH_SHORT).show()
             }
             return
         }
@@ -583,7 +586,7 @@ class CloudflareWorkerActivity : Activity() {
                 populateEditor(parsed, isBaseWorker = true)
                 Toast.makeText(
                     this,
-                    if (exitCode == 0) "Worker deployed! Config loaded into editor." else "Loaded latest saved config.",
+                    if (exitCode == 0) getString(R.string.cf_toast_worker_deployed) else getString(R.string.cf_toast_loaded_latest),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -606,7 +609,7 @@ class CloudflareWorkerActivity : Activity() {
             label = null
         )
         if (config == null) {
-            Toast.makeText(this, "Enter a valid worker hostname (e.g. myworker.sub.workers.dev).", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cf_toast_invalid_worker_host), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -618,9 +621,9 @@ class CloudflareWorkerActivity : Activity() {
         reloadProfileState(loadInitialEditorConfig = false)
 
         if (cleanIp != null) {
-            Toast.makeText(this, "Base Worker config ready! Tap Clean IP chip '$cleanIp' to apply.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.cf_toast_existing_ready_with_ip, cleanIp), Toast.LENGTH_LONG).show()
         } else {
-            Toast.makeText(this, "Base Worker config loaded! Discover or add a Clean IP next.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.cf_toast_existing_ready), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -660,7 +663,7 @@ class CloudflareWorkerActivity : Activity() {
         val raw = etCustomCleanIp.text.toString()
         val parsedList = WorkerConfigStudio.extractCleanIpsFromText(raw)
         if (parsedList.isEmpty()) {
-            Toast.makeText(this, "Enter valid IPv4 Clean IP(s), e.g. 104.16.1.1 or 104.16.1.1:8443", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cf_toast_invalid_cleanip_input), Toast.LENGTH_SHORT).show()
             return
         }
         WorkerConfigStudio.appendCleanIps(filesDir, activeProfileId, parsedList)
@@ -674,10 +677,11 @@ class CloudflareWorkerActivity : Activity() {
 
     private fun showCleanIpChipMenu(endpoint: String) {
         val sniHost = etEditSni.text.toString().trim()
+        val sniTag = if (sniHost.isNotBlank()) " → $sniHost" else ""
         val options = arrayOf(
-            "Apply '$endpoint' to Config Editor",
-            "Test TLS + SNI Handshake ($endpoint${if (sniHost.isNotBlank()) " → $sniHost" else ""})",
-            "Remove '$endpoint' from Pool"
+            getString(R.string.cf_cleanip_menu_apply, endpoint),
+            getString(R.string.cf_cleanip_menu_test, "$endpoint$sniTag"),
+            getString(R.string.cf_cleanip_menu_remove, endpoint)
         )
         UiSafety.safeShowDialog(
             this,
@@ -697,10 +701,10 @@ class CloudflareWorkerActivity : Activity() {
                                     setBusy(false)
                                     if (ms >= 0) {
                                         appendConsole("OK: ${parsed.first}:$port TLS handshake succeeded in ${ms} ms!\n")
-                                        Toast.makeText(this, "TLS OK: ${ms} ms", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(this, getString(R.string.cf_toast_tls_ok, ms.toInt()), Toast.LENGTH_SHORT).show()
                                     } else {
                                         appendConsole("ERROR: ${parsed.first}:$port TLS handshake failed or timed out.\n")
-                                        Toast.makeText(this, "TLS handshake failed", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(this, getString(R.string.cf_toast_tls_failed), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -721,35 +725,35 @@ class CloudflareWorkerActivity : Activity() {
             val fallbackBase = WorkerConfigStudio.parseVless(currentSummary?.lastDeployedBaseLink)
                 ?: WorkerConfigStudio.parseVless(TunnelConfig.load(this).vlessUri)
             if (fallbackBase == null) {
-                Toast.makeText(this, "Deploy a worker or enter an existing worker first!", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.cf_toast_need_worker_first), Toast.LENGTH_LONG).show()
                 return
             }
             val patched = fallbackBase.applyCleanIp(cleanEndpoint)
             if (patched != null) {
                 originalWorkerHostForReset = fallbackBase.effectiveSni()
                 populateEditor(patched, isBaseWorker = false)
-                Toast.makeText(this, "Applied Clean IP $cleanEndpoint (SNI: ${patched.effectiveSni()})", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.cf_toast_applied_cleanip, cleanEndpoint, patched.effectiveSni()), Toast.LENGTH_SHORT).show()
             }
             return
         }
         val patched = current.applyCleanIp(cleanEndpoint)
         if (patched == null) {
-            Toast.makeText(this, "Invalid Clean IP endpoint: $cleanEndpoint", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cf_toast_invalid_cleanip_ep, cleanEndpoint), Toast.LENGTH_SHORT).show()
             return
         }
         populateEditor(patched, isBaseWorker = false)
-        Toast.makeText(this, "Patched Address → ${patched.address}:${patched.port} (SNI preserved: ${patched.effectiveSni()})", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.cf_toast_patched_cleanip, patched.address, patched.port, patched.effectiveSni()), Toast.LENGTH_SHORT).show()
     }
 
     private fun generateBatchCleanIpConfigs() {
         val base = readConfigFromEditor()
         if (base == null) {
-            Toast.makeText(this, "Configure a Worker first (Deploy or Use Existing Worker).", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.cf_toast_need_worker_first), Toast.LENGTH_LONG).show()
             return
         }
         val pool = currentSummary?.cleanIps.orEmpty().take(5)
         if (pool.isEmpty()) {
-            Toast.makeText(this, "No Clean IPs saved yet — run Scout or Find first.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.cf_toast_no_cleanips_saved), Toast.LENGTH_LONG).show()
             return
         }
         val generatedUris = mutableListOf<String>()
@@ -775,7 +779,7 @@ class CloudflareWorkerActivity : Activity() {
             reloadProfileState(loadInitialEditorConfig = false)
             appendConsole("Generated ${generatedUris.size} Clean-IP config(s) & synced to VPN pool:\n" +
                 generatedUris.joinToString("\n") + "\n")
-            Toast.makeText(this, "Saved ${generatedUris.size} Clean-IP configs!", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.cf_toast_saved_batch, generatedUris.size), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -832,7 +836,7 @@ class CloudflareWorkerActivity : Activity() {
     private fun updateExportPreview() {
         val cfg = readConfigFromEditor()
         if (cfg == null) {
-            tvExportPreview.text = "Fill in UUID and Address above (or deploy/select a worker) to render ${selectedExportFormat.label}."
+            tvExportPreview.text = getString(R.string.cf_export_empty_format, selectedExportFormat.label)
             return
         }
         tvExportPreview.text = cfg.export(selectedExportFormat)
@@ -847,13 +851,13 @@ class CloudflareWorkerActivity : Activity() {
         }
         val isClean = WorkerConfigStudio.isValidCanonicalIpv4(parsed.address)
         populateEditor(parsed, isBaseWorker = !isClean)
-        Toast.makeText(this, "Imported vless:// config into editor", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.cf_toast_imported_vless), Toast.LENGTH_SHORT).show()
     }
 
     private fun testEditorHandshake() {
         val cfg = readConfigFromEditor()
         if (cfg == null) {
-            Toast.makeText(this, "Fill in UUID and Address first.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cf_toast_fill_uuid_addr), Toast.LENGTH_SHORT).show()
             return
         }
         setBusy(true)
@@ -864,11 +868,11 @@ class CloudflareWorkerActivity : Activity() {
                 setBusy(false)
                 if (ms >= 0) {
                     appendConsole("OK: Handshake to ${cfg.address}:${cfg.port} with SNI '${cfg.effectiveSni()}' succeeded in ${ms} ms!\n")
-                    Toast.makeText(this, "TLS + SNI OK (${ms} ms)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.cf_toast_tls_ok, ms.toInt()), Toast.LENGTH_SHORT).show()
                 } else {
                     appendConsole("ERROR: Handshake to ${cfg.address}:${cfg.port} (SNI '${cfg.effectiveSni()}') failed/reset.\n" +
                         "Tip: Try a different Clean IP from the pool above.\n")
-                    Toast.makeText(this, "Handshake failed — try another Clean IP", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.cf_toast_handshake_failed_retry), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -877,7 +881,7 @@ class CloudflareWorkerActivity : Activity() {
     private fun saveAndActivateEditorConfig() {
         val cfg = readConfigFromEditor()
         if (cfg == null) {
-            Toast.makeText(this, "Fill in UUID and Address first.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cf_toast_fill_uuid_addr), Toast.LENGTH_SHORT).show()
             return
         }
         val uri = cfg.toVlessUri()
@@ -912,11 +916,11 @@ class CloudflareWorkerActivity : Activity() {
                 @Suppress("DEPRECATION")
                 startActivityForResult(prep, REQ_VPN_PREPARE)
             } catch (_: Exception) {
-                Toast.makeText(this, "Saved config to DastYab VPN profile.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.cf_toast_saved_to_profile), Toast.LENGTH_LONG).show()
             }
         } else {
             DastyabVpnService.start(this)
-            Toast.makeText(this, "Config saved & DastYab VPN activated!", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.cf_toast_saved_vpn_activated), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -926,7 +930,7 @@ class CloudflareWorkerActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_VPN_PREPARE && resultCode == RESULT_OK) {
             DastyabVpnService.start(this)
-            Toast.makeText(this, "DastYab VPN started with your Worker config!", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.cf_toast_vpn_started_worker), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -962,9 +966,9 @@ class CloudflareWorkerActivity : Activity() {
             val pad = (16 * resources.displayMetrics.density).toInt()
             setPadding(pad, pad / 2, pad, 0)
         }
-        val etPattern = EditText(this).apply { hint = "Route pattern (e.g. edge.example.com/*)" }
+        val etPattern = EditText(this).apply { hint = getString(R.string.cf_dialog_route_pattern_hint) }
         val etScript = EditText(this).apply {
-            hint = "Worker script name"
+            hint = getString(R.string.cf_dialog_route_script_hint)
             setText(etDeployWorkerName.text.toString().trim())
         }
         box.addView(etPattern)
@@ -973,16 +977,16 @@ class CloudflareWorkerActivity : Activity() {
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("Create Cloudflare Worker Route")
+                .setTitle(getString(R.string.cf_dialog_route_title))
                 .setView(box)
-                .setPositiveButton("Create") { _, _ ->
+                .setPositiveButton(getString(R.string.cf_btn_create)) { _, _ ->
                     val args = WorkerConfigStudio.buildRoutesCreateArgs(
                         activeProfileId,
                         etPattern.text.toString(),
                         etScript.text.toString()
                     )
                     if (args == null) {
-                        Toast.makeText(this, "Enter both pattern and worker script name.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.cf_toast_enter_pattern_script), Toast.LENGTH_SHORT).show()
                     } else {
                         runNativeCli(args)
                     }
@@ -993,18 +997,18 @@ class CloudflareWorkerActivity : Activity() {
 
     private fun showDnsListDialog() {
         val input = EditText(this).apply {
-            hint = "Zone ID or domain (e.g. example.com)"
+            hint = getString(R.string.cf_dialog_dns_hint)
             setSingleLine(true)
         }
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("List Cloudflare DNS Records")
+                .setTitle(getString(R.string.cf_dialog_dns_title))
                 .setView(input)
-                .setPositiveButton("List") { _, _ ->
+                .setPositiveButton(getString(R.string.cf_btn_list)) { _, _ ->
                     val args = WorkerConfigStudio.buildDnsListArgs(activeProfileId, input.text.toString())
                     if (args == null) {
-                        Toast.makeText(this, "Enter a Zone ID or domain name.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.cf_toast_enter_zone), Toast.LENGTH_SHORT).show()
                     } else {
                         runNativeCli(args)
                     }
@@ -1019,7 +1023,7 @@ class CloudflareWorkerActivity : Activity() {
         val args = try {
             CommandArgs.parse(raw)
         } catch (e: IllegalArgumentException) {
-            Toast.makeText(this, e.message ?: "Invalid CLI args", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, e.message ?: getString(R.string.error_invalid_args), Toast.LENGTH_SHORT).show()
             return
         }
         if (args.isEmpty()) return
@@ -1035,7 +1039,7 @@ class CloudflareWorkerActivity : Activity() {
 
     private fun runNativeCli(args: List<String>, onFinished: ((Int) -> Unit)? = null) {
         if (!cliRunning.compareAndSet(false, true)) {
-            Toast.makeText(this, "Another CLI command is running — tap Stop first.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cf_toast_cli_busy), Toast.LENGTH_SHORT).show()
             return
         }
         when (val verdict = CommandCompat.check(args)) {

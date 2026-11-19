@@ -36,7 +36,34 @@ class SettingsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_settings)
+
+        val tvCurrentTheme = findViewById<TextView>(R.id.tvCurrentTheme)
+        val btnChooseTheme = findViewById<Button>(R.id.btnChooseTheme)
+        val tvCurrentLanguage = findViewById<TextView>(R.id.tvCurrentLanguage)
+        val btnChooseLanguage = findViewById<Button>(R.id.btnChooseLanguage)
+
+        tvCurrentTheme.text = getString(
+            R.string.settings_current_theme_format,
+            ThemeManager.localizedName(this, ThemeManager.getSelectedTheme(this))
+        )
+        tvCurrentLanguage.text = getString(
+            R.string.settings_current_lang_format,
+            LocaleHelper.displayName(LocaleHelper.getLanguage(this))
+        )
+
+        btnChooseTheme.setOnClickListener {
+            ThemeManager.showThemePickerDialog(this) {
+                recreate()
+            }
+        }
+        btnChooseLanguage.setOnClickListener {
+            LocaleHelper.showLanguagePickerDialog(this) {
+                DastyabWidgetProvider.updateAllWidgets(this)
+                recreate()
+            }
+        }
 
         levelSpinner = findViewById(R.id.spinnerLogLevel)
         cbAutoUpdate = findViewById(R.id.cbAutoUpdate)
@@ -58,8 +85,13 @@ class SettingsActivity : Activity() {
         } catch (_: Throwable) { "DEBUG" }
         levelSpinner.setSelection(levels.indexOf(current).coerceAtLeast(0))
 
+        var initialSelection = true
         levelSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (initialSelection) {
+                    initialSelection = false
+                    return
+                }
                 val name = levels[position]
                 val level = try {
                     DastyabLogger.LogLevel.valueOf(name)
@@ -67,7 +99,7 @@ class SettingsActivity : Activity() {
                 DastyabLogger.setMinFileLevel(level)
                 persistPref(PREF_LOG_LEVEL, name)
                 DastyabLogger.i("Settings", "Log file level set to %s", name)
-                setStatus("Log level set to $name")
+                setStatus(getString(R.string.settings_status_log_level, name))
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
@@ -81,23 +113,26 @@ class SettingsActivity : Activity() {
             var n = 0
             for (f in files) if (f.delete()) n++
             DastyabLogger.i("Settings", "Cleared %d log files", n)
-            Toast.makeText(this, "Deleted $n log file(s)", Toast.LENGTH_SHORT).show()
-            setStatus("Deleted $n log file(s)")
+            val msg = getString(R.string.settings_deleted_logs, n)
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            setStatus(msg)
         }
 
         // ── Clear crash logs ──
         btnClearCrashLogs.setOnClickListener {
             val n = CrashHandler.clearCrashFiles()
             DastyabLogger.i("Settings", "Cleared %d crash files", n)
-            Toast.makeText(this, "Deleted $n crash file(s)", Toast.LENGTH_SHORT).show()
-            setStatus("Deleted $n crash file(s)")
+            val msg = getString(R.string.settings_deleted_crash_logs, n)
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            setStatus(msg)
         }
 
         // ── Clear command history ──
         btnClearHistory.setOnClickListener {
             CommandHistory.clear()
-            Toast.makeText(this, "Command history cleared", Toast.LENGTH_SHORT).show()
-            setStatus("Command history cleared")
+            val msg = getString(R.string.settings_history_cleared)
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            setStatus(msg)
         }
 
         // ── Force re-download binary ──
@@ -107,7 +142,7 @@ class SettingsActivity : Activity() {
                 Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/DastYab/dastyab/releases"))
             )
             if (!opened) {
-                setStatus("Open github.com/DastYab/dastyab/releases in a browser to update the app.")
+                setStatus(getString(R.string.settings_releases_hint))
             }
         }
 

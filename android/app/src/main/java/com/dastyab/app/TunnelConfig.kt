@@ -76,6 +76,26 @@ object TunnelConfig {
                 return values().firstOrNull { it.name.equals(name, ignoreCase = true) } ?: SMART
             }
         }
+
+        fun localizedLabel(context: Context): String = context.getString(
+            when (this) {
+                SMART -> R.string.tunnel_mode_smart_label
+                GLOBAL -> R.string.tunnel_mode_global_label
+                SPLIT_INCLUDE -> R.string.tunnel_mode_split_include_label
+                SPLIT_EXCLUDE -> R.string.tunnel_mode_split_exclude_label
+                DNS_BLACKOUT -> R.string.tunnel_mode_dns_blackout_label
+            }
+        )
+
+        fun localizedSubtitle(context: Context): String = context.getString(
+            when (this) {
+                SMART -> R.string.tunnel_mode_smart_sub
+                GLOBAL -> R.string.tunnel_mode_global_sub
+                SPLIT_INCLUDE -> R.string.tunnel_mode_split_include_sub
+                SPLIT_EXCLUDE -> R.string.tunnel_mode_split_exclude_sub
+                DNS_BLACKOUT -> R.string.tunnel_mode_dns_blackout_sub
+            }
+        )
     }
 
     enum class GoogleAccessMode(val label: String, val subtitle: String) {
@@ -106,6 +126,26 @@ object TunnelConfig {
                 return values().firstOrNull { it.name.equals(name, ignoreCase = true) } ?: AUTO_SMART
             }
         }
+
+        fun localizedLabel(context: Context): String = context.getString(
+            when (this) {
+                AUTO_SMART -> R.string.google_access_auto_label
+                EXTERNAL_VPN -> R.string.google_access_external_label
+                IN_APP_PROXY -> R.string.google_access_inapp_label
+                VPN_CHAIN_PROXY -> R.string.google_access_chain_label
+                LOCAL_BRIDGE -> R.string.google_access_bridge_label
+            }
+        )
+
+        fun localizedSubtitle(context: Context): String = context.getString(
+            when (this) {
+                AUTO_SMART -> R.string.google_access_auto_sub
+                EXTERNAL_VPN -> R.string.google_access_external_sub
+                IN_APP_PROXY -> R.string.google_access_inapp_sub
+                VPN_CHAIN_PROXY -> R.string.google_access_chain_sub
+                LOCAL_BRIDGE -> R.string.google_access_bridge_sub
+            }
+        )
     }
 
     enum class ProxyScheme(val label: String) {
@@ -119,6 +159,14 @@ object TunnelConfig {
                 return values().firstOrNull { it.name.equals(name, ignoreCase = true) } ?: DIRECT
             }
         }
+
+        fun localizedLabel(context: Context): String = context.getString(
+            when (this) {
+                DIRECT -> R.string.proxy_scheme_direct
+                HTTP -> R.string.proxy_scheme_http
+                SOCKS5 -> R.string.proxy_scheme_socks5
+            }
+        )
     }
 
     data class VlessEndpoint(

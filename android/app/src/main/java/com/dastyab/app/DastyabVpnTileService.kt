@@ -57,6 +57,7 @@ class DastyabVpnTileService : TileService() {
     private fun refreshTile(forceConnected: Boolean = false, forceDisconnected: Boolean = false) {
         try {
             val tile = qsTile ?: return
+            val localized = LocaleHelper.wrapContext(this)
             val connected = when {
                 forceConnected -> true
                 forceDisconnected -> false
@@ -67,9 +68,13 @@ class DastyabVpnTileService : TileService() {
             } else {
                 null
             }
-            tile.label = "DastYab VPN"
+            tile.label = localized.getString(R.string.tile_vpn_label)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                tile.subtitle = if (connected) (activeLayer?.mode?.label ?: "Connected") else "Tap to connect"
+                tile.subtitle = if (connected) {
+                    activeLayer?.mode?.localizedLabel(localized) ?: localized.getString(R.string.tile_connected)
+                } else {
+                    localized.getString(R.string.tile_tap_to_connect)
+                }
             }
             tile.state = if (connected) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             tile.updateTile()

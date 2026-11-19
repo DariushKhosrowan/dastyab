@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="16dp"
-    android:background="@color/colorBackground">
+    android:background="?attr/dastyabBackground">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -17,8 +17,61 @@
             android:text="@string/settings_title"
             android:textSize="24sp"
             android:textStyle="bold"
-            android:textColor="@color/colorAccent"
+            android:textColor="?attr/dastyabAccent"
             android:paddingBottom="16dp" />
+
+        <!-- Appearance: Theme & Language Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_appearance_title"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="?attr/dastyabAccent"
+                android:paddingBottom="10dp" />
+
+            <TextView
+                android:id="@+id/tvCurrentTheme"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:textColor="?attr/dastyabTextSecondary"
+                android:paddingBottom="6dp" />
+
+            <Button
+                android:id="@+id/btnChooseTheme"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_choose_theme"
+                style="@style/DastyabButtonPrimary"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:id="@+id/tvCurrentLanguage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:textColor="?attr/dastyabTextSecondary"
+                android:paddingBottom="6dp" />
+
+            <Button
+                android:id="@+id/btnChooseLanguage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_choose_language"
+                style="@style/DastyabButton" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
 
         <!-- Logging Card -->
         <LinearLayout
@@ -34,7 +87,7 @@
                 android:text="@string/settings_log_level"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:paddingBottom="8dp" />
 
             <Spinner
@@ -47,7 +100,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/settings_auto_update"
-                android:textColor="@color/colorTextPrimary"
+                android:textColor="?attr/dastyabTextPrimary"
                 android:paddingTop="8dp" />
         </LinearLayout>
 
@@ -120,7 +173,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textSize="13sp"
-            android:textColor="@color/colorChipText"
+            android:textColor="?attr/dastyabChipText"
             android:paddingTop="14dp"
             android:paddingStart="4dp" />
 

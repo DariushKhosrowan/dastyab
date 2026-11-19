@@ -58,4 +58,53 @@ class ReachabilityAndAutopilotTest {
             NewbieAutopilot.decideOutcome(allOffline, vpnConnected = false, vpnConsentNeeded = false)
         )
     }
+
+    @Test
+    fun decideExternalAutopilotPlan_handlesAllExternalVpnScenarios() {
+        assertEquals(
+            NewbieAutopilot.ExternalRoutePlan.USE_EXTERNAL_VPN,
+            NewbieAutopilot.decideExternalAutopilotPlan(
+                externalVpnActive = true,
+                listeningProxyPort = 10808,
+                dastyabVpnActive = false,
+                targetReachable = true
+            )
+        )
+        assertEquals(
+            NewbieAutopilot.ExternalRoutePlan.USE_DETECTED_LOCAL_PROXY,
+            NewbieAutopilot.decideExternalAutopilotPlan(
+                externalVpnActive = false,
+                listeningProxyPort = 7890,
+                dastyabVpnActive = false,
+                targetReachable = true
+            )
+        )
+        assertEquals(
+            NewbieAutopilot.ExternalRoutePlan.USE_DASTYAB_VPN,
+            NewbieAutopilot.decideExternalAutopilotPlan(
+                externalVpnActive = false,
+                listeningProxyPort = null,
+                dastyabVpnActive = true,
+                targetReachable = true
+            )
+        )
+        assertEquals(
+            NewbieAutopilot.ExternalRoutePlan.USE_EXTERNAL_VPN,
+            NewbieAutopilot.decideExternalAutopilotPlan(
+                externalVpnActive = false,
+                listeningProxyPort = null,
+                dastyabVpnActive = false,
+                targetReachable = true
+            )
+        )
+        assertEquals(
+            NewbieAutopilot.ExternalRoutePlan.NEEDS_EXTERNAL_VPN_CONNECT,
+            NewbieAutopilot.decideExternalAutopilotPlan(
+                externalVpnActive = false,
+                listeningProxyPort = null,
+                dastyabVpnActive = false,
+                targetReachable = false
+            )
+        )
+    }
 }

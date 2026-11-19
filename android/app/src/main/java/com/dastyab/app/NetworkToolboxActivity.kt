@@ -37,6 +37,7 @@ class NetworkToolboxActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_network_toolbox)
 
         progress = findViewById(R.id.toolboxProgress)
@@ -149,25 +150,25 @@ class NetworkToolboxActivity : Activity() {
 
     private fun showBase64Dialog() {
         val input = EditText(this).apply {
-            hint = "Paste Base64 subscription blob OR plain proxy links"
+            hint = getString(R.string.toolbox_base64_hint)
             setSingleLine(false)
             maxLines = 5
         }
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("Base64 Subscription Codec")
+                .setTitle(getString(R.string.toolbox_base64_title))
                 .setView(input)
-                .setPositiveButton("Decode") { _, _ ->
+                .setPositiveButton(getString(R.string.toolbox_base64_decode)) { _, _ ->
                     val decoded = NetworkTools.decodeBase64(input.text.toString())
                     if (decoded == null) {
-                        Toast.makeText(this, "Invalid Base64 text.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.toolbox_base64_invalid), Toast.LENGTH_SHORT).show()
                     } else {
                         tvOutput.text = "=== DECODED SUBSCRIPTION ===\n$decoded"
                         copyToClipboard("Decoded Sub", decoded)
                     }
                 }
-                .setNeutralButton("Encode") { _, _ ->
+                .setNeutralButton(getString(R.string.toolbox_base64_encode)) { _, _ ->
                     val encoded = NetworkTools.encodeBase64(input.text.toString())
                     tvOutput.text = "=== ENCODED BASE64 ===\n$encoded"
                     copyToClipboard("Encoded Sub", encoded)
@@ -178,19 +179,19 @@ class NetworkToolboxActivity : Activity() {
 
     private fun showCidrGeneratorDialog() {
         val input = EditText(this).apply {
-            hint = "IPv4 CIDR (e.g. 104.16.0.0/16)"
+            hint = getString(R.string.toolbox_cidr_hint)
             setText("104.16.0.0/16")
         }
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("CIDR IPv4 Candidate Generator")
+                .setTitle(getString(R.string.toolbox_cidr_title))
                 .setView(input)
-                .setPositiveButton("Generate 15 IPs") { _, _ ->
+                .setPositiveButton(getString(R.string.toolbox_cidr_generate)) { _, _ ->
                     val cidr = input.text.toString().trim()
                     val ips = CleanEndpointScout.sampleIpsFromCidr(cidr, 15)
                     if (ips.isEmpty()) {
-                        Toast.makeText(this, "Invalid IPv4 CIDR (prefix must be /8../30).", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.toolbox_cidr_invalid), Toast.LENGTH_SHORT).show()
                     } else {
                         val text = ips.joinToString("\n")
                         tvOutput.text = "=== GENERATED IPs FROM $cidr ===\n$text"
@@ -204,7 +205,7 @@ class NetworkToolboxActivity : Activity() {
     private fun showUriInspectorDialog() {
         val current = TunnelConfig.load(this).vlessUri
         val input = EditText(this).apply {
-            hint = "Paste vless:// URI to inspect"
+            hint = getString(R.string.toolbox_uri_hint)
             setText(current)
             setSingleLine(false)
             maxLines = 4
@@ -212,12 +213,12 @@ class NetworkToolboxActivity : Activity() {
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("VLESS URI Inspector")
+                .setTitle(getString(R.string.toolbox_btn_uri_inspect))
                 .setView(input)
-                .setPositiveButton("Inspect") { _, _ ->
+                .setPositiveButton(getString(R.string.toolbox_uri_inspect_btn)) { _, _ ->
                     val parsed = TunnelConfig.parseVlessUri(input.text.toString())
                     if (parsed == null) {
-                        Toast.makeText(this, "Invalid vless:// URI.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.tunnel_vless_invalid), Toast.LENGTH_SHORT).show()
                     } else {
                         tvOutput.text = buildString {
                             append("=== VLESS URI DECODED ===\n")
@@ -238,7 +239,7 @@ class NetworkToolboxActivity : Activity() {
 
     private fun copyToClipboard(label: String, text: String) {
         if (UiSafety.copyTextSafely(this, label, text)) {
-            Toast.makeText(this, "Result copied to clipboard!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
         }
     }
 

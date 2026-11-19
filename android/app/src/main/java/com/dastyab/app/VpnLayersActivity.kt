@@ -51,6 +51,7 @@ class VpnLayersActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_vpn_layers)
 
         progress = findViewById(R.id.layersProgress)
@@ -72,7 +73,7 @@ class VpnLayersActivity : Activity() {
         findViewById<Button>(R.id.btnResetSources).setOnClickListener {
             HarvestSourceStore.resetToDefaults(this)
             refreshSourcesUi()
-            Toast.makeText(this, "Custom sources reset to built-in defaults.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.layers_sources_reset_toast), Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.btnLayersBack).setOnClickListener { finish() }
 
@@ -93,8 +94,8 @@ class VpnLayersActivity : Activity() {
         for (layer in layers) {
             val isActive = layer.id == activeId
             val btn = Button(this, null, 0, if (isActive) R.style.DastyabButtonPrimary else R.style.DastyabButton).apply {
-                val marker = if (isActive) "● ACTIVE · " else ""
-                text = "$marker${layer.name}\n${layer.subtitle()}"
+                val marker = if (isActive) getString(R.string.layers_active_prefix) else ""
+                text = "$marker${layer.name}\n${layer.mode.localizedLabel(this@VpnLayersActivity)} · ${layer.dnsPrimary}"
                 setOnClickListener { showLayerActionSheet(layer) }
             }
             val params = LinearLayout.LayoutParams(
@@ -109,11 +110,11 @@ class VpnLayersActivity : Activity() {
 
     private fun showLayerActionSheet(layer: VpnLayerStore.VpnLayer) {
         val options = arrayOf(
-            "1. Activate & Connect this VPN Layer",
-            "2. Edit Layer Settings",
-            "3. Share Layer as Offline QR Code",
-            "4. Clone Layer",
-            "5. Delete Layer"
+            getString(R.string.layers_action_activate),
+            getString(R.string.layers_action_edit),
+            getString(R.string.layers_action_qr),
+            getString(R.string.layers_action_clone),
+            getString(R.string.layers_action_delete)
         )
         UiSafety.safeShowDialog(
             this,
@@ -134,16 +135,16 @@ class VpnLayersActivity : Activity() {
                         3 -> {
                             val copy = layer.copy(
                                 id = java.util.UUID.randomUUID().toString().take(8),
-                                name = "${layer.name} (Copy)"
+                                name = "${layer.name} ${getString(R.string.layers_copy_suffix)}"
                             )
                             VpnLayerStore.addOrUpdate(this, copy)
                             refreshLayersUi()
-                            Toast.makeText(this, "Cloned layer!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.layers_cloned_toast), Toast.LENGTH_SHORT).show()
                         }
                         4 -> {
                             VpnLayerStore.delete(this, layer.id)
                             refreshLayersUi()
-                            Toast.makeText(this, "Deleted layer.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.layers_deleted_toast), Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -158,7 +159,7 @@ class VpnLayersActivity : Activity() {
             setPadding(pad, pad, pad, pad)
         }
         val etName = EditText(this).apply {
-            hint = "Layer Name (e.g. Fast Cloudflare VLESS)"
+            hint = getString(R.string.layers_hint_name)
             setText(existing?.name ?: "")
         }
         val modes = TunnelConfig.Mode.values()
@@ -166,7 +167,7 @@ class VpnLayersActivity : Activity() {
             adapter = ArrayAdapter(
                 this@VpnLayersActivity,
                 android.R.layout.simple_spinner_item,
-                modes.map { it.label }
+                modes.map { it.localizedLabel(this@VpnLayersActivity) }
             ).apply {
                 setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             }
@@ -174,17 +175,17 @@ class VpnLayersActivity : Activity() {
             setSelection(idx)
         }
         val etUri = EditText(this).apply {
-            hint = "Optional Config URI (vless://, trojan://, vmess://, hy2://)"
+            hint = getString(R.string.layers_hint_uri)
             setText(existing?.configUri ?: "")
             setSingleLine(false)
             maxLines = 3
         }
         val etDns = EditText(this).apply {
-            hint = "Primary DNS (default 1.1.1.1)"
+            hint = getString(R.string.layers_hint_dns)
             setText(existing?.dnsPrimary ?: TunnelConfig.DEFAULT_DNS_PRIMARY)
         }
         val etDoh = EditText(this).apply {
-            hint = "DoH URL (default https://1.1.1.1/dns-query)"
+            hint = getString(R.string.layers_hint_doh)
             setText(existing?.dohUrl ?: TunnelConfig.DEFAULT_DOH_URL)
         }
 
@@ -197,10 +198,10 @@ class VpnLayersActivity : Activity() {
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle(if (existing == null) "Add New VPN Layer" else "Edit VPN Layer")
+                .setTitle(if (existing == null) getString(R.string.layers_add_title) else getString(R.string.layers_edit_title))
                 .setView(container)
-                .setPositiveButton("Save & Activate") { _, _ ->
-                    val name = etName.text.toString().trim().ifEmpty { "Custom VPN Layer" }
+                .setPositiveButton(getString(R.string.layers_save_activate)) { _, _ ->
+                    val name = etName.text.toString().trim().ifEmpty { getString(R.string.layers_default_custom_name) }
                     val mode = modes[spinnerMode.selectedItemPosition.coerceIn(0, modes.lastIndex)]
                     val layer = (existing ?: VpnLayerStore.VpnLayer(name = name, mode = mode)).copy(
                         name = name,
@@ -212,8 +213,8 @@ class VpnLayersActivity : Activity() {
                     VpnLayerStore.addOrUpdate(this, layer)
                     VpnLayerStore.activateLayer(this, layer, restartIfConnected = true)
                     refreshLayersUi()
-                    tvLayersLog.text = "Saved & activated layer: ${layer.name}\n${layer.subtitle()}"
-                    Toast.makeText(this, "Layer saved & activated!", Toast.LENGTH_SHORT).show()
+                    tvLayersLog.text = getString(R.string.layers_saved_log, layer.name, layer.subtitle())
+                    Toast.makeText(this, getString(R.string.layers_saved_toast), Toast.LENGTH_SHORT).show()
                 }
                 .setNegativeButton(android.R.string.cancel, null)
         )
@@ -221,7 +222,7 @@ class VpnLayersActivity : Activity() {
 
     private fun benchmarkAndSwitchBestLayer() {
         progress.visibility = View.VISIBLE
-        tvLayersLog.text = "Benchmarking all saved VPN layers in parallel…\n"
+        tvLayersLog.text = getString(R.string.layers_bench_running)
         val layers = VpnLayerStore.loadAll(this)
         thread(isDaemon = true, name = "dastyab-layer-bench") {
             val results = VpnLayerStore.benchmarkLayers(layers)
@@ -237,7 +238,7 @@ class VpnLayersActivity : Activity() {
                     VpnLayerStore.activateLayer(this, best.layer, restartIfConnected = true)
                     refreshLayersUi()
                     sb.append("\n✓ Switched to fastest layer: ${best.layer.name} (${best.latencyMs} ms)")
-                    Toast.makeText(this, "Switched to ${best.layer.name} (${best.latencyMs}ms)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.layers_switched_fastest_toast, best.layer.name, best.latencyMs.toInt()), Toast.LENGTH_SHORT).show()
                 } else {
                     sb.append("\n✗ No layers responded — try DNS Blackout VPN or IP Scout.")
                 }
@@ -249,29 +250,29 @@ class VpnLayersActivity : Activity() {
     private fun exportLayersToClipboard() {
         val json = VpnLayerStore.serializeLayers(VpnLayerStore.loadAll(this))
         if (UiSafety.copyTextSafely(this, "DastYab VPN Layers", json)) {
-            Toast.makeText(this, "Exported all VPN layers JSON to clipboard!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.layers_exported_toast), Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun showImportLayersDialog() {
         val input = EditText(this).apply {
-            hint = "Paste exported DastYab VPN Layers JSON here"
+            hint = getString(R.string.layers_import_hint)
             setSingleLine(false)
             maxLines = 5
         }
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("Import VPN Layers JSON")
+                .setTitle(getString(R.string.layers_import_title))
                 .setView(input)
-                .setPositiveButton("Import") { _, _ ->
+                .setPositiveButton(getString(R.string.layers_btn_do_import)) { _, _ ->
                     val imported = VpnLayerStore.deserializeLayers(input.text.toString())
                     if (imported.isEmpty()) {
-                        Toast.makeText(this, "Invalid JSON or no layers found.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.layers_import_invalid), Toast.LENGTH_SHORT).show()
                     } else {
                         VpnLayerStore.saveAll(this, imported)
                         refreshLayersUi()
-                        Toast.makeText(this, "Imported ${imported.size} VPN layer(s)!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.layers_imported_toast, imported.size), Toast.LENGTH_SHORT).show()
                     }
                 }
                 .setNegativeButton(android.R.string.cancel, null)
@@ -282,14 +283,15 @@ class VpnLayersActivity : Activity() {
         val customUrls = HarvestSourceStore.getCustomGithubUrls(this)
         val customChannels = HarvestSourceStore.getCustomTelegramChannels(this)
         val density = resources.displayMetrics.density
+        val textSecondary = ThemeManager.resolveColor(this, R.attr.dastyabTextSecondary, R.color.colorTextSecondary)
 
-        tvGithubCount.text = "GitHub Subscription URLs (${customUrls.size} custom + ${ConfigHarvester.DEFAULT_GITHUB_FEEDS.size} built-in)"
+        tvGithubCount.text = getString(R.string.layers_github_count, customUrls.size, ConfigHarvester.DEFAULT_GITHUB_FEEDS.size)
         githubUrlsContainer.removeAllViews()
         if (customUrls.isEmpty()) {
             githubUrlsContainer.addView(TextView(this).apply {
-                text = "Using built-in GitHub feeds + jsDelivr mirrors. Tap below to add your own URLs."
+                text = getString(R.string.layers_github_empty)
                 textSize = 12f
-                setTextColor(getColor(R.color.colorTextSecondary))
+                setTextColor(textSecondary)
             })
         } else {
             for (url in customUrls) {
@@ -298,7 +300,7 @@ class VpnLayersActivity : Activity() {
                     setOnClickListener {
                         HarvestSourceStore.removeGithubUrl(this@VpnLayersActivity, url)
                         refreshSourcesUi()
-                        Toast.makeText(this@VpnLayersActivity, "Removed GitHub URL", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@VpnLayersActivity, getString(R.string.layers_removed_github_toast), Toast.LENGTH_SHORT).show()
                     }
                 }
                 val lp = LinearLayout.LayoutParams(
@@ -309,13 +311,16 @@ class VpnLayersActivity : Activity() {
             }
         }
 
-        tvTelegramCount.text = "Telegram Public Channels (${customChannels.size} custom + ${ConfigHarvester.DEFAULT_TELEGRAM_CHANNELS.size} built-in)"
+        tvTelegramCount.text = getString(R.string.layers_telegram_count, customChannels.size, ConfigHarvester.DEFAULT_TELEGRAM_CHANNELS.size)
         telegramChannelsContainer.removeAllViews()
         if (customChannels.isEmpty()) {
             telegramChannelsContainer.addView(TextView(this).apply {
-                text = "Built-in: ${ConfigHarvester.DEFAULT_TELEGRAM_CHANNELS.joinToString { "@$it" }}. Tap below to add more."
+                text = getString(
+                    R.string.layers_telegram_empty,
+                    ConfigHarvester.DEFAULT_TELEGRAM_CHANNELS.joinToString { "@$it" }
+                )
                 textSize = 12f
-                setTextColor(getColor(R.color.colorTextSecondary))
+                setTextColor(textSecondary)
             })
         } else {
             for (ch in customChannels) {
@@ -324,7 +329,7 @@ class VpnLayersActivity : Activity() {
                     setOnClickListener {
                         HarvestSourceStore.removeTelegramChannel(this@VpnLayersActivity, ch)
                         refreshSourcesUi()
-                        Toast.makeText(this@VpnLayersActivity, "Removed @$ch", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@VpnLayersActivity, getString(R.string.layers_removed_channel_toast, ch), Toast.LENGTH_SHORT).show()
                     }
                 }
                 val lp = LinearLayout.LayoutParams(
@@ -338,21 +343,21 @@ class VpnLayersActivity : Activity() {
 
     private fun showAddGithubUrlDialog() {
         val input = EditText(this).apply {
-            hint = "Paste one or more GitHub / subscription URLs (one per line)\ngithub.com/blob links auto-convert to raw!"
+            hint = getString(R.string.layers_add_github_hint)
             setSingleLine(false)
             maxLines = 5
         }
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("Add GitHub / Subscription URLs")
+                .setTitle(getString(R.string.layers_add_github_title))
                 .setView(input)
-                .setPositiveButton("Add") { _, _ ->
+                .setPositiveButton(getString(R.string.layers_btn_do_add)) { _, _ ->
                     val added = HarvestSourceStore.addGithubUrls(this, input.text.toString())
                     refreshSourcesUi()
                     Toast.makeText(
                         this,
-                        if (added > 0) "Added $added GitHub URL(s)!" else "No valid http(s) URLs found.",
+                        if (added > 0) getString(R.string.layers_added_github_toast, added) else getString(R.string.layers_invalid_github_toast),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -362,21 +367,21 @@ class VpnLayersActivity : Activity() {
 
     private fun showAddTelegramChannelDialog() {
         val input = EditText(this).apply {
-            hint = "Paste @channel, t.me/channel, or one per line"
+            hint = getString(R.string.layers_add_telegram_hint)
             setSingleLine(false)
             maxLines = 5
         }
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("Add Telegram Public Channels")
+                .setTitle(getString(R.string.layers_add_telegram_title))
                 .setView(input)
-                .setPositiveButton("Add") { _, _ ->
+                .setPositiveButton(getString(R.string.layers_btn_do_add)) { _, _ ->
                     val added = HarvestSourceStore.addTelegramChannels(this, input.text.toString())
                     refreshSourcesUi()
                     Toast.makeText(
                         this,
-                        if (added > 0) "Added $added Telegram channel(s)!" else "No valid channel usernames found.",
+                        if (added > 0) getString(R.string.layers_added_telegram_toast, added) else getString(R.string.layers_invalid_telegram_toast),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -387,17 +392,17 @@ class VpnLayersActivity : Activity() {
     private fun benchmarkHarvestedPool() {
         val pool = TunnelConfig.loadHarvestedConfigs(this)
         if (pool.isEmpty()) {
-            Toast.makeText(this, "Harvested pool is empty — run Smart Harvest first!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.layers_pool_empty_toast), Toast.LENGTH_SHORT).show()
             return
         }
         progress.visibility = View.VISIBLE
-        tvLayersLog.text = "Testing up to 25 harvested configs in parallel…\n"
+        tvLayersLog.text = getString(R.string.layers_pool_testing)
         thread(isDaemon = true, name = "dastyab-pool-bench") {
             val working = HarvestSourceStore.benchmarkHarvestedConfigs(pool, maxToTest = 25)
             UiSafety.safePostUi(this, handler) {
                 progress.visibility = View.GONE
                 if (working.isEmpty()) {
-                    tvLayersLog.text = "No harvested configs responded within 1.8s.\nTip: Run Smart Harvest again or activate DNS Blackout VPN."
+                    tvLayersLog.text = getString(R.string.layers_pool_none_responded)
                     return@safePostUi
                 }
                 val sb = StringBuilder("Found ${working.size} live configs (fastest first):\n")
@@ -412,7 +417,7 @@ class VpnLayersActivity : Activity() {
                 UiSafety.safeShowDialog(
                     this,
                     AlertDialog.Builder(this)
-                        .setTitle("Promote Fastest Config to VPN Layer")
+                        .setTitle(getString(R.string.layers_promote_title))
                         .setItems(items) { _, which ->
                             val picked = working[which]
                             val newLayer = VpnLayerStore.VpnLayer(
@@ -423,7 +428,7 @@ class VpnLayersActivity : Activity() {
                             VpnLayerStore.addOrUpdate(this, newLayer)
                             VpnLayerStore.activateLayer(this, newLayer, restartIfConnected = true)
                             refreshLayersUi()
-                            Toast.makeText(this, "Promoted & activated ${newLayer.name}!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.layers_promoted_toast, newLayer.name), Toast.LENGTH_SHORT).show()
                         }
                         .setNegativeButton(android.R.string.cancel, null)
                 )
@@ -443,11 +448,11 @@ class VpnLayersActivity : Activity() {
                 @Suppress("DEPRECATION")
                 startActivityForResult(prep, REQ_VPN_LAYER_START)
             } catch (_: Exception) {
-                Toast.makeText(this, "VPN consent dialog unavailable.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.rescue_vpn_consent_unavailable), Toast.LENGTH_SHORT).show()
             }
         } else {
             DastyabVpnService.start(this)
-            Toast.makeText(this, "VPN Layer connected!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.layers_vpn_connected_toast), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -457,7 +462,7 @@ class VpnLayersActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_VPN_LAYER_START && resultCode == RESULT_OK) {
             DastyabVpnService.start(this)
-            Toast.makeText(this, "VPN Layer connected!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.layers_vpn_connected_toast), Toast.LENGTH_SHORT).show()
         }
     }
 }

@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
 import android.net.VpnService
@@ -157,6 +156,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         DastyabLogger.init(filesDir)
         CrashHandler.install(applicationContext, filesDir)
+        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_main)
 
         status = findViewById(R.id.status)
@@ -259,19 +259,38 @@ class MainActivity : Activity() {
             refreshVpnCard()
             if (DastyabVpnService.isConnected()) {
                 DastyabVpnService.start(this)
-                Toast.makeText(this, "Switched mode → ${newMode.label} (reconnected)", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this,
+                    getString(R.string.main_switched_mode_reconnected, newMode.localizedLabel(this)),
+                    Toast.LENGTH_LONG
+                ).show()
             } else {
-                Toast.makeText(this, "Switched mode → ${newMode.label}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    getString(R.string.main_switched_mode, newMode.localizedLabel(this)),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
 
-        // ── Bilingual Persian (RTL) / English Toggle ──
-        findViewById<Button>(R.id.btnLangToggle).apply {
-            text = LocaleHelper.toggleButtonLabel(LocaleHelper.getLanguage(this@MainActivity))
+        // ── Theme Picker Toggle (4 Light + 2 Dark + Follow System) ──
+        findViewById<Button>(R.id.btnThemeToggle).apply {
+            text = ThemeManager.badgeLabel(this@MainActivity)
             setOnClickListener {
-                LocaleHelper.toggleLanguage(this@MainActivity)
-                DastyabWidgetProvider.updateAllWidgets(this@MainActivity)
-                recreate()
+                ThemeManager.showThemePickerDialog(this@MainActivity) {
+                    recreate()
+                }
+            }
+        }
+
+        // ── 6-Language Multilingual Toggle (EN / FA / AR / TR / RU / ZH) ──
+        findViewById<Button>(R.id.btnLangToggle).apply {
+            text = LocaleHelper.badgeLabel(LocaleHelper.getLanguage(this@MainActivity))
+            setOnClickListener {
+                LocaleHelper.showLanguagePickerDialog(this@MainActivity) {
+                    DastyabWidgetProvider.updateAllWidgets(this@MainActivity)
+                    recreate()
+                }
             }
         }
 
@@ -286,11 +305,14 @@ class MainActivity : Activity() {
         btnSimpleMagicAutopilot.setOnClickListener { runNewbieAutopilot() }
         btnSimpleQuickToggle.setOnClickListener { toggleVpnTunnel() }
         findViewById<Button>(R.id.btnSimpleSpeedIp).setOnClickListener { runQuickSpeedAndIpCheck() }
+        findViewById<View>(R.id.btnSimpleLanternAutopilot).setOnClickListener {
+            runExternalVpnAutopilotFlow()
+        }
         findViewById<View>(R.id.btnSimpleOneClickAiStudio).setOnClickListener {
-            if (operation.get() == null) launchGoogleServiceViaVpn("Google AI Studio", CommandCompat.AISTUDIO_URL)
+            if (operation.get() == null) launchGoogleServiceViaVpn(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
         }
         findViewById<View>(R.id.btnSimpleOneClickFlow).setOnClickListener {
-            if (operation.get() == null) launchGoogleServiceViaVpn("Google Flow", CommandCompat.FLOW_URL)
+            if (operation.get() == null) launchGoogleServiceViaVpn(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
         }
         findViewById<View>(R.id.btnSimpleOneClickRefresh).setOnClickListener {
             openRescueHub(BlackoutRescueActivity.ACTION_HARVEST)
@@ -365,17 +387,17 @@ class MainActivity : Activity() {
 
         // ── Google & Tunnel Quick Actions ──
         btnSimpleAistudio.setOnClickListener {
-            if (operation.get() == null) launchGoogleServiceViaVpn("Google AI Studio", CommandCompat.AISTUDIO_URL)
+            if (operation.get() == null) launchGoogleServiceViaVpn(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
         }
         btnSimpleAistudio.setOnLongClickListener {
-            showGoogleRescueDialog("Google AI Studio", CommandCompat.AISTUDIO_URL)
+            showGoogleRescueDialog(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
             true
         }
         btnSimpleFlow.setOnClickListener {
-            if (operation.get() == null) launchGoogleServiceViaVpn("Google Flow", CommandCompat.FLOW_URL)
+            if (operation.get() == null) launchGoogleServiceViaVpn(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
         }
         btnSimpleFlow.setOnLongClickListener {
-            showGoogleRescueDialog("Google Flow", CommandCompat.FLOW_URL)
+            showGoogleRescueDialog(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
             true
         }
         btnSimpleDeploy.setOnClickListener {
@@ -437,12 +459,12 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.btnAbout).setOnClickListener { openActivity(AboutActivity::class.java) }
         findViewById<Button>(R.id.btnSettings).setOnClickListener { openActivity(SettingsActivity::class.java) }
         findViewById<Button>(R.id.btnUpdate).apply {
-            text = "Releases"
+            text = getString(R.string.btn_releases)
             setOnClickListener {
                 try {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DastYab/dastyab/releases")))
                 } catch (_: android.content.ActivityNotFoundException) {
-                    postStatus("No browser available to open releases")
+                    postStatus(getString(R.string.main_no_browser_releases))
                 }
             }
         }
@@ -509,9 +531,9 @@ class MainActivity : Activity() {
 
     private fun showSafeModeRecoveryDialog(notice: String) {
         val builder = AlertDialog.Builder(this)
-            .setTitle("Safe-Mode Recovery")
-            .setMessage("The previous session closed unexpectedly:\n$notice\n\nDastYab cleared the transient fault and started safely.")
-            .setPositiveButton("View Crash Logs") { _, _ ->
+            .setTitle(getString(R.string.main_safe_mode_title))
+            .setMessage(getString(R.string.main_safe_mode_message, notice))
+            .setPositiveButton(getString(R.string.main_safe_mode_view_logs)) { _, _ ->
                 openActivity(LogViewerActivity::class.java)
             }
             .setNegativeButton(android.R.string.ok, null)
@@ -541,7 +563,7 @@ class MainActivity : Activity() {
     private fun toggleVpnTunnel() {
         if (DastyabVpnService.isConnected()) {
             DastyabVpnService.stop(this)
-            postOutput("VPN tunnel disconnected.\n")
+            postOutput(getString(R.string.main_vpn_disconnected_log) + "\n")
             refreshVpnCard()
             return
         }
@@ -553,9 +575,13 @@ class MainActivity : Activity() {
         refreshVpnCard()
         if (DastyabVpnService.isConnected()) {
             DastyabVpnService.start(this)
-            postOutput("Switched VPN mode to ${mode.label} and reconnected.\n")
+            postOutput(getString(R.string.main_switched_mode_reconnected, mode.localizedLabel(this)) + "\n")
         } else {
-            Toast.makeText(this, "Tunnel mode: ${mode.label}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                getString(R.string.main_tunnel_mode_toast, mode.localizedLabel(this)),
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -568,7 +594,7 @@ class MainActivity : Activity() {
                 @Suppress("DEPRECATION")
                 startActivityForResult(prepIntent, REQ_VPN_PREPARE)
             } catch (_: Exception) {
-                postOutput("WARNING: System VPN consent dialog unavailable on this device.\n")
+                postOutput(getString(R.string.rescue_vpn_consent_unavailable) + "\n")
                 openPendingGoogleUrlIfAny()
             }
         } else {
@@ -585,11 +611,11 @@ class MainActivity : Activity() {
         if (requestCode == REQ_VPN_PREPARE) {
             if (resultCode == RESULT_OK) {
                 DastyabVpnService.start(this)
-                postOutput("OK: DastYab VPN tunnel started.\n")
+                postOutput(getString(R.string.main_vpn_started_log) + "\n")
                 refreshVpnCard()
                 openPendingGoogleUrlIfAny()
             } else {
-                postOutput("WARNING: VPN permission declined by user.\n")
+                postOutput(getString(R.string.main_vpn_declined_log) + "\n")
                 val failedName = pendingGoogleLaunchName
                 val failedUrl = pendingGoogleLaunchUrl
                 pendingGoogleLaunchName = null
@@ -607,7 +633,7 @@ class MainActivity : Activity() {
             if (autoAction != null) intent.putExtra(BlackoutRescueActivity.EXTRA_AUTO_ACTION, autoAction)
             startActivity(intent)
         } catch (_: android.content.ActivityNotFoundException) {
-            postStatus("Blackout Rescue screen unavailable")
+            postStatus(getString(R.string.main_rescue_unavailable))
         }
     }
 
@@ -616,13 +642,13 @@ class MainActivity : Activity() {
         val activeId = VpnLayerStore.getActiveLayerId(this)
         val labels = layers.map { l ->
             val mark = if (l.id == activeId) "● " else "   "
-            "$mark${l.name} (${l.mode.label})"
-        } + "+ Manage / Add VPN Layers & Channels…"
+            "$mark${l.name} (${l.mode.localizedLabel(this)})"
+        } + getString(R.string.main_layer_manage_option)
 
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("Quick Switch VPN Layer")
+                .setTitle(getString(R.string.main_layer_switcher_title))
                 .setItems(labels.toTypedArray()) { _, which ->
                     if (which == layers.size) {
                         openActivity(VpnLayersActivity::class.java)
@@ -630,7 +656,7 @@ class MainActivity : Activity() {
                         val picked = layers[which]
                         VpnLayerStore.activateLayer(this, picked, restartIfConnected = true)
                         refreshVpnCard()
-                        postOutput("Switched active VPN layer → ${picked.name} (${picked.mode.label})\n")
+                        postOutput(getString(R.string.main_layer_switched_log, picked.name, picked.mode.localizedLabel(this)) + "\n")
                         if (!DastyabVpnService.isConnected()) {
                             requestStartVpn(null, null)
                         }
@@ -642,16 +668,16 @@ class MainActivity : Activity() {
 
     private fun showGoogleRescueDialog(serviceName: String, url: String) {
         val options = arrayOf(
-            "1. Open $serviceName anyway (current connection)",
-            "2. Activate Emergency DNS Blackout VPN (DoH / WhiteDNS)",
-            "3. Run Smart Config Harvester (GitHub → Telegram)",
-            "4. Run Clean IP & DNS Scout",
-            "5. Run 7-Layer Connectivity Troubleshooter"
+            getString(R.string.main_rescue_opt_open_anyway, serviceName),
+            getString(R.string.main_rescue_opt_dns_vpn),
+            getString(R.string.main_rescue_opt_harvest),
+            getString(R.string.main_rescue_opt_scout),
+            getString(R.string.main_rescue_opt_troubleshoot)
         )
         UiSafety.safeShowDialog(
             this,
             AlertDialog.Builder(this)
-                .setTitle("Troubleshoot $serviceName Access")
+                .setTitle(getString(R.string.main_rescue_dialog_title, serviceName))
                 .setItems(options) { _, which ->
                     when (which) {
                         0 -> openBrowserUrl(serviceName, url)
@@ -667,15 +693,103 @@ class MainActivity : Activity() {
 
     private fun openPendingGoogleUrlIfAny() {
         val url = pendingGoogleLaunchUrl ?: return
-        val name = pendingGoogleLaunchName ?: "Google Service"
+        val name = pendingGoogleLaunchName ?: getString(R.string.service_name_google)
         pendingGoogleLaunchUrl = null
         pendingGoogleLaunchName = null
         verifyAndOpenGoogleService(name, url)
     }
 
+    /**
+     * 1-Tap Lantern / External VPN Autopilot + Direct Internal Browser Quick Action:
+     * Detects active Lantern/system VPN or listening local proxies without overwriting the OS VPN
+     * slot, verifies exit country + Flow 151-country gate + HTTPS, and provides 1-tap open into
+     * AI Studio & Google Flow inside the built-in browser (or 1-tap Lantern launch if disconnected).
+     */
+    private fun runExternalVpnAutopilotFlow() {
+        if (operation.get() != null) return
+        setBusy(true)
+        simpleProgress.visibility = View.VISIBLE
+        val runningMsg = getString(R.string.lantern_autopilot_running)
+        postStatus(runningMsg)
+        setStatusDot(DotState.ORANGE)
+        tvSimpleReachability.text = runningMsg
+        tvReachabilityBadge.text = runningMsg
+        applyFormattedOutput("\n=== ${getString(R.string.simple_card_lantern_autopilot)} ===\n")
+
+        thread(isDaemon = true, name = "dastyab-lantern-autopilot") {
+            val result = NewbieAutopilot.runExternalVpnAutopilot(
+                context = this,
+                targetName = getString(R.string.lantern_target_both),
+                targetUrl = CommandCompat.AISTUDIO_URL
+            ) { step ->
+                postOutput("$step\n")
+            }
+            postUi {
+                setBusy(false)
+                simpleProgress.visibility = View.GONE
+                refreshVpnCard()
+
+                val ccTag = result.exitCountry ?: "??"
+                val statusBadge = if (result.targetReady) {
+                    getString(R.string.lantern_badge_ready, ccTag, result.latencyMs, result.routeLabel)
+                } else {
+                    getString(R.string.lantern_badge_blocked, ccTag, result.routeLabel)
+                }
+                tvSimpleReachability.text = statusBadge
+                tvReachabilityBadge.text = statusBadge
+                postStatus(result.headline)
+                setStatusDot(
+                    when {
+                        result.targetReady -> DotState.GREEN
+                        result.needsLanternConnect -> DotState.RED
+                        else -> DotState.ORANGE
+                    }
+                )
+
+                val summaryMsg = getString(
+                    R.string.lantern_dialog_body,
+                    result.routeLabel,
+                    result.exitIp ?: getString(R.string.main_ip_unknown),
+                    ccTag,
+                    if (result.flowCountrySupported) getString(R.string.main_geo_flow_supported) else getString(R.string.main_geo_flow_blocked),
+                    result.recommendation
+                )
+
+                val builder = AlertDialog.Builder(this)
+                    .setTitle(result.headline)
+                    .setMessage(summaryMsg)
+                    .setPositiveButton(getString(R.string.autopilot_open_aistudio)) { _, _ ->
+                        openBrowserUrl(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
+                    }
+                    .setNeutralButton(getString(R.string.autopilot_open_flow)) { _, _ ->
+                        openBrowserUrl(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
+                    }
+
+                if (result.needsLanternConnect) {
+                    val vpnPkg = result.lanternPackage ?: result.installedVpnApps.firstOrNull()?.installedPackage
+                    builder.setNegativeButton(getString(R.string.lantern_btn_open_app)) { _, _ ->
+                        val launched = vpnPkg?.let { pkg ->
+                            packageManager.getLaunchIntentForPackage(pkg)?.let { intent ->
+                                UiSafety.safeStartActivity(this, intent)
+                            }
+                        } ?: false
+                        if (!launched) {
+                            GoogleAccessSheet.show(this) { refreshVpnCard() }
+                        }
+                    }
+                } else {
+                    builder.setNegativeButton(getString(R.string.action_google_route)) { _, _ ->
+                        GoogleAccessSheet.show(this) { refreshVpnCard() }
+                    }
+                }
+                UiSafety.safeShowDialog(this, builder)
+            }
+        }
+    }
+
     private fun launchGoogleServiceViaVpn(serviceName: String, url: String) {
         setBusy(true)
-        postStatus("Preparing best route for $serviceName…")
+        postStatus(getString(R.string.main_preparing_route, serviceName))
         setStatusDot(DotState.ORANGE)
         thread(isDaemon = true, name = "dastyab-google-launch") {
             val settings = TunnelConfig.load(this)
@@ -692,13 +806,13 @@ class MainActivity : Activity() {
             postUi {
                 setBusy(false)
                 if (route.shouldStartDastyabVpn && !DastyabVpnService.isConnected()) {
-                    postOutput("Starting ${settings.mode.label} encrypted tunnel before checking $serviceName…\n")
+                    postOutput(getString(R.string.main_starting_tunnel_log, settings.mode.localizedLabel(this), serviceName) + "\n")
                     requestStartVpn(serviceName, url)
                 } else {
                     if (route.externalVpnActive) {
-                        postOutput("External VPN (e.g. Lantern) active — keeping OS VPN untouched.\n")
+                        postOutput(getString(R.string.main_external_vpn_kept_log) + "\n")
                     } else if (route.webViewHttpProxyPort != null) {
-                        postOutput("Using Internal App Proxy (${route.routeLabel}) without conflicting with system VPN.\n")
+                        postOutput(getString(R.string.main_internal_proxy_used_log, route.routeLabel) + "\n")
                     }
                     verifyAndOpenGoogleService(serviceName, url, route)
                 }
@@ -716,9 +830,9 @@ class MainActivity : Activity() {
         resolvedRoute: GeoBypassEngine.RouteResolution? = null
     ) {
         setBusy(true)
-        postStatus("Verifying $serviceName geo & reachability…")
+        postStatus(getString(R.string.main_verifying_service, serviceName))
         setStatusDot(DotState.ORANGE)
-        postOutput("Verifying live geo country & HTTPS access for $serviceName ($url)…\n")
+        postOutput(getString(R.string.main_verifying_service_log, serviceName, url) + "\n")
 
         thread(isDaemon = true, name = "dastyab-verify-google") {
             val route = resolvedRoute ?: GeoBypassEngine.resolveCurrentRoute(this)
@@ -732,38 +846,42 @@ class MainActivity : Activity() {
                 if (targetOk) {
                     val lat = if (isFlowTarget) probe.flow.latencyMs else probe.aiStudio.latencyMs
                     tvReachabilityBadge.text = "$serviceName ✓ ($ccTag · ${lat}ms · ${probe.routeLabel})"
-                    postOutput("OK: $serviceName verified via ${probe.routeLabel} (Exit $ccTag ${probe.egress?.ip ?: ""})\n")
+                    postOutput(getString(R.string.main_service_verified_log, serviceName, probe.routeLabel, ccTag, probe.egress?.ip ?: "") + "\n")
                     openBrowserUrl(serviceName, url)
                 } else {
                     val reason = when {
                         probe.egress != null && !probe.flowCountrySupported ->
-                            "Geo-blocked country $ccTag (Flow requires foreign IP)"
+                            getString(R.string.main_geo_blocked_reason, ccTag)
                         isFlowTarget && probe.flow.unsupportedRegion ->
-                            "Flow returned /unsupported-country ($ccTag)"
+                            getString(R.string.main_flow_unsupported_reason, ccTag)
                         isFlowTarget -> probe.flow.detail
                         else -> probe.aiStudio.detail
                     }
-                    tvReachabilityBadge.text = "$serviceName blocked ($ccTag) → Tap Route & Proxy"
-                    postOutput("WARNING: $serviceName check failed via ${probe.routeLabel}: $reason\n")
-                    postStatus("$serviceName geo/access issue — switch route or open anyway")
+                    tvReachabilityBadge.text = getString(R.string.main_service_blocked_badge, serviceName, ccTag)
+                    postOutput(getString(R.string.main_service_check_failed_log, serviceName, probe.routeLabel, reason) + "\n")
+                    postStatus(getString(R.string.main_service_geo_issue_status, serviceName))
                     setStatusDot(DotState.RED)
                     UiSafety.safeShowDialog(
                         this,
                         AlertDialog.Builder(this)
                             .setTitle(probe.headline)
                             .setMessage(
-                                "Route: ${probe.routeLabel}\n" +
-                                    "Exit IP: ${probe.egress?.ip ?: "Unknown"} ($ccTag)\n" +
-                                    "Issue: $reason\n\n" +
+                                getString(
+                                    R.string.main_service_blocked_message,
+                                    probe.routeLabel,
+                                    probe.egress?.ip ?: getString(R.string.main_ip_unknown),
+                                    ccTag,
+                                    reason,
                                     probe.recommendation
+                                )
                             )
-                            .setPositiveButton("Route / Proxy Modes") { _, _ ->
+                            .setPositiveButton(getString(R.string.main_btn_route_proxy_modes)) { _, _ ->
                                 GoogleAccessSheet.show(this, serviceName, url) { refreshVpnCard() }
                             }
-                            .setNeutralButton("Open Browser Anyway") { _, _ ->
+                            .setNeutralButton(getString(R.string.main_btn_open_anyway)) { _, _ ->
                                 openBrowserUrl(serviceName, url)
                             }
-                            .setNegativeButton("1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
+                            .setNegativeButton(getString(R.string.main_btn_autopilot)) { _, _ -> runNewbieAutopilot() }
                     )
                 }
             }
@@ -781,9 +899,9 @@ class MainActivity : Activity() {
         btnNewbieAutopilot.isEnabled = false
         btnSimpleMagicAutopilot.isEnabled = false
         simpleProgress.visibility = View.VISIBLE
-        postStatus("Autopilot running (auto-fixing AI Studio & Flow)…")
+        postStatus(getString(R.string.autopilot_status_running))
         setStatusDot(DotState.ORANGE)
-        val runningText = "Autopilot running… scouting DoH, harvesting & verifying…"
+        val runningText = getString(R.string.autopilot_badge_running)
         tvReachabilityBadge.text = runningText
         tvSimpleReachability.text = runningText
         applyFormattedOutput("\n=== DASTYAB 1-TAP NEWBIE AUTOPILOT ===\n")
@@ -825,17 +943,17 @@ class MainActivity : Activity() {
                 when (report.outcome) {
                     NewbieAutopilot.Outcome.READY_DIRECT,
                     NewbieAutopilot.Outcome.READY_WITH_VPN -> {
-                        dialog.setPositiveButton("Open AI Studio") { _, _ ->
-                            openBrowserUrl("Google AI Studio", CommandCompat.AISTUDIO_URL)
+                        dialog.setPositiveButton(getString(R.string.autopilot_open_aistudio)) { _, _ ->
+                            openBrowserUrl(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
                         }
-                        dialog.setNeutralButton("Open Google Flow") { _, _ ->
-                            openBrowserUrl("Google Flow", CommandCompat.FLOW_URL)
+                        dialog.setNeutralButton(getString(R.string.autopilot_open_flow)) { _, _ ->
+                            openBrowserUrl(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
                         }
                         dialog.setNegativeButton(android.R.string.ok, null)
                     }
                     NewbieAutopilot.Outcome.NEEDS_VPN_CONSENT -> {
-                        dialog.setPositiveButton("Allow & Connect VPN") { _, _ ->
-                            requestStartVpn("Google AI Studio", CommandCompat.AISTUDIO_URL)
+                        dialog.setPositiveButton(getString(R.string.autopilot_allow_connect_vpn)) { _, _ ->
+                            requestStartVpn(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
                         }
                         dialog.setNegativeButton(android.R.string.cancel, null)
                     }
@@ -844,10 +962,11 @@ class MainActivity : Activity() {
                         val firstApp = report.installedProxyApps.firstOrNull()
                         if (bestUri != null) {
                             dialog.setPositiveButton(
-                                if (firstApp != null) "Copy Config & Open ${firstApp.name}" else "Copy Fastest Config"
+                                if (firstApp != null) getString(R.string.autopilot_copy_and_open, firstApp.name)
+                                else getString(R.string.autopilot_copy_fastest)
                             ) { _, _ ->
                                 if (UiSafety.copyTextSafely(this, "DastYab Fastest Config", bestUri)) {
-                                    Toast.makeText(this, "Fastest verified config copied!", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(this, getString(R.string.autopilot_fastest_copied), Toast.LENGTH_LONG).show()
                                 }
                                 firstApp?.installedPackage?.let { pkg ->
                                     packageManager.getLaunchIntentForPackage(pkg)?.let {
@@ -856,11 +975,11 @@ class MainActivity : Activity() {
                                 }
                             }
                         }
-                        dialog.setNeutralButton("Open Rescue Hub") { _, _ -> openRescueHub() }
+                        dialog.setNeutralButton(getString(R.string.autopilot_open_rescue_hub)) { _, _ -> openRescueHub() }
                         dialog.setNegativeButton(android.R.string.ok, null)
                     }
                     NewbieAutopilot.Outcome.OFFLINE_OR_BLACKOUT -> {
-                        dialog.setPositiveButton("Open Blackout Rescue") { _, _ ->
+                        dialog.setPositiveButton(getString(R.string.autopilot_open_blackout_rescue)) { _, _ ->
                             openRescueHub(BlackoutRescueActivity.ACTION_TROUBLESHOOT)
                         }
                         dialog.setNegativeButton(android.R.string.ok, null)
@@ -872,21 +991,21 @@ class MainActivity : Activity() {
     }
 
     private fun openBrowserUrl(serviceName: String, url: String) {
-        postOutput("Opening $serviceName in DastYab built-in browser…\n")
-        postStatus("Opening $serviceName…")
+        postOutput(getString(R.string.main_opening_browser_log, serviceName) + "\n")
+        postStatus(getString(R.string.main_opening_browser_status, serviceName))
         setStatusDot(DotState.ORANGE)
         try {
             InAppBrowserActivity.launch(this, serviceName, url)
-            val vpnNote = if (DastyabVpnService.isConnected()) " (VPN active)" else ""
-            postOutput("OK: $serviceName opened$vpnNote → $url\n")
-            postStatus("$serviceName opened$vpnNote")
+            val vpnNote = if (DastyabVpnService.isConnected()) " (${getString(R.string.main_vpn_active_note)})" else ""
+            postOutput(getString(R.string.main_browser_opened_log, serviceName, vpnNote, url) + "\n")
+            postStatus(getString(R.string.main_browser_opened_status, serviceName, vpnNote))
             setStatusDot(DotState.GREEN)
         } catch (_: Exception) {
             try {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             } catch (_: android.content.ActivityNotFoundException) {
-                postOutput("ERROR: No browser available. Open manually: $url\n")
-                postStatus("No browser available")
+                postOutput(getString(R.string.main_no_browser_log, url) + "\n")
+                postStatus(getString(R.string.main_no_browser_status))
                 setStatusDot(DotState.RED)
             }
         }
@@ -938,7 +1057,7 @@ class MainActivity : Activity() {
             statusObj.state == DastyabVpnService.State.CONNECTED -> {
                 vpnDot.background = getDrawable(R.drawable.status_dot_green)
                 simpleStatusDot.background = getDrawable(R.drawable.status_dot_green)
-                tvVpnState.text = "${getString(R.string.vpn_status_connected)} · ${activeMode.label}"
+                tvVpnState.text = "${getString(R.string.vpn_status_connected)} · ${activeMode.localizedLabel(this)}"
                 tvSimpleHeroTitle.text = getString(R.string.simple_hero_connected)
                 btnVpnToggle.text = getString(R.string.vpn_btn_disconnect)
                 btnSimpleQuickToggle.text = getString(R.string.vpn_btn_disconnect)
@@ -955,9 +1074,9 @@ class MainActivity : Activity() {
                 vpnDot.background = getDrawable(R.drawable.status_dot_green)
                 simpleStatusDot.background = getDrawable(R.drawable.status_dot_green)
                 val extLabel = when {
-                    externalVpn && bridgePort != null -> "External VPN + Proxy :$bridgePort"
-                    externalVpn -> "External VPN Active (Lantern / System)"
-                    else -> "Local Proxy Active (:$bridgePort)"
+                    externalVpn && bridgePort != null -> getString(R.string.main_external_vpn_plus_proxy, bridgePort)
+                    externalVpn -> getString(R.string.main_external_vpn_active)
+                    else -> getString(R.string.main_local_proxy_active, bridgePort ?: 0)
                 }
                 tvVpnState.text = extLabel
                 tvSimpleHeroTitle.text = extLabel
@@ -967,7 +1086,7 @@ class MainActivity : Activity() {
             else -> {
                 vpnDot.background = getDrawable(R.drawable.status_dot_gray)
                 simpleStatusDot.background = getDrawable(R.drawable.status_dot_gray)
-                tvVpnState.text = "${getString(R.string.vpn_status_disconnected)} · ${activeMode.label}"
+                tvVpnState.text = "${getString(R.string.vpn_status_disconnected)} · ${activeMode.localizedLabel(this)}"
                 tvSimpleHeroTitle.text = getString(R.string.simple_hero_disconnected)
                 btnVpnToggle.text = getString(R.string.vpn_btn_connect)
                 btnSimpleQuickToggle.text = getString(R.string.vpn_btn_connect)
@@ -1050,10 +1169,10 @@ class MainActivity : Activity() {
             }
         }
         findViewById<Button>(R.id.btnTerminalOpenAiStudio).setOnClickListener {
-            launchGoogleServiceViaVpn("Google AI Studio", CommandCompat.AISTUDIO_URL)
+            launchGoogleServiceViaVpn(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
         }
         findViewById<Button>(R.id.btnTerminalOpenFlow).setOnClickListener {
-            launchGoogleServiceViaVpn("Google Flow", CommandCompat.FLOW_URL)
+            launchGoogleServiceViaVpn(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
         }
         terminalInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE) {
@@ -1212,7 +1331,7 @@ class MainActivity : Activity() {
     /** 1-tap Speed, Exit Country/Geo & AI Studio / Flow live check right from Simple Mode. */
     private fun runQuickSpeedAndIpCheck() {
         simpleProgress.visibility = View.VISIBLE
-        tvSimpleReachability.text = "Testing Exit Country, AI Studio & Google Flow…"
+        tvSimpleReachability.text = getString(R.string.main_speed_checking)
         thread(isDaemon = true, name = "dastyab-quick-speed") {
             val route = GeoBypassEngine.resolveCurrentRoute(this)
             val probe = GeoBypassEngine.runAccessProbe(route, timeoutMs = 3800)
@@ -1229,10 +1348,21 @@ class MainActivity : Activity() {
                 tvReachabilityBadge.text = badge
 
                 val ipLine = if (egress != null) {
-                    val supportTag = if (probe.flowCountrySupported) "Supported for Flow ✓" else "Geo-blocked for Flow ✗"
-                    "Route  : ${probe.routeLabel}\nExit IP: ${egress.ip} (${egress.countryCode} · ${egress.countryName})\nGeo Gate: $supportTag"
+                    val supportTag = if (probe.flowCountrySupported) {
+                        getString(R.string.main_geo_flow_supported)
+                    } else {
+                        getString(R.string.main_geo_flow_blocked)
+                    }
+                    getString(
+                        R.string.main_speed_ip_summary,
+                        probe.routeLabel,
+                        egress.ip,
+                        egress.countryCode,
+                        egress.countryName,
+                        supportTag
+                    )
                 } else {
-                    "Route  : ${probe.routeLabel}\nExit IP: Unreachable (check Lantern, proxy port, or Autopilot)"
+                    getString(R.string.main_speed_ip_unreachable, probe.routeLabel)
                 }
                 val msg = "$ipLine\n\nAI Studio: ${probe.aiStudio.detail}\nGoogle Flow: ${probe.flow.detail}\n\n${probe.recommendation}"
                 UiSafety.safeShowDialog(
@@ -1240,10 +1370,10 @@ class MainActivity : Activity() {
                     AlertDialog.Builder(this)
                         .setTitle(probe.headline)
                         .setMessage(msg)
-                        .setPositiveButton("Route / Proxy Modes") { _, _ ->
+                        .setPositiveButton(getString(R.string.main_btn_route_proxy_modes)) { _, _ ->
                             GoogleAccessSheet.show(this) { refreshVpnCard() }
                         }
-                        .setNeutralButton("1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
+                        .setNeutralButton(getString(R.string.main_btn_autopilot)) { _, _ -> runNewbieAutopilot() }
                         .setNegativeButton(android.R.string.ok, null)
                 )
             }
@@ -1546,9 +1676,9 @@ class MainActivity : Activity() {
         for (line in text.split('\n')) {
             val lower = line.trimStart().lowercase()
             val color = when {
-                lower.startsWith("error") -> Color.rgb(0xF8, 0x71, 0x71)
-                lower.startsWith("warn") -> Color.rgb(0xFB, 0xBF, 0x24)
-                lower.startsWith("ok") || lower.startsWith("success") -> Color.rgb(0x4A, 0xDE, 0x80)
+                lower.startsWith("error") -> ThemeManager.resolveColor(this, R.attr.dastyabStatusError, R.color.colorStatusError)
+                lower.startsWith("warn") -> ThemeManager.resolveColor(this, R.attr.dastyabStatusWarning, R.color.colorStatusWarning)
+                lower.startsWith("ok") || lower.startsWith("success") -> ThemeManager.resolveColor(this, R.attr.dastyabStatusReady, R.color.colorStatusReady)
                 else -> null
             }
             if (color != null) spans.setSpan(
