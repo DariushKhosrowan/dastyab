@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -22,14 +23,22 @@ import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.webkit.ProxyConfig
+import androidx.webkit.ProxyController
+import androidx.webkit.WebViewFeature
+import java.util.concurrent.Executor
+import kotlin.concurrent.thread
 
 /**
  * InAppBrowserActivity — Built-in Royal Gold WebView browser for Google AI Studio & Google Flow.
  *
- * Features:
- *  • Modern Chrome-compatible User-Agent (removes `; wv` token) + persistent cookies & DOM storage
- *  • Compact top bar with Back, Forward, Reload, Live VPN Status dot, 1-Tap Auto-Fix, and Open in Chrome
- *  • Automatic OAuth fallback button ("Chrome") in case Google blocks embedded sign-in
+ * Geo-Bypass & Multi-Layer Proxy Features:
+ *  • Per-app `androidx.webkit.ProxyController` proxy override so AI Studio & Flow can route via
+ *    any local HTTP or SOCKS5 proxy port (`127.0.0.1:10809`, `:10808`, `:2080`, `:9050`, `:10850`)
+ *    WITHOUT stealing Android's single `VpnService` slot — allowing Lantern or another VPN on top!
+ *  • Automatic SOCKS5 -> HTTP translation via [LocalProxyService] whenever a SOCKS5 upstream is chosen
+ *  • Live Egress IP + Country ISO banner checking Google Flow's 151-country gate & `/unsupported-country`
+ *  • 1-tap Access Switcher (`Proxy / VPN`), `Geo Check`, and `AI Studio ↔ Flow` switcher
  */
 class InAppBrowserActivity : Activity() {
 
@@ -49,13 +58,15 @@ class InAppBrowserActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var progress: ProgressBar
     private lateinit var tvTitle: TextView
+    private lateinit var tvRouteStatus: TextView
     private lateinit var vpnDot: View
     private var initialUrl: String = CommandCompat.AISTUDIO_URL
     private var receiverRegistered = false
+    private val mainExecutor = Executor { runnable -> runOnUiThread(runnable) }
 
-    private val vpnReceiver = object : BroadcastReceiver() {
+    private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            refreshVpnIndicator()
+            refreshRouteAndIndicator()
         }
     }
 
@@ -74,6 +85,7 @@ class InAppBrowserActivity : Activity() {
             webView = findViewById(R.id.browserWebView)
             progress = findViewById(R.id.browserProgress)
             tvTitle = findViewById(R.id.tvBrowserTitle)
+            tvRouteStatus = findViewById(R.id.tvBrowserRouteStatus)
             vpnDot = findViewById(R.id.browserVpnDot)
             tvTitle.text = title
 
@@ -113,15 +125,15 @@ class InAppBrowserActivity : Activity() {
 
             webView.webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                    if (UiSafety.isActivityAlive(this@InAppBrowserActivity)) {
-                        progress.visibility = View.VISIBLE
-                    }
+                    if (!UiSafety.isActivityAlive(this@InAppBrowserActivity)) return
+                    progress.visibility = View.VISIBLE
+                    checkUnsupportedRedirect(url)
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
-                    if (UiSafety.isActivityAlive(this@InAppBrowserActivity)) {
-                        progress.visibility = View.GONE
-                    }
+                    if (!UiSafety.isActivityAlive(this@InAppBrowserActivity)) return
+                    progress.visibility = View.GONE
+                    checkUnsupportedRedirect(url)
                 }
 
                 override fun onReceivedError(
@@ -149,6 +161,31 @@ class InAppBrowserActivity : Activity() {
             findViewById<Button>(R.id.btnBrowserReload).setOnClickListener {
                 webView.reload()
             }
+            findViewById<Button>(R.id.btnBrowserProxyMode).setOnClickListener {
+                GoogleAccessSheet.show(this, tvTitle.text.toString(), currentOrInitialUrl()) {
+                    applyProxyAndLoad(currentOrInitialUrl())
+                }
+            }
+            tvRouteStatus.setOnClickListener {
+                GoogleAccessSheet.show(this, tvTitle.text.toString(), currentOrInitialUrl()) {
+                    applyProxyAndLoad(currentOrInitialUrl())
+                }
+            }
+            findViewById<Button>(R.id.btnBrowserGeoCheck).setOnClickListener {
+                GoogleAccessSheet.runLiveGeoCheckDialog(this)
+            }
+            findViewById<Button>(R.id.btnBrowserSwitchSite).setOnClickListener {
+                val cur = currentOrInitialUrl()
+                val nextUrl = if (cur.contains("flow.google.com", ignoreCase = true)) {
+                    CommandCompat.AISTUDIO_URL
+                } else {
+                    CommandCompat.FLOW_URL
+                }
+                val nextTitle = if (nextUrl == CommandCompat.AISTUDIO_URL) "Google AI Studio" else "Google Flow"
+                initialUrl = nextUrl
+                tvTitle.text = nextTitle
+                applyProxyAndLoad(nextUrl)
+            }
             findViewById<Button>(R.id.btnBrowserAutoFix).setOnClickListener {
                 val rescue = Intent(this, BlackoutRescueActivity::class.java).apply {
                     putExtra(BlackoutRescueActivity.EXTRA_AUTO_ACTION, BlackoutRescueActivity.ACTION_DNS_VPN)
@@ -156,15 +193,14 @@ class InAppBrowserActivity : Activity() {
                 UiSafety.safeStartActivity(this, rescue)
             }
             findViewById<Button>(R.id.btnBrowserOpenChrome).setOnClickListener {
-                val currentUrl = webView.url?.takeIf { it.startsWith("http") } ?: initialUrl
+                val currentUrl = currentOrInitialUrl()
                 if (!UiSafety.safeStartActivity(this, Intent(Intent.ACTION_VIEW, Uri.parse(currentUrl)))) {
                     Toast.makeText(this, getString(R.string.aistudio_no_browser), Toast.LENGTH_SHORT).show()
                 }
             }
 
-            registerVpnReceiver()
-            refreshVpnIndicator()
-            webView.loadUrl(initialUrl)
+            registerStateReceivers()
+            applyProxyAndLoad(initialUrl)
         } catch (t: Throwable) {
             DastyabLogger.e("InAppBrowser", t, "WebView unavailable; falling back to external browser")
             val opened = UiSafety.safeStartActivity(this, Intent(Intent.ACTION_VIEW, Uri.parse(initialUrl)))
@@ -177,11 +213,94 @@ class InAppBrowserActivity : Activity() {
         }
     }
 
+    private fun currentOrInitialUrl(): String =
+        webView.url?.takeIf { it.startsWith("http") } ?: initialUrl
+
+    private fun checkUnsupportedRedirect(url: String?) {
+        if (url != null && url.contains("unsupported-country", ignoreCase = true)) {
+            tvRouteStatus.text = "GEO-BLOCKED (unsupported country) — Tap 'Proxy / VPN' to switch to Lantern or v2rayNG"
+            tvRouteStatus.setTextColor(Color.rgb(0xF8, 0x71, 0x71))
+        }
+    }
+
+    private fun applyProxyAndLoad(urlToLoad: String) {
+        thread(isDaemon = true, name = "dastyab-browser-route") {
+            val settings = TunnelConfig.load(this)
+            var route = GeoBypassEngine.resolveCurrentRoute(this, settings)
+            if (route.shouldStartLocalBridge) {
+                LocalProxyService.startSafely(this)
+                // Give LocalProxyServer a brief moment to bind 127.0.0.1:<port>
+                var waited = 0
+                while (LocalProxyService.activePort() == null && waited < 900) {
+                    try { Thread.sleep(60) } catch (_: InterruptedException) { break }
+                    waited += 60
+                }
+                route = GeoBypassEngine.resolveCurrentRoute(this, settings)
+            }
+
+            runOnUiThread {
+                if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
+                applyWebViewProxy(route.webViewHttpProxyPort) {
+                    refreshRouteAndIndicator(route)
+                    if (UiSafety.isActivityAlive(this)) {
+                        webView.loadUrl(urlToLoad)
+                    }
+                    probeBannerEgress(route)
+                }
+            }
+        }
+    }
+
+    private fun applyWebViewProxy(httpProxyPort: Int?, onApplied: () -> Unit) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            if (httpProxyPort != null) {
+                Toast.makeText(
+                    this,
+                    "This WebView version lacks per-app proxy override; use DastYab VPN + Proxy Chain or Chrome.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            onApplied()
+            return
+        }
+
+        val controller = ProxyController.getInstance()
+        if (httpProxyPort != null) {
+            val cfg = ProxyConfig.Builder()
+                .addProxyRule("127.0.0.1:$httpProxyPort")
+                .build()
+            controller.setProxyOverride(cfg, mainExecutor, Runnable { onApplied() })
+        } else {
+            controller.clearProxyOverride(mainExecutor, Runnable { onApplied() })
+        }
+    }
+
+    private fun probeBannerEgress(route: GeoBypassEngine.RouteResolution) {
+        thread(isDaemon = true, name = "dastyab-browser-geo") {
+            val egress = GeoBypassEngine.fetchEgressGeo(route.javaNetProxy, timeoutMs = 3500)
+            runOnUiThread {
+                if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
+                if (egress == null) {
+                    tvRouteStatus.text = "${route.routeLabel} · Tap 'Geo Check' to verify IP"
+                    tvRouteStatus.setTextColor(Color.rgb(0xFB, 0xBF, 0x24))
+                } else {
+                    val ok = GeoBypassEngine.isFlowCountrySupported(egress.countryCode)
+                    val mark = if (ok) "✓ Supported" else "✗ Geo-Blocked"
+                    tvRouteStatus.text = "${route.routeLabel} · ${egress.countryCode} ($mark · ${egress.ip})"
+                    tvRouteStatus.setTextColor(
+                        if (ok) Color.rgb(0x4A, 0xDE, 0x80) else Color.rgb(0xF8, 0x71, 0x71)
+                    )
+                }
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         if (this::webView.isInitialized) {
             runCatching { webView.onResume() }
         }
+        refreshRouteAndIndicator()
     }
 
     override fun onPause() {
@@ -191,29 +310,40 @@ class InAppBrowserActivity : Activity() {
         super.onPause()
     }
 
-    private fun registerVpnReceiver() {
+    private fun registerStateReceivers() {
         if (receiverRegistered) return
-        val filter = IntentFilter(DastyabVpnService.ACTION_STATE_CHANGED)
+        val filter = IntentFilter().apply {
+            addAction(DastyabVpnService.ACTION_STATE_CHANGED)
+            addAction(LocalProxyService.ACTION_STATE_CHANGED)
+        }
         if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(vpnReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(stateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             @Suppress("DEPRECATION")
-            registerReceiver(vpnReceiver, filter)
+            registerReceiver(stateReceiver, filter)
         }
         receiverRegistered = true
     }
 
-    private fun refreshVpnIndicator() {
+    private fun refreshRouteAndIndicator(precomputed: GeoBypassEngine.RouteResolution? = null) {
         if (!UiSafety.isActivityAlive(this) || !this::vpnDot.isInitialized) return
         try {
-            val status = DastyabVpnService.getStatus()
+            val dastyabStatus = DastyabVpnService.getStatus()
+            val externalVpn = NetworkUtils.hasActiveExternalVpn(this)
+            val bridgeRunning = LocalProxyService.isRunning()
             vpnDot.background = getDrawable(
-                when (status.state) {
-                    DastyabVpnService.State.CONNECTED -> R.drawable.status_dot_green
-                    DastyabVpnService.State.CONNECTING -> R.drawable.status_dot_orange
-                    DastyabVpnService.State.DISCONNECTED -> R.drawable.status_dot_gray
+                when {
+                    dastyabStatus.state == DastyabVpnService.State.CONNECTED || externalVpn || bridgeRunning ->
+                        R.drawable.status_dot_green
+                    dastyabStatus.state == DastyabVpnService.State.CONNECTING ->
+                        R.drawable.status_dot_orange
+                    else ->
+                        R.drawable.status_dot_gray
                 }
             )
+            if (precomputed != null && this::tvRouteStatus.isInitialized) {
+                tvRouteStatus.text = "${precomputed.routeLabel} · Checking egress country…"
+            }
         } catch (_: Throwable) {
         }
     }
@@ -230,7 +360,7 @@ class InAppBrowserActivity : Activity() {
 
     override fun onDestroy() {
         if (receiverRegistered) {
-            try { unregisterReceiver(vpnReceiver) } catch (_: Exception) {}
+            try { unregisterReceiver(stateReceiver) } catch (_: Exception) {}
             receiverRegistered = false
         }
         if (this::webView.isInitialized) {

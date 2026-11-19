@@ -1,0 +1,1233 @@
+#!/usr/bin/env python3
+"""
+dastyab flow — multi-layer access to Google Flow (flow.google.com).
+
+THE LAYERS (identical to Linux `dastyab-flow.py`):
+  L0 supply    — union of node sources: flow_pool, fresh_vless, nekoray, nodes.json
+  L1 transport — xray config builder (reality / tls / ws / grpc / xhttp, vision)
+  L2 chain     — optional two-hop: you -> entry -> exit -> Google
+  L3 geo gate  — Google's official 151-country Flow allowlist (`SUPPORTED_COUNTRIES`)
+  L4 reach     — live flow.google.com (`AiSandboxAngularFrontend`) + accounts.google.com
+  L5 quality   — ip-api proxy/hosting flags; prefers clean non-flagged IPs
+  L6 browser   — dedicated Chrome on Linux / pinned InAppBrowserActivity on Android
+  L7 watchdog  — `watch` re-probes gates & rotates automatically
+
+USAGE:
+  dastyab flow start [idx] [--hops 1|2] [--country XX]
+  dastyab flow next
+  dastyab flow stop
+  dastyab flow status
+  dastyab flow verify [--country XX]
+  dastyab flow best [--try N] [--country XX]
+  dastyab flow prove [--try N] [--country XX]
+  dastyab flow watch [secs]
+  dastyab flow build-pool <uris.txt>
+  dastyab flow countries
+"""
+import argparse
+import glob
+import json
+import os
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+import urllib.parse
+
+import dastyab_android_shim as _shim
+
+SOCK = int(os.environ.get("DASTYAB_FLOW_SOCKS", "10860"))
+
+FLOW_URL = "https://flow.google.com/"
+ACCOUNTS_URL = "https://accounts.google.com/"
+GATE_MARKERS = (
+    "unsupported-country-title",
+    "not available in your country yet",
+    "flow is not available in your country",
+)
+UNAVAILABLE_MARKERS = (
+    "unavailable-title",
+    "don't have access to flow",
+    "dont have access to flow",
+    "do not have access to flow",
+)
+ACCOUNT_HELP = (
+    "Flow's account gate. Per support.google.com/flow/answer/16353333 you "
+    "need ALL of: (1) age verified, 18+; (2) a supported region; "
+    "(3) Google AI Plus/Pro/Ultra (or a qualifying Workspace plan). "
+    "The tunnel only satisfies (2)."
+)
+IPIFY = "https://api.ipify.org"
+IPAPI = "http://ip-api.com/json/?fields=status,country,countryCode,proxy,hosting,mobile"
+
+SUPPORTED_COUNTRIES = frozenset(
+    """
+AL DZ AS AO AG AR AM AW AU AT AZ BS BH BD BE BZ BJ BM BO BA BW BR BG BF
+CV KH CM CA KY CL CO CR CI HR CY CZ DK DO EC EG SV EE FJ FI FR GA DE GH
+GI GR GU GT GW HT HN HK HU IS IN ID IQ IE IL IT JM JP JO KZ KE KW KG LA
+LV LB LI LT LU MO MY MV ML MT MU MX MD MC MA MZ NA NP NL NZ NI NE NG MK
+MP NO OM PK PW PA PG PY PE PH PL PT PR QA RO RW SM SA SN RS SC SL SG SK
+SI ZA KR ES LK SE CH TW TJ TZ TH TG TO TT TN TR TM VI UG UA AE GB US UY
+UZ VE VN VG YE ZM ZW
+""".split()
+)
+
+
+def _paths():
+    home = os.path.expanduser("~")
+    prof = os.path.join(home, ".dastyab", "profiles", "default")
+    tmp = _shim.tmp_dir()
+    return {
+        "HOME": home,
+        "PROFILE_DIR": prof,
+        "FLOW_POOL": os.path.join(prof, "flow_pool.json"),
+        "AISTUDIO_POOL": os.path.join(prof, "fresh_vless.json"),
+        "NODES_JSON": os.path.join(prof, "nodes.json"),
+        "NEKORAY_PROFILES": os.path.join(home, ".config/nekoray/config/profiles"),
+        "PIDFILE": os.path.join(tmp, "dastyab_flow.pid"),
+        "CFGPATH": os.path.join(tmp, "dastyab_flow.json"),
+        "IDXFILE": os.path.join(tmp, "dastyab_flow_idx"),
+        "STATEFILE": os.path.join(tmp, "dastyab_flow_state.json"),
+        "BRIDGEFILE": os.path.join(tmp, "dastyab_flow_bridge.json"),
+        "BROWSER_PROFILE": os.path.join(home, ".dastyab-flow-profile"),
+    }
+
+
+_XRAY_VERSION = None
+
+
+def _find_xray_optional():
+    here = os.path.dirname(os.path.abspath(__file__))
+    return _shim.find_xray_android(extra_paths=(os.path.join(here, "xray"),))
+
+
+def find_xray():
+    here = os.path.dirname(os.path.abspath(__file__))
+    found = _shim.find_xray_android(extra_paths=(os.path.join(here, "xray"),))
+    if found:
+        return found
+    raise SystemExit(
+        "[flow] No xray core found. Install xray and put it on PATH, or set "
+        "DASTYAB_XRAY=/path/to/xray"
+    )
+
+
+def xray_supports_vision():
+    global _XRAY_VERSION
+    if _XRAY_VERSION is None:
+        _XRAY_VERSION = ""
+        try:
+            out = subprocess.run(
+                [find_xray(), "version"], capture_output=True, text=True, timeout=10
+            ).stdout
+            m = re.search(r"Xray\s+(\d+)\.(\d+)", out)
+            if m:
+                _XRAY_VERSION = f"{m.group(1)}.{m.group(2)}"
+        except (SystemExit, OSError, subprocess.SubprocessError):
+            _XRAY_VERSION = ""
+    if not _XRAY_VERSION:
+        return False
+    major, minor = (int(x) for x in _XRAY_VERSION.split("."))
+    return (major, minor) >= (1, 7)
+
+
+def read_json(path, default):
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return default
+    except (json.JSONDecodeError, OSError):
+        return default
+
+
+def write_json_atomic(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(obj, fh, indent=1)
+    os.replace(tmp, path)
+
+
+def parse_vless(line):
+    line = line.split("#")[0].strip()
+    m = re.match(r"vless://([^@]*)@([^:]+):(\d+)\?(.*)", line)
+    if not m:
+        return None
+    uuid_, host, port, qs = m.group(1), m.group(2), int(m.group(3)), m.group(4)
+    if not uuid_ or not host:
+        return None
+    return {
+        "proto": "vless",
+        "uuid": uuid_,
+        "addr": host,
+        "port": port,
+        "q": dict(urllib.parse.parse_qsl(qs)),
+    }
+
+
+def _bean_to_server(bean, typ):
+    if not bean.get("addr") or not bean.get("port"):
+        return None
+    st = bean.get("stream", {}) or {}
+    q = {
+        "security": st.get("sec", "none"),
+        "type": st.get("net", "tcp"),
+        "sni": st.get("sni", ""),
+        "host": st.get("host", ""),
+        "path": st.get("path", "/"),
+        "serviceName": st.get("servicename", ""),
+        "pbk": st.get("pbk", ""),
+        "sid": st.get("sid", ""),
+        "fp": st.get("utls", "chrome"),
+        "flow": bean.get("flow", ""),
+    }
+    srv = {
+        "proto": typ,
+        "addr": bean["addr"],
+        "port": int(bean["port"]),
+        "q": q,
+        "name": bean.get("name", ""),
+    }
+    if typ in ("vless", "vmess"):
+        srv["uuid"] = bean.get("pass", "")
+    else:
+        srv["password"] = bean.get("pass", "")
+        if typ == "ss":
+            srv["method"] = bean.get("method", "aes-256-gcm")
+    return srv
+
+
+def load_candidates(limit=400):
+    p = _paths()
+    out, seen = [], set()
+
+    def add(srv):
+        if not srv or not srv.get("addr") or not srv.get("port"):
+            return
+        key = (str(srv["addr"]), int(srv["port"]))
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(srv)
+
+    for e in read_json(p["FLOW_POOL"], []):
+        if isinstance(e, dict) and e.get("nodes"):
+            for n in e["nodes"]:
+                add(n)
+        elif isinstance(e, dict) and "addr" in e:
+            add(e)
+
+    for e in read_json(p["AISTUDIO_POOL"], []):
+        if isinstance(e, dict) and e.get("uuid"):
+            add(
+                {
+                    "proto": "vless",
+                    "uuid": e["uuid"],
+                    "addr": e["addr"],
+                    "port": int(e["port"]),
+                    "q": e.get("q", {}),
+                }
+            )
+
+    beans = []
+    for f in sorted(glob.glob(os.path.join(p["NEKORAY_PROFILES"], "*.json"))):
+        d = read_json(f, {})
+        if not isinstance(d, dict):
+            continue
+        srv = _bean_to_server(d.get("bean", {}) or {}, d.get("type", ""))
+        if srv:
+            beans.append(srv)
+    prio = {"vless": 0, "trojan": 1, "vmess": 2, "shadowsocks": 3, "ss": 3}
+    for srv in sorted(beans, key=lambda s: prio.get(s["proto"], 9)):
+        add(srv)
+
+    nodes_doc = read_json(p["NODES_JSON"], {})
+    urls = []
+    if isinstance(nodes_doc, dict):
+        for n in nodes_doc.get("nodes", []):
+            u = (n or {}).get("url", "")
+            if u.startswith("vless://"):
+                urls.append((not n.get("healthy", False), u))
+    elif isinstance(nodes_doc, list):
+        for n in nodes_doc:
+            u = (n or {}).get("url", "")
+            if u.startswith("vless://"):
+                urls.append((not n.get("healthy", False), u))
+    for _, u in sorted(urls):
+        add(parse_vless(u))
+
+    return out[:limit]
+
+
+def build_outbound(srv, tag):
+    q = srv.get("q", {})
+    addr, port = srv["addr"], int(srv["port"])
+    proto = srv["proto"]
+
+    if proto == "vless":
+        out = {
+            "tag": tag,
+            "protocol": "vless",
+            "settings": {
+                "vnext": [{"address": addr, "port": port, "users": [{"id": srv["uuid"], "encryption": "none"}]}]
+            },
+        }
+        flow = q.get("flow")
+        if flow:
+            if q.get("security") not in ("tls", "reality"):
+                flow = None
+            elif not xray_supports_vision():
+                flow = None
+        if flow:
+            out["settings"]["vnext"][0]["users"][0]["flow"] = flow
+    elif proto == "trojan":
+        out = {
+            "tag": tag,
+            "protocol": "trojan",
+            "settings": {"servers": [{"address": addr, "port": port, "password": srv["password"]}]},
+        }
+    elif proto == "vmess":
+        out = {
+            "tag": tag,
+            "protocol": "vmess",
+            "settings": {"vnext": [{"address": addr, "port": port, "users": [{"id": srv["uuid"], "alterId": 0}]}]},
+        }
+    elif proto in ("ss", "shadowsocks"):
+        out = {
+            "tag": tag,
+            "protocol": "shadowsocks",
+            "settings": {
+                "servers": [
+                    {
+                        "address": addr,
+                        "port": port,
+                        "method": srv.get("method", "aes-256-gcm"),
+                        "password": srv["password"],
+                    }
+                ]
+            },
+        }
+    else:
+        return None
+
+    sec = q.get("security", "none")
+    net = q.get("type", "tcp")
+    ss = {}
+    if sec == "reality":
+        ss.update(
+            security="reality",
+            realitySettings={
+                "serverName": q.get("sni") or addr,
+                "fingerprint": q.get("fp", "chrome"),
+                "publicKey": q.get("pbk", ""),
+                "shortId": q.get("sid", ""),
+                "spiderX": q.get("spx", "/"),
+            },
+        )
+    elif sec == "tls":
+        ss["security"] = "tls"
+        ss["tlsSettings"] = {"serverName": q.get("sni") or addr, "fingerprint": q.get("fp", "chrome")}
+        if q.get("alpn"):
+            ss["tlsSettings"]["alpn"] = [x for x in q["alpn"].split(",") if x]
+    else:
+        ss["security"] = "none"
+
+    if net == "ws":
+        ss["network"] = "ws"
+        ss["wsSettings"] = {"path": q.get("path", "/"), "headers": {"Host": q.get("host") or q.get("sni") or addr}}
+    elif net == "xhttp":
+        ss["network"] = "xhttp"
+        ss["xhttpSettings"] = {
+            "path": q.get("path", "/"),
+            "host": q.get("host") or q.get("sni") or addr,
+            "mode": q.get("mode", "auto"),
+        }
+    elif net == "grpc":
+        ss["network"] = "grpc"
+        ss["grpcSettings"] = {"serviceName": q.get("serviceName", "")}
+    else:
+        ss["network"] = "tcp"
+    out["streamSettings"] = ss
+    return out
+
+
+def build_config(nodes, port):
+    if len(nodes) == 1:
+        outbounds = [build_outbound(nodes[0], "exit")]
+    else:
+        exit_ob = build_outbound(nodes[0], "exit")
+        exit_ob["sockopt"] = {"dialerProxy": "entry"}
+        outbounds = [exit_ob, build_outbound(nodes[1], "entry")]
+    outbounds = [ob for ob in outbounds if ob]
+    if not outbounds:
+        return None
+    return {
+        "log": {"loglevel": "warning"},
+        "inbounds": [
+            {
+                "listen": "127.0.0.1",
+                "port": port,
+                "protocol": "socks",
+                "settings": {"auth": "noauth", "udp": True},
+                "tag": "socks-in",
+            }
+        ],
+        "outbounds": outbounds,
+    }
+
+
+def is_running():
+    p = _paths()
+    if os.path.exists(p["PIDFILE"]):
+        try:
+            pid = int(open(p["PIDFILE"]).read())
+            os.kill(pid, 0)
+            return True
+        except (ProcessLookupError, ValueError, PermissionError, OSError):
+            pass
+    if os.path.exists(p["BRIDGEFILE"]):
+        return True
+    return False
+
+
+def _has_curl():
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        p = os.path.join(d, "curl") if d else ""
+        if p and os.path.isfile(p) and os.access(p, os.X_OK):
+            return True
+    return False
+
+
+def _curl(args, timeout):
+    """Run curl via SOCKS5 tunnel — uses pure-Python curl bridge on Android."""
+    if _shim.is_android() or not _has_curl():
+        return _shim.android_curl(args, timeout=timeout, default_socks_port=SOCK)
+    try:
+        return subprocess.run(
+            ["curl", "-s", "--max-time", str(timeout), "--socks5-hostname", f"127.0.0.1:{SOCK}"] + args,
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return _shim.android_curl(args, timeout=timeout, default_socks_port=SOCK)
+
+
+def bring_up(nodes):
+    p = _paths()
+    cfg = build_config(nodes, SOCK)
+    if cfg is None:
+        return None
+    with open(p["CFGPATH"], "w") as fh:
+        json.dump(cfg, fh)
+    xray = find_xray()
+    try:
+        proc = subprocess.Popen(
+            [xray, "run", "-c", p["CFGPATH"]],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        return None
+    up = False
+    for _ in range(25):
+        if proc.poll() is not None:
+            break
+        s = None
+        try:
+            s = socket.socket()
+            s.settimeout(0.5)
+            s.connect(("127.0.0.1", SOCK))
+            up = True
+            break
+        except Exception:
+            time.sleep(0.3)
+        finally:
+            if s is not None:
+                s.close()
+    if not up:
+        proc.kill()
+        return None
+    with open(p["PIDFILE"], "w") as fh:
+        fh.write(str(proc.pid))
+    return proc.pid
+
+
+def stop(quiet=False):
+    p = _paths()
+    if os.path.exists(p["PIDFILE"]):
+        try:
+            pid = int(open(p["PIDFILE"]).read())
+            os.kill(pid, signal.SIGTERM)
+            time.sleep(0.3)
+            os.kill(pid, signal.SIGKILL)
+        except Exception:
+            pass
+        try:
+            os.remove(p["PIDFILE"])
+        except OSError:
+            pass
+    if os.path.exists(p["BRIDGEFILE"]):
+        try:
+            os.remove(p["BRIDGEFILE"])
+        except OSError:
+            pass
+    if not _shim.is_android():
+        subprocess.run(
+            [
+                "bash",
+                "-c",
+                'for p in $(pgrep -f dastyab_flow.json); do '
+                '[ "$p" = "${1}" ] || [ "$p" = "$$" ] || kill -9 "$p" 2>/dev/null; done',
+                "dastyab-flow-stop",
+                str(os.getpid()),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    if not quiet:
+        print("[flow] Tunnel stopped")
+
+
+def probe_gates(want_country=None, browser_profile=None):
+    res = {
+        "egress": None,
+        "country": None,
+        "country_name": None,
+        "proxy": None,
+        "hosting": None,
+        "flow_ok": False,
+        "accounts_ok": False,
+        "latency_ms": None,
+        "verdict": False,
+        "reason": "",
+    }
+
+    t0 = time.time()
+    r = _curl([IPIFY], 20)
+    ip = (r.stdout or "").strip() if r else ""
+    if not ip or len(ip) > 60 or "\n" in ip:
+        res["reason"] = "no egress (tunnel dead at the far end)"
+        return res
+    res["egress"] = ip
+
+    r = _curl([IPAPI], 15)
+    geo = {}
+    try:
+        geo = json.loads((r.stdout or "").strip()) if r else {}
+    except json.JSONDecodeError:
+        geo = {}
+    if geo.get("status") != "success":
+        # Fallback to HTTPS geo trace / ipwho.is if HTTP ip-api blocked
+        r2 = _curl(["https://ipwho.is/"], 12)
+        try:
+            j2 = json.loads((r2.stdout or "").strip()) if r2 else {}
+            if j2.get("success"):
+                geo = {
+                    "status": "success",
+                    "countryCode": j2.get("country_code"),
+                    "country": j2.get("country"),
+                    "proxy": bool((j2.get("security") or {}).get("proxy")),
+                    "hosting": bool((j2.get("security") or {}).get("hosting")),
+                }
+        except json.JSONDecodeError:
+            pass
+
+    if geo.get("status") != "success":
+        res["reason"] = "geo lookup failed (ip-api unreachable through tunnel)"
+        res["latency_ms"] = int((time.time() - t0) * 1000)
+        return res
+    res["country"] = geo.get("countryCode")
+    res["country_name"] = geo.get("country")
+    res["proxy"] = bool(geo.get("proxy"))
+    res["hosting"] = bool(geo.get("hosting"))
+    res["latency_ms"] = int((time.time() - t0) * 1000)
+
+    if res["country"] not in SUPPORTED_COUNTRIES:
+        res["reason"] = f"egress {ip} is in {res['country']} ({res['country_name']}) — not on Google's Flow list"
+        return res
+    if want_country and res["country"] != want_country.upper():
+        res["reason"] = f"egress country {res['country']} != requested {want_country.upper()}"
+        return res
+
+    r = _curl(["-o", "/dev/null", "-w", "%{http_code}", FLOW_URL], 25)
+    code = (r.stdout or "").strip() if r else "000"
+    res["flow_ok"] = code not in ("", "000")
+    if not res["flow_ok"]:
+        res["reason"] = f"flow.google.com unreachable through tunnel (HTTP {code})"
+        return res
+
+    r = _curl([FLOW_URL], 25)
+    body = (r.stdout or "") if r else ""
+    low_body = body.lower()
+    for marker in GATE_MARKERS:
+        if marker in low_body:
+            res["reason"] = f"REGION-GATE: Flow rejected this egress (shows '{marker}')"
+            return res
+    res["app_shell_ok"] = "AiSandboxAngularFrontend" in body
+    if not res["app_shell_ok"]:
+        res["reason"] = "flow.google.com answered but not with the Flow app shell"
+        return res
+
+    r = _curl(["-o", "/dev/null", "-w", "%{http_code}", ACCOUNTS_URL], 25)
+    code = (r.stdout or "").strip() if r else "000"
+    res["accounts_ok"] = code not in ("", "000")
+    if not res["accounts_ok"]:
+        res["reason"] = "accounts.google.com unreachable (sign-in would fail)"
+        return res
+
+    b_ok, b_detail = browser_gate(profile_dir=browser_profile)
+    res["browser_ok"] = b_ok
+    res["browser_detail"] = b_detail
+    if b_ok is False:
+        res["reason"] = b_detail
+        return res
+
+    res["verdict"] = True
+    flags = []
+    if res["proxy"]:
+        flags.append("proxy-flagged")
+    if res["hosting"]:
+        flags.append("hosting")
+    suffix = f"; browser check ({b_detail})" if b_ok is None else ""
+    res["reason"] = "egress %s in %s (%s); Flow + accounts reachable%s%s" % (
+        res["egress"],
+        res["country"],
+        res["country_name"],
+        ("; " + ", ".join(flags)) if flags else "",
+        suffix,
+    )
+    return res
+
+
+def gate_score(g):
+    return (
+        0 if g["verdict"] else 1,
+        0 if not g["proxy"] else 1,
+        0 if not g["hosting"] else 1,
+        g["latency_ms"] or 10_000,
+    )
+
+
+def _label(nodes):
+    return " -> ".join(f"{n['proto']} {n['addr']}:{n['port']}" for n in nodes)
+
+
+def load_pool():
+    pool = read_json(_paths()["FLOW_POOL"], [])
+    return [e for e in pool if isinstance(e, dict) and e.get("nodes")]
+
+
+def save_pool(passing):
+    p = _paths()
+    if not passing:
+        raise SystemExit(
+            f"[flow] No candidate passed the gates; keeping existing pool at {p['FLOW_POOL']} unchanged."
+        )
+    write_json_atomic(p["FLOW_POOL"], passing)
+
+
+def _try_nodes(nodes, want_country=None):
+    pid = bring_up(nodes)
+    if pid is None:
+        return None
+    try:
+        return probe_gates(want_country)
+    finally:
+        stop(quiet=True)
+
+
+def scan(candidates, want_country=None, try_n=10, allow_chain=True):
+    passing = []
+    tested = 0
+    for cand in candidates[:try_n]:
+        tested += 1
+        nodes = [cand]
+        print(f"[flow] [{tested}] trying {_label(nodes)} ...", flush=True)
+        g = _try_nodes(nodes, want_country)
+        if g and g["verdict"]:
+            print(f"[flow]     PASS {g['reason']} ({g['latency_ms']}ms)")
+            passing.append(
+                {
+                    "nodes": nodes,
+                    "egress": g["egress"],
+                    "country": g["country"],
+                    "country_name": g["country_name"],
+                    "proxy": g["proxy"],
+                    "hosting": g["hosting"],
+                    "latency_ms": g["latency_ms"],
+                    "checked_epoch": time.time(),
+                }
+            )
+            if len(passing) >= 3:
+                break
+        else:
+            print(f"[flow]     fail: {(g or {}).get('reason', 'transport dead')}", flush=True)
+
+    if passing or not allow_chain:
+        return passing
+
+    print("[flow] No single hop passed — engaging the two-hop chain layer ...")
+    entries = candidates[:3]
+    for cand in candidates[:try_n]:
+        tested += 1
+        for entry in entries:
+            if entry is cand:
+                continue
+            nodes = [cand, entry]
+            print(f"[flow] [{tested}] chain {_label(nodes)} ...", flush=True)
+            g = _try_nodes(nodes, want_country)
+            if g and g["verdict"]:
+                print(f"[flow]     PASS {g['reason']} ({g['latency_ms']}ms)")
+                passing.append(
+                    {
+                        "nodes": nodes,
+                        "egress": g["egress"],
+                        "country": g["country"],
+                        "country_name": g["country_name"],
+                        "proxy": g["proxy"],
+                        "hosting": g["hosting"],
+                        "latency_ms": g["latency_ms"],
+                        "checked_epoch": time.time(),
+                    }
+                )
+                break
+            reason = (g or {}).get("reason", "transport dead")
+            print(f"[flow]     fail: {reason}", flush=True)
+            if g and g.get("country") and g["country"] not in SUPPORTED_COUNTRIES:
+                break
+        if len(passing) >= 2:
+            break
+    return passing
+
+
+def find_browser():
+    cands = [
+        os.environ.get("DASTYAB_BROWSER", ""),
+        "/opt/google/chrome/google-chrome",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
+        "/usr/bin/microsoft-edge",
+        "/usr/bin/brave-browser",
+    ]
+    return next((c for c in cands if c and os.path.isfile(c) and os.access(c, os.X_OK)), None)
+
+
+def browser_gate(timeout=150, profile_dir=None):
+    ch = find_browser()
+    if ch is None:
+        return None, "no headless Chromium (verified via live TLS HTML shell on Android)"
+    prof = profile_dir or os.path.join(_shim.tmp_dir(), f"dastyab-flow-gate-{os.getpid()}")
+    args = [
+        ch,
+        "--headless=new",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-default-browser-check",
+        f"--proxy-server=socks5://127.0.0.1:{SOCK}",
+        "--virtual-time-budget=12000",
+        f"--user-data-dir={prof}",
+        "--dump-dom",
+        FLOW_URL,
+    ]
+    dom = ""
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        dom = r.stdout or ""
+    except subprocess.TimeoutExpired as e:
+        dom = e.stdout or ""
+        if isinstance(dom, bytes):
+            dom = dom.decode("utf-8", "replace")
+        if not dom:
+            return None, "browser gate timed out before the page settled"
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, f"browser gate failed to run ({e})"
+    finally:
+        if profile_dir is None:
+            shutil.rmtree(prof, ignore_errors=True)
+
+    low = dom.lower()
+    for marker in UNAVAILABLE_MARKERS:
+        if marker in low:
+            return False, f"ACCOUNT-GATE: {ACCOUNT_HELP} (shows '{marker}')"
+    for marker in GATE_MARKERS:
+        if marker in low:
+            return False, f"REGION-GATE: Flow rejected this egress in the browser (shows '{marker}')"
+    if len(dom) < 1000:
+        return False, "browser rendered nothing (tunnel unusable for HTTPS)"
+    if "aisandboxangularfrontend" not in low:
+        return False, "browser did not render the Flow app"
+    if "sign in" in low and "credits" not in low:
+        return None, "region gate clear; pass signed-in profile to test account entitlement"
+    return True, "browser loaded the Flow app (no region or account gate)"
+
+
+def launch_browser(proxy_port=None):
+    if _shim.is_android():
+        _shim.emit_event(
+            "OPEN_BROWSER",
+            {"title": "Google Flow", "url": FLOW_URL, "proxy_port": proxy_port or SOCK},
+        )
+        print("[flow] Opening Google Flow inside DastYab Browser...")
+        return
+    p = _paths()
+    ch = find_browser()
+    if ch is None:
+        print("[flow] No Chromium-based browser found.")
+        print(f"[flow] Open {FLOW_URL} through socks5://127.0.0.1:{SOCK}")
+        return
+    os.makedirs(p["BROWSER_PROFILE"], exist_ok=True)
+    subprocess.Popen(
+        [
+            ch,
+            "--ozone-platform=x11",
+            f"--proxy-server=socks5://127.0.0.1:{SOCK}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            f"--user-data-dir={p['BROWSER_PROFILE']}",
+            FLOW_URL,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    print("[flow] Opened Flow in the dedicated tunnel-pinned browser.")
+
+
+def _android_start_bridge(want_country=None):
+    """Android multi-layer bridge when no standalone xray ELF binary is present."""
+    p = _paths()
+    print("[flow] Android CPython Core: probing active proxy ports & system VPN (L3+L4+L5)...")
+    results = _shim.discover_best_android_route(probe_gates, want_country=want_country)
+    best = None
+    for route, g in results:
+        scheme, host, port, label = route
+        status_str = f"PASS {g['country']} {g['egress']} ({g['latency_ms']}ms)" if g["verdict"] else f"fail: {g['reason']}"
+        print(f"   • {label}: {status_str}", flush=True)
+        if g["verdict"] and (best is None or gate_score(g) < gate_score(best[1])):
+            best = (route, g)
+
+    if best is None:
+        print(
+            "[flow] No active Android route passed Flow's 151-country + HTTPS gates.",
+            file=sys.stderr,
+        )
+        print(
+            "[flow] Tip: Start Lantern or connect v2rayNG (:10808/:10809) in a supported country, OR install ~/.dastyab/bin/xray.",
+            file=sys.stderr,
+        )
+        return 3
+
+    route, g = best
+    scheme, host, port, label = route
+    write_json_atomic(
+        p["BRIDGEFILE"],
+        {"scheme": scheme, "host": host, "port": port, "label": label, "egress": g["egress"]},
+    )
+    write_json_atomic(
+        p["STATEFILE"],
+        {
+            "idx": 0,
+            "hops": 1,
+            "egress": g["egress"],
+            "country": g["country"],
+            "country_name": g["country_name"],
+            "verified_epoch": time.time(),
+            "route_label": label,
+        },
+    )
+    print(f"[flow] Verified route: {label}")
+    print(f"[flow] {g['reason']}")
+    launch_browser(proxy_port=port if scheme in ("http", "socks5") else None)
+    return 0
+
+
+def cmd_start(index=None, hops=1, want_country=None):
+    p = _paths()
+    if is_running():
+        print(f"[flow] Tunnel already active on 127.0.0.1:{SOCK}")
+        bridge = read_json(p["BRIDGEFILE"], {})
+        launch_browser(proxy_port=bridge.get("port") or None)
+        return 0
+
+    if _find_xray_optional() is None and _shim.is_android():
+        return _android_start_bridge(want_country=want_country)
+
+    pool = load_pool()
+    if not pool:
+        print("[flow] No ranked pool yet — scanning candidates first ...")
+        passing = scan(load_candidates(), want_country, try_n=10)
+        if not passing:
+            print("[flow] No candidate passed the gates. Widen the scan: dastyab flow best --try 25", file=sys.stderr)
+            return 3
+        save_pool(passing)
+        pool = load_pool()
+
+    first = (index or 0) % len(pool)
+    order = [first] + [(first + off) % len(pool) for off in range(1, len(pool))]
+    for idx in order:
+        route = pool[idx]
+        nodes = route["nodes"]
+        if hops == 1 and len(nodes) > 1:
+            nodes = nodes[:1]
+        print(f"[flow] Bringing up {_label(nodes)} ...")
+        pid = bring_up(nodes)
+        if pid is None:
+            print("[flow] transport dead, next node", flush=True)
+            continue
+        g = probe_gates(want_country)
+        if g["verdict"]:
+            print(f"[flow] Tunnel up (pid {pid}) via {_label(nodes)}")
+            print(f"[flow] SOCKS5: 127.0.0.1:{SOCK} | {g['reason']}")
+            write_json_atomic(
+                p["STATEFILE"],
+                {
+                    "idx": idx,
+                    "hops": len(nodes),
+                    "egress": g["egress"],
+                    "country": g["country"],
+                    "country_name": g["country_name"],
+                    "verified_epoch": time.time(),
+                },
+            )
+            with open(p["IDXFILE"], "w") as fh:
+                fh.write(str(idx))
+            launch_browser()
+            return 0
+        stop(quiet=True)
+        print(f"[flow] gate fail: {g['reason']} — rotating", flush=True)
+
+    print("[flow] Every route in the pool failed the gates live.", file=sys.stderr)
+    return 3
+
+
+def cmd_next():
+    p = _paths()
+    state = read_json(p["STATEFILE"], {})
+    pool = load_pool()
+    if not pool:
+        print("[flow] No pool to rotate through. Run: dastyab flow best")
+        return 3
+    idx = (state.get("idx", 0) + 1) % len(pool)
+    print(f"[flow] Rotating to route {idx + 1}/{len(pool)}")
+    stop(quiet=True)
+    return cmd_start(index=idx)
+
+
+def cmd_stop():
+    stop()
+    return 0
+
+
+def cmd_status():
+    p = _paths()
+    xray = _find_xray_optional()
+    print(f"[flow] xray core: {xray or 'Not installed (Android Hybrid Proxy Bridge active)'}")
+    print(f"[flow] SOCKS port: 127.0.0.1:{SOCK} | profile: {p['PROFILE_DIR']}")
+    if _shim.is_android() and not xray:
+        results = _shim.discover_best_android_route(probe_gates)
+        any_ok = False
+        for route, g in results:
+            verdict = "PASS" if g["verdict"] else "FAIL"
+            print(f"[flow]   {route[3]} -> {verdict}: {g['reason']}")
+            if g["verdict"]:
+                any_ok = True
+        return 0 if any_ok else 1
+
+    if not is_running():
+        state = read_json(p["STATEFILE"], {})
+        if state:
+            age = int(time.time() - state.get("verified_epoch", 0))
+            print(f"[flow] Tunnel DOWN. Last route {state.get('country')} / {state.get('egress')} ({age // 60}m ago)")
+        else:
+            print("[flow] Tunnel DOWN. Start with: dastyab flow start")
+        return 1
+    g = probe_gates()
+    if g["verdict"]:
+        print(f"[flow] Tunnel UP. {g['reason']}")
+        return 0
+    print(f"[flow] Tunnel UP but gates FAIL: {g['reason']}")
+    return 1
+
+
+def cmd_verify(want_country=None):
+    if _find_xray_optional() is None and _shim.is_android():
+        return cmd_best(try_n=15, want_country=want_country)
+    pool = load_pool()
+    if not pool:
+        print("[flow] No saved pool. Run: dastyab flow best")
+        return 1
+    print(f"[flow] {len(pool)} saved route(s) — re-probing each live:")
+    alive = 0
+    for i, route in enumerate(pool):
+        nodes = route["nodes"]
+        g = _try_nodes(nodes, want_country)
+        if g and g["verdict"]:
+            alive += 1
+            print(f"   [{i}] {_label(nodes)}  OK  {g['country']} {g['egress']} ({g['latency_ms']}ms)")
+        else:
+            print(f"   [{i}] {_label(nodes)}  DEAD  {(g or {}).get('reason', 'transport dead')}")
+    print(f"[flow] {alive}/{len(pool)} routes still pass the gates.")
+    return 0 if alive else 3
+
+
+def cmd_best(try_n=10, want_country=None):
+    p = _paths()
+    xray = _find_xray_optional()
+    cands = load_candidates()
+
+    if xray is None and _shim.is_android():
+        print("[flow] Step 1/2: Probing active Android proxies & system VPNs against Flow gates...")
+        results = _shim.discover_best_android_route(probe_gates, want_country=want_country)
+        for route, g in results:
+            mark = f"PASS {g['country']} {g['egress']} ({g['latency_ms']}ms)" if g["verdict"] else f"FAIL ({g['reason']})"
+            print(f"   • {route[3]} -> {mark}", flush=True)
+
+        print(f"[flow] Step 2/2: Benchmarking {min(len(cands), try_n)} harvested VLESS nodes (TCP+TLS latency)...")
+        reachable = []
+        for idx, srv in enumerate(cands[:try_n], 1):
+            ms = _shim.probe_vless_node_transport(srv, timeout=2.5)
+            status_s = f"OK ({ms}ms)" if ms is not None else "DEAD"
+            print(f"   [{idx}] {srv['proto']} {srv['addr']}:{srv['port']}  {status_s}", flush=True)
+            if ms is not None:
+                reachable.append((ms, srv))
+        reachable.sort(key=lambda item: item[0])
+        if reachable:
+            pool_entries = [
+                {
+                    "nodes": [srv],
+                    "egress": "tls-verified",
+                    "country": want_country or "??",
+                    "country_name": "Pending xray",
+                    "proxy": False,
+                    "hosting": False,
+                    "latency_ms": ms,
+                    "checked_epoch": time.time(),
+                }
+                for ms, srv in reachable[:6]
+            ]
+            write_json_atomic(p["FLOW_POOL"], pool_entries)
+            top_uri = _shim.vless_dict_to_uri(reachable[0][1])
+            if top_uri:
+                _shim.emit_event(
+                    "SYNC_BEST_VLESS",
+                    {"uri": top_uri, "latency_ms": reachable[0][0]},
+                )
+            print(f"[flow] Ranked {len(pool_entries)} fastest VLESS endpoint(s) -> {p['FLOW_POOL']}")
+        return 0 if (any(g["verdict"] for _, g in results) or reachable) else 3
+
+    if not cands:
+        print("[flow] No candidates found in any source (pool, nekoray, nodes.json).", file=sys.stderr)
+        return 3
+    print(f"[flow] {len(cands)} candidate(s) from all sources; testing up to {try_n} for the gates ...")
+    passing = scan(cands, want_country, try_n=try_n)
+    if not passing:
+        print("[flow] Nothing passed.", file=sys.stderr)
+        return 3
+    passing.sort(key=lambda r: (0 if not r["proxy"] else 1, 0 if not r["hosting"] else 1, r["latency_ms"]))
+    save_pool(passing)
+    print(f"[flow] Ranked pool saved ({len(passing)} route(s)) -> {p['FLOW_POOL']}")
+    for i, r in enumerate(passing):
+        print(f"   [{i}] {r['country']} {r['egress']} ({r['latency_ms']}ms)")
+    return 0
+
+
+def cmd_watch(interval=30):
+    p = _paths()
+    print(f"[flow] Watchdog started: probing every {interval}s")
+    fails = 0
+    while True:
+        try:
+            g = probe_gates() if is_running() else None
+            if g and g["verdict"]:
+                fails = 0
+            elif g is None:
+                cmd_start(index=read_json(p["STATEFILE"], {}).get("idx", 0))
+                fails = 0
+            else:
+                fails += 1
+                print(f"[flow] gate fail ({fails}): {g['reason']}", file=sys.stderr)
+                if fails >= 2:
+                    cmd_next()
+                    fails = 0
+            time.sleep(interval)
+        except KeyboardInterrupt:
+            print("[flow] Watchdog stopped.")
+            return 0
+
+
+def cmd_build_pool(uris_txt, want=6):
+    if not os.path.isfile(uris_txt):
+        raise SystemExit(f"[flow] No such URI file: {uris_txt}")
+    uris, seen = [], set()
+    with open(uris_txt, errors="replace") as fh:
+        for line in fh:
+            if not line.strip().startswith("vless://"):
+                continue
+            u = parse_vless(line)
+            if not u:
+                continue
+            key = (u["addr"], u["port"])
+            if key in seen:
+                continue
+            seen.add(key)
+            uris.append(u)
+    if not uris:
+        raise SystemExit(f"[flow] No vless:// URIs found in {uris_txt}")
+    print(f"[flow] {len(uris)} unique URI(s); testing up to 30 ...")
+    has_xray = _find_xray_optional() is not None
+    passing = []
+    for u in uris[:30]:
+        if has_xray:
+            g = _try_nodes([u])
+            if g and g["verdict"]:
+                print(f"   {u['addr']}:{u['port']}  OK  {g['country']} {g['egress']}", flush=True)
+                passing.append(
+                    {
+                        "nodes": [u],
+                        "egress": g["egress"],
+                        "country": g["country"],
+                        "country_name": g["country_name"],
+                        "proxy": g["proxy"],
+                        "hosting": g["hosting"],
+                        "latency_ms": g["latency_ms"],
+                        "checked_epoch": time.time(),
+                    }
+                )
+            else:
+                print(f"   {u['addr']}:{u['port']}  DEAD  {(g or {}).get('reason', 'transport dead')}", flush=True)
+        else:
+            ms = _shim.probe_vless_node_transport(u, timeout=2.5)
+            if ms is not None:
+                print(f"   {u['addr']}:{u['port']}  OK  tls {ms}ms", flush=True)
+                passing.append(
+                    {
+                        "nodes": [u],
+                        "egress": "tls-verified",
+                        "country": "??",
+                        "country_name": "Pending xray",
+                        "proxy": False,
+                        "hosting": False,
+                        "latency_ms": ms,
+                        "checked_epoch": time.time(),
+                    }
+                )
+            else:
+                print(f"   {u['addr']}:{u['port']}  DEAD", flush=True)
+        if len(passing) >= want:
+            break
+    save_pool(passing)
+    print(f"[flow] Built pool: {len(passing)} route(s) -> {_paths()['FLOW_POOL']}")
+
+
+def cmd_prove(tries=6, want_country=None, profile=None):
+    ch = find_browser()
+    if ch is None:
+        print("[flow] Android Proof Check: running live L3+L4+L5 gate verification & opening DastYab Browser...")
+        return _android_start_bridge(want_country=want_country)
+    print(f"[flow] Proving Flow access with headless browser ({ch})")
+    cands = load_candidates()
+    if not cands:
+        print("[flow] No candidates in any source.", file=sys.stderr)
+        return 3
+    for i, cand in enumerate(cands[:tries], 1):
+        pid = bring_up([cand])
+        if pid is None:
+            continue
+        try:
+            g = probe_gates(want_country, browser_profile=profile)
+            if g["verdict"] and g.get("browser_ok"):
+                print(f"[flow] PROVEN egress {g['egress']} ({g['country']}) {g['latency_ms']}ms")
+                return 0
+        finally:
+            stop(quiet=True)
+    return 3
+
+
+def cmd_countries():
+    codes = sorted(SUPPORTED_COUNTRIES)
+    print(
+        f"[flow] Google Flow is officially available in {len(codes)} "
+        "countries/territories (per support.google.com, fetched 2026-11-16):"
+    )
+    for i in range(0, len(codes), 16):
+        print("   " + " ".join(codes[i : i + 16]))
+    print("[flow] Filter egress with: dastyab flow start --country XX")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        prog="dastyab-flow.py",
+        description="Multi-layer access to Google Flow (flow.google.com).",
+    )
+    sub = ap.add_subparsers(dest="cmd")
+
+    p = sub.add_parser("start", help="tunnel + open Flow (default)")
+    p.add_argument("index", nargs="?", type=int, default=None)
+    p.add_argument("--hops", type=int, default=1, choices=(1, 2))
+    p.add_argument("--country", default=None)
+
+    sub.add_parser("next", help="rotate to the next ranked route")
+    sub.add_parser("stop", help="stop the tunnel")
+    sub.add_parser("status", help="current egress + gate verdict")
+
+    p = sub.add_parser("verify", help="re-probe every saved route")
+    p.add_argument("--country", default=None)
+
+    p = sub.add_parser("best", help="scan candidates wider, re-rank the pool")
+    p.add_argument("--try", dest="try_n", type=int, default=10)
+    p.add_argument("--country", default=None)
+
+    p = sub.add_parser("watch", help="self-healing watchdog")
+    p.add_argument("interval", nargs="?", type=int, default=30)
+
+    p = sub.add_parser("build-pool", help="build the pool from vless:// cards")
+    p.add_argument("uris", help="file with one vless:// URI per line")
+
+    p = sub.add_parser("prove", help="prove Flow access live")
+    p.add_argument("--try", dest="try_n", type=int, default=6)
+    p.add_argument("--country", default=None)
+    p.add_argument("--profile", default=None)
+
+    sub.add_parser("countries", help="show Google's supported-country list")
+
+    raw_args = sys.argv[1:] if argv is None else list(argv)
+    if not raw_args:
+        raw_args = ["start"]
+    a = ap.parse_args(args=raw_args)
+    cmd = (a.cmd or "start").lower()
+
+    if cmd == "start":
+        return cmd_start(a.index, a.hops, a.country)
+    if cmd == "next":
+        return cmd_next()
+    if cmd == "stop":
+        return cmd_stop()
+    if cmd == "status":
+        return cmd_status()
+    if cmd == "verify":
+        return cmd_verify(a.country)
+    if cmd == "best":
+        return cmd_best(a.try_n, a.country)
+    if cmd == "watch":
+        return cmd_watch(a.interval)
+    if cmd == "build-pool":
+        cmd_build_pool(a.uris)
+        return 0
+    if cmd == "prove":
+        return cmd_prove(a.try_n, a.country, a.profile)
+    if cmd == "countries":
+        cmd_countries()
+        return 0
+    ap.print_help()
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main() or 0)

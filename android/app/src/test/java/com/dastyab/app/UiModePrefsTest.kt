@@ -16,5 +16,7 @@ class UiModePrefsTest {
         assertEquals(UiModePrefs.Mode.SIMPLE, UiModePrefs.Mode.fromName("simple"))
         assertEquals(UiModePrefs.Mode.ADVANCED, UiModePrefs.Mode.fromName("advanced"))
         assertEquals(UiModePrefs.Mode.ADVANCED, UiModePrefs.Mode.fromName("ADVANCED"))
+        assertEquals(UiModePrefs.Mode.TERMINAL, UiModePrefs.Mode.fromName("terminal"))
+        assertEquals(UiModePrefs.Mode.TERMINAL, UiModePrefs.Mode.fromName("TERMINAL"))
     }
 }

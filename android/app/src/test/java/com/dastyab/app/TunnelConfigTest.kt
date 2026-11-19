@@ -107,4 +107,20 @@ class TunnelConfigTest {
         assertEquals(TunnelConfig.Mode.SPLIT_INCLUDE, TunnelConfig.Mode.fromName("SPLIT_INCLUDE"))
         assertEquals(TunnelConfig.Mode.SPLIT_EXCLUDE, TunnelConfig.Mode.fromName("split_exclude"))
     }
+
+    @Test
+    fun googleAccessMode_andProxySanitizers() {
+        assertEquals(TunnelConfig.GoogleAccessMode.AUTO_SMART, TunnelConfig.GoogleAccessMode.fromName(null))
+        assertEquals(TunnelConfig.GoogleAccessMode.IN_APP_PROXY, TunnelConfig.GoogleAccessMode.fromName("in_app_proxy"))
+        assertEquals(TunnelConfig.ProxyScheme.SOCKS5, TunnelConfig.ProxyScheme.fromName("socks5"))
+        assertEquals(TunnelConfig.ProxyScheme.DIRECT, TunnelConfig.ProxyScheme.fromName("invalid"))
+
+        assertEquals("127.0.0.1", TunnelConfig.sanitizeProxyHost("  "))
+        assertEquals("127.0.0.1", TunnelConfig.sanitizeProxyHost("127.0.0.1:1080"))
+        assertEquals("192.168.1.50", TunnelConfig.sanitizeProxyHost(" 192.168.1.50 "))
+
+        assertEquals(10850, TunnelConfig.clampPort(80, 10850, min = TunnelConfig.MIN_LOCAL_PORT))
+        assertEquals(10850, TunnelConfig.clampPort(70000, 10850, min = TunnelConfig.MIN_LOCAL_PORT))
+        assertEquals(10809, TunnelConfig.clampPort(10809, 10850, min = TunnelConfig.MIN_LOCAL_PORT))
+    }
 }

@@ -295,4 +295,39 @@
     <string name="mode_normal_badge">عادی: زنجیره</string>
     <string name="mode_emergency_badge">اضطراری: DNS</string>
     <string name="mode_toggle_desc">تغییر بین حالت عادی زنجیره هوشمند و حالت اضطراری DNS</string>
+
+    <!-- v3.1.0 Persian Strings: Geo-Bypass, Internal Proxy & Local Proxy Port -->
+    <string name="action_google_route">مسیر و پروکسی</string>
+    <string name="action_google_route_subtitle">لنترن، پروکسی داخلی و پورت محلی</string>
+    <string name="simple_card_proxy">تنظیم مسیر و پروکسی</string>
+    <string name="simple_card_proxy_sub">لنترن، v2rayNG و پورت محلی</string>
+    <string name="browser_btn_proxy">پروکسی / VPN</string>
+    <string name="browser_btn_geocheck">تست کشور</string>
+    <string name="browser_btn_switch_site">تغییر سایت</string>
+    <string name="browser_route_checking">مسیر: در حال بررسی IP و کشور…</string>
+    <string name="tunnel_proxy_header">دور زدن تحریم AI Studio و Flow + پورت محلی</string>
+    <string name="tunnel_proxy_mode_label">روش دسترسی به گوگل و لایه پروکسی</string>
+    <string name="tunnel_upstream_scheme_label">پروتکل پروکسی بالادستی (برای پروکسی داخلی و چندلایه)</string>
+    <string name="tunnel_upstream_host_label">آدرس هاست پروکسی (معمولاً 127.0.0.1)</string>
+    <string name="tunnel_upstream_port_label">پورت پروکسی (مثلاً v2rayNG 10809/10808، NekoBox 2080، Orbot 9050)</string>
+    <string name="tunnel_local_bridge_port_label">پورت محلی دستیاب (HTTP + SOCKS5 برای v2rayNG و مرورگر)</string>
+    <string name="tunnel_auto_start_bridge">روشن ماندن پورت پروکسی محلی دستیاب در پس‌زمینه</string>
+    <string name="tunnel_btn_bridge_toggle_start">شروع پورت پروکسی محلی دستیاب</string>
+    <string name="tunnel_btn_bridge_toggle_stop">توقف پورت پروکسی محلی دستیاب</string>
+    <string name="tunnel_btn_copy_v2rayng">کپی لینک SOCKS برای v2rayNG</string>
+
+    <!-- v3.2.0: Embedded CPython 3.12 Terminal Mode -->
+    <string name="tab_terminal_mode">ترمینال</string>
+    <string name="terminal_title">هسته لینوکسی پایتون</string>
+    <string name="terminal_subtitle">پایتون ۳.۱۲ داخلی برای اجرای دقیق الگوریتم‌های لینوکسی dastyab-flow.py و dastyab-aistudio.py به همراه دستورات python3 و پوسته لینوکس.</string>
+    <string name="terminal_btn_sync">همگام‌سازی نودها</string>
+    <string name="terminal_btn_open_flow">باز کردن Flow</string>
+    <string name="terminal_btn_open_ai">AI Studio</string>
+    <string name="terminal_btn_stop">توقف Ctrl+C</string>
+    <string name="terminal_btn_clear">پاک کردن</string>
+    <string name="terminal_btn_copy">کپی</string>
+    <string name="terminal_btn_run">اجرا</string>
+    <string name="terminal_hint_command">dastyab flow best  |  python3 -c "print(1+1)"</string>
+    <string name="terminal_chips_flow">الگوریتم‌های لینوکسی Flow و AI Studio</string>
+    <string name="terminal_chips_shell">دستورات پایتون ۳ و محیط لینوکس</string>
 </resources>

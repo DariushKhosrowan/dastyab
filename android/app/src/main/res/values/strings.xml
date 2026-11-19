@@ -310,4 +310,39 @@
     <string name="mode_normal_badge">Normal: Chain</string>
     <string name="mode_emergency_badge">Emergency: DNS</string>
     <string name="mode_toggle_desc">Switch between Normal Smart Chain and Emergency DNS Blackout mode</string>
+
+    <!-- v3.1.0: Geo-Bypass, Multi-Layer Internal Proxy & Local Proxy Port (AI Studio & Flow) -->
+    <string name="action_google_route">Route &amp; Proxy</string>
+    <string name="action_google_route_subtitle">Lantern, Internal Proxy &amp; Port</string>
+    <string name="simple_card_proxy">Access &amp; Proxy Port</string>
+    <string name="simple_card_proxy_sub">Lantern, v2rayNG &amp; 127.0.0.1</string>
+    <string name="browser_btn_proxy">Proxy / VPN</string>
+    <string name="browser_btn_geocheck">Geo Check</string>
+    <string name="browser_btn_switch_site">Switch Site</string>
+    <string name="browser_route_checking">Route: Checking geo &amp; proxy…</string>
+    <string name="tunnel_proxy_header">AI Studio / Flow Geo-Bypass &amp; Local Proxy</string>
+    <string name="tunnel_proxy_mode_label">Google Access &amp; Proxy Layer Mode</string>
+    <string name="tunnel_upstream_scheme_label">Upstream Proxy Protocol (for Internal Proxy / Multi-Layer)</string>
+    <string name="tunnel_upstream_host_label">Upstream Proxy Host (e.g. 127.0.0.1)</string>
+    <string name="tunnel_upstream_port_label">Upstream Proxy Port (v2rayNG 10809/10808, NekoBox 2080, Orbot 9050)</string>
+    <string name="tunnel_local_bridge_port_label">DastYab Local Proxy Port (HTTP + SOCKS5 for v2rayNG &amp; Browser)</string>
+    <string name="tunnel_auto_start_bridge">Keep DastYab Local Proxy Port running in background</string>
+    <string name="tunnel_btn_bridge_toggle_start">Start DastYab Local Proxy Port</string>
+    <string name="tunnel_btn_bridge_toggle_stop">Stop DastYab Local Proxy Port</string>
+    <string name="tunnel_btn_copy_v2rayng">Copy SOCKS URI for v2rayNG</string>
+
+    <!-- v3.2.0: Embedded CPython 3.12 Linux-Compatible Terminal Mode -->
+    <string name="tab_terminal_mode">Terminal</string>
+    <string name="terminal_title">Linux Python Core</string>
+    <string name="terminal_subtitle">Embedded CPython 3.12 executing the exact Linux dastyab-flow.py &amp; dastyab-aistudio.py algorithms, plus python3 &amp; Linux shell built-ins.</string>
+    <string name="terminal_btn_sync">Sync Nodes</string>
+    <string name="terminal_btn_open_flow">Open Flow</string>
+    <string name="terminal_btn_open_ai">Open AI Studio</string>
+    <string name="terminal_btn_stop">Ctrl+C</string>
+    <string name="terminal_btn_clear">Clear</string>
+    <string name="terminal_btn_copy">Copy</string>
+    <string name="terminal_btn_run">Execute</string>
+    <string name="terminal_hint_command">dastyab flow best  |  python3 -c "print(1+1)"</string>
+    <string name="terminal_chips_flow">Linux Flow &amp; AI Studio Algorithms (CPython)</string>
+    <string name="terminal_chips_shell">Python 3 &amp; Linux Environment</string>
 </resources>

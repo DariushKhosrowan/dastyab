@@ -5,6 +5,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.chaquo.python")
 }
 
 android {
@@ -18,6 +19,11 @@ android {
         versionCode = 14
         versionName = "0.3.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        if (!project.hasProperty("abiSplits")) {
+            ndk {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            }
+        }
     }
 
     // Package the CLI as an extracted native executable: Android 10+ denies
@@ -107,8 +113,16 @@ android {
     }
 }
 
+chaquopy {
+    defaultConfig {
+        version = "3.12"
+        buildPython("python3")
+    }
+}
+
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
+    implementation("androidx.webkit:webkit:1.11.0")
 
     // --- Test dependencies ---
     testImplementation("junit:junit:4.13.2")

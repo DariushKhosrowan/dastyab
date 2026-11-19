@@ -98,6 +98,15 @@
         </service>
 
         <service
+            android:name=".LocalProxyService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="DastYab Local HTTP and SOCKS5 Proxy Bridge" />
+        </service>
+
+        <service
             android:name=".DastyabVpnTileService"
             android:icon="@drawable/ic_notification_vpn"
             android:label="DastYab VPN"

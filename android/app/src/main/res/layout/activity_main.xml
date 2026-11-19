@@ -147,11 +147,13 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:maxLines="1"
+                android:textSize="12sp"
                 android:text="@string/tab_simple_mode"
                 style="@style/DastyabButtonPrimary" />
 
             <View
-                android:layout_width="8dp"
+                android:layout_width="6dp"
                 android:layout_height="0dp" />
 
             <Button
@@ -159,7 +161,23 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:maxLines="1"
+                android:textSize="12sp"
                 android:text="@string/tab_advanced_mode"
+                style="@style/DastyabButton" />
+
+            <View
+                android:layout_width="6dp"
+                android:layout_height="0dp" />
+
+            <Button
+                android:id="@+id/btnTabTerminal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:maxLines="1"
+                android:textSize="12sp"
+                android:text="@string/tab_terminal_mode"
                 style="@style/DastyabButton" />
         </LinearLayout>
 
@@ -511,6 +529,18 @@
                 android:paddingBottom="16dp">
 
                 <Button
+                    android:id="@+id/btnSimpleProxyPort"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/action_google_route"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
                     android:id="@+id/btnSimpleLayerPick"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -519,7 +549,7 @@
                     style="@style/DastyabButton" />
 
                 <View
-                    android:layout_width="10dp"
+                    android:layout_width="8dp"
                     android:layout_height="0dp" />
 
                 <Button
@@ -740,13 +770,32 @@
                     style="@style/DastyabButton" />
             </LinearLayout>
 
-            <Button
-                android:id="@+id/btnDnsRules"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/vpn_btn_dns_rules"
-                style="@style/DastyabButton" />
+                android:orientation="horizontal"
+                android:paddingTop="8dp">
+
+                <Button
+                    android:id="@+id/btnDnsRules"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vpn_btn_dns_rules"
+                    style="@style/DastyabButton" />
+
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btnGoogleAccessMode"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/action_google_route"
+                    style="@style/DastyabButtonPrimary" />
+            </LinearLayout>
         </LinearLayout>
 
         <View
@@ -2055,6 +2104,301 @@
                     android:paddingEnd="12dp" />
             </HorizontalScrollView>
         </LinearLayout>
+        </LinearLayout>
+
+        <!-- ============ TERMINAL MODE (EMBEDDED CPYTHON 3.12 LINUX SHELL) ============ -->
+        <LinearLayout
+            android:id="@+id/terminalModeContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Runtime Banner Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/header_card_background"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/terminal_title"
+                        android:textSize="17sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorAccent" />
+
+                    <TextView
+                        android:id="@+id/tvTerminalRuntimeBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/version_pill_bg"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingTop="3dp"
+                        android:paddingBottom="3dp"
+                        android:text="CPython 3.12"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorChipText" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/terminal_subtitle"
+                    android:textSize="12sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="10dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnTerminalSyncNodes"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/terminal_btn_sync"
+                        android:textSize="12sp"
+                        style="@style/DastyabButton" />
+
+                    <View
+                        android:layout_width="6dp"
+                        android:layout_height="0dp" />
+
+                    <Button
+                        android:id="@+id/btnTerminalOpenAiStudio"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/terminal_btn_open_ai"
+                        android:textSize="12sp"
+                        style="@style/DastyabButton" />
+
+                    <View
+                        android:layout_width="6dp"
+                        android:layout_height="0dp" />
+
+                    <Button
+                        android:id="@+id/btnTerminalOpenFlow"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/terminal_btn_open_flow"
+                        android:textSize="12sp"
+                        style="@style/DastyabButtonPrimary" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
+
+            <!-- Quick Python & Flow Preset Chips -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/terminal_chips_flow"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textAllCaps="true"
+                android:textColor="@color/colorTextSecondary"
+                android:letterSpacing="0.06"
+                android:paddingStart="4dp"
+                android:paddingBottom="6dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingBottom="8dp">
+                <LinearLayout
+                    android:id="@+id/terminalChipsFlow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/terminal_chips_shell"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textAllCaps="true"
+                android:textColor="@color/colorTextSecondary"
+                android:letterSpacing="0.06"
+                android:paddingStart="4dp"
+                android:paddingBottom="6dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingBottom="12dp">
+                <LinearLayout
+                    android:id="@+id/terminalChipsShell"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <!-- Live Linux Terminal Console Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/card_background">
+
+                <!-- Console Toolbar -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/tvTerminalPromptHeader"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="monospace"
+                        android:text="dastyab@android:~$"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorAccent" />
+
+                    <Button
+                        android:id="@+id/btnTerminalStop"
+                        android:layout_width="wrap_content"
+                        android:layout_height="34dp"
+                        android:text="@string/terminal_btn_stop"
+                        android:textSize="11sp"
+                        android:background="@drawable/btn_danger_bg"
+                        android:textColor="@color/colorStatusError"
+                        android:visibility="gone"
+                        android:layout_marginEnd="6dp"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp" />
+
+                    <Button
+                        android:id="@+id/btnTerminalCopy"
+                        android:layout_width="wrap_content"
+                        android:layout_height="34dp"
+                        android:text="@string/terminal_btn_copy"
+                        android:textSize="11sp"
+                        style="@style/DastyabChip"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btnTerminalClear"
+                        android:layout_width="wrap_content"
+                        android:layout_height="34dp"
+                        android:text="@string/terminal_btn_clear"
+                        android:textSize="11sp"
+                        style="@style/DastyabChip" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/colorDivider" />
+
+                <ScrollView
+                    android:id="@+id/terminalOutputScroll"
+                    android:layout_width="match_parent"
+                    android:layout_height="320dp"
+                    android:background="@color/colorOutputBg"
+                    android:nestedScrollingEnabled="true">
+
+                    <TextView
+                        android:id="@+id/tvTerminalOutput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textIsSelectable="true"
+                        android:fontFamily="monospace"
+                        android:textSize="12sp"
+                        android:lineSpacingExtra="3dp"
+                        android:textColor="@color/colorTextPrimary"
+                        android:padding="12dp" />
+                </ScrollView>
+
+                <ProgressBar
+                    android:id="@+id/terminalProgress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:indeterminate="true"
+                    android:visibility="gone" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/colorDivider" />
+
+                <!-- Interactive Shell Prompt Row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="$ "
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorAccent"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp" />
+
+                    <EditText
+                        android:id="@+id/terminalInput"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="@string/terminal_hint_command"
+                        android:inputType="textNoSuggestions"
+                        android:imeOptions="actionSend"
+                        android:fontFamily="monospace"
+                        android:textSize="13sp"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:background="@drawable/input_bg"
+                        android:textColor="@color/colorTextPrimary"
+                        android:textColorHint="@color/colorTextSecondary" />
+
+                    <Button
+                        android:id="@+id/btnTerminalRun"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/terminal_btn_run"
+                        style="@style/DastyabButtonPrimary" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
 
         <!-- ============ BOTTOM ACTIONS ============ -->

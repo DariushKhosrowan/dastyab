@@ -3,8 +3,9 @@ package com.dastyab.app
 import android.content.Context
 
 /**
- * UiModePrefs — persists whether the user prefers Simple Mode (1-tap automatic UI)
- * or Advanced Mode (full pro VPN layers, harvester editor, toolbox, and CLI).
+ * UiModePrefs — persists whether the user prefers Simple Mode (1-tap automatic UI),
+ * Advanced Mode (full pro VPN layers, harvester editor, toolbox, and CLI),
+ * or Terminal Mode (embedded CPython 3.12 Linux-compatible shell).
  */
 object UiModePrefs {
 
@@ -14,7 +15,8 @@ object UiModePrefs {
 
     enum class Mode {
         SIMPLE,
-        ADVANCED;
+        ADVANCED,
+        TERMINAL;
 
         companion object {
             fun fromName(name: String?): Mode {

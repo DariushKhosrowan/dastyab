@@ -20,15 +20,18 @@ import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -56,17 +59,33 @@ class MainActivity : Activity() {
     private lateinit var historySpinner: Spinner
     private lateinit var binary: File
 
-    // Simple / Advanced Mode views
+    // Simple / Advanced / Terminal Mode views
     private lateinit var btnTabSimple: Button
     private lateinit var btnTabAdvanced: Button
+    private lateinit var btnTabTerminal: Button
     private lateinit var simpleModeContainer: LinearLayout
     private lateinit var advancedModeContainer: LinearLayout
+    private lateinit var terminalModeContainer: LinearLayout
     private lateinit var simpleStatusDot: View
     private lateinit var tvSimpleHeroTitle: TextView
     private lateinit var tvSimpleReachability: TextView
     private lateinit var simpleProgress: ProgressBar
     private lateinit var btnSimpleMagicAutopilot: Button
     private lateinit var btnSimpleQuickToggle: Button
+
+    // Terminal Mode views (CPython 3.12 Linux-compatible shell)
+    private lateinit var tvTerminalRuntimeBadge: TextView
+    private lateinit var tvTerminalPromptHeader: TextView
+    private lateinit var terminalOutputScroll: ScrollView
+    private lateinit var tvTerminalOutput: TextView
+    private lateinit var terminalProgress: ProgressBar
+    private lateinit var terminalInput: EditText
+    private lateinit var btnTerminalRun: Button
+    private lateinit var btnTerminalStop: Button
+    private val terminalRunning = AtomicBoolean(false)
+    private val terminalProcessHolder = AtomicReference<Process?>(null)
+    @Volatile
+    private var terminalBannerShown = false
 
     // VPN Tunnel card views (Advanced Mode)
     private lateinit var vpnDot: View
@@ -151,17 +170,29 @@ class MainActivity : Activity() {
         historySpinner = findViewById(R.id.historySpinner)
         binary = File(applicationInfo.nativeLibraryDir, "libdastyab.so")
 
-        // Simple / Advanced Mode bindings
+        // Simple / Advanced / Terminal Mode bindings
         btnTabSimple = findViewById(R.id.btnTabSimple)
         btnTabAdvanced = findViewById(R.id.btnTabAdvanced)
+        btnTabTerminal = findViewById(R.id.btnTabTerminal)
         simpleModeContainer = findViewById(R.id.simpleModeContainer)
         advancedModeContainer = findViewById(R.id.advancedModeContainer)
+        terminalModeContainer = findViewById(R.id.terminalModeContainer)
         simpleStatusDot = findViewById(R.id.simpleStatusDot)
         tvSimpleHeroTitle = findViewById(R.id.tvSimpleHeroTitle)
         tvSimpleReachability = findViewById(R.id.tvSimpleReachability)
         simpleProgress = findViewById(R.id.simpleProgress)
         btnSimpleMagicAutopilot = findViewById(R.id.btnSimpleMagicAutopilot)
         btnSimpleQuickToggle = findViewById(R.id.btnSimpleQuickToggle)
+
+        // Terminal Mode bindings
+        tvTerminalRuntimeBadge = findViewById(R.id.tvTerminalRuntimeBadge)
+        tvTerminalPromptHeader = findViewById(R.id.tvTerminalPromptHeader)
+        terminalOutputScroll = findViewById(R.id.terminalOutputScroll)
+        tvTerminalOutput = findViewById(R.id.tvTerminalOutput)
+        terminalProgress = findViewById(R.id.terminalProgress)
+        terminalInput = findViewById(R.id.terminalInput)
+        btnTerminalRun = findViewById(R.id.btnTerminalRun)
+        btnTerminalStop = findViewById(R.id.btnTerminalStop)
 
         // VPN Tunnel card bindings
         vpnDot = findViewById(R.id.vpnDot)
@@ -244,9 +275,11 @@ class MainActivity : Activity() {
             }
         }
 
-        // ── Simple / Advanced Mode Switcher ──
+        // ── Simple / Advanced / Terminal Mode Switcher ──
         btnTabSimple.setOnClickListener { applyUiMode(UiModePrefs.Mode.SIMPLE) }
         btnTabAdvanced.setOnClickListener { applyUiMode(UiModePrefs.Mode.ADVANCED) }
+        btnTabTerminal.setOnClickListener { applyUiMode(UiModePrefs.Mode.TERMINAL) }
+        setupTerminalModeUi()
         applyUiMode(UiModePrefs.getMode(this), persist = false)
 
         // ── Simple Mode 1-Click Controls ──
@@ -264,6 +297,9 @@ class MainActivity : Activity() {
         }
         findViewById<View>(R.id.btnSimpleOneClickBlackout).setOnClickListener {
             openRescueHub(BlackoutRescueActivity.ACTION_DNS_VPN)
+        }
+        findViewById<Button>(R.id.btnSimpleProxyPort).setOnClickListener {
+            GoogleAccessSheet.show(this) { refreshVpnCard() }
         }
         findViewById<Button>(R.id.btnSimpleLayerPick).setOnClickListener {
             showQuickLayerSwitcherDialog()
@@ -296,6 +332,9 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.btnDnsRules).setOnClickListener {
             DomainDnsDialog.show(this) { refreshVpnCard() }
+        }
+        findViewById<Button>(R.id.btnGoogleAccessMode).setOnClickListener {
+            GoogleAccessSheet.show(this) { refreshVpnCard() }
         }
 
         // ── Blackout Rescue & Harvesting Quick Actions ──
@@ -455,6 +494,11 @@ class MainActivity : Activity() {
             showSafeModeRecoveryDialog(notice)
         }
 
+        val initialSettings = TunnelConfig.load(this)
+        if (initialSettings.autoStartLocalBridge && !LocalProxyService.isRunning()) {
+            LocalProxyService.startSafely(this)
+        }
+
         if (intent?.getBooleanExtra(EXTRA_AUTO_CONNECT_VPN, false) == true && !DastyabVpnService.isConnected()) {
             requestStartVpn(null, null)
         }
@@ -478,7 +522,10 @@ class MainActivity : Activity() {
 
     private fun registerVpnReceiver() {
         if (vpnReceiverRegistered) return
-        val filter = IntentFilter(DastyabVpnService.ACTION_STATE_CHANGED)
+        val filter = IntentFilter().apply {
+            addAction(DastyabVpnService.ACTION_STATE_CHANGED)
+            addAction(LocalProxyService.ACTION_STATE_CHANGED)
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(vpnStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -624,46 +671,96 @@ class MainActivity : Activity() {
     }
 
     private fun launchGoogleServiceViaVpn(serviceName: String, url: String) {
-        val settings = TunnelConfig.load(this)
-        if (settings.autoVpnForGoogle && !DastyabVpnService.isConnected()) {
-            postOutput("Starting ${settings.mode.label} encrypted tunnel before checking $serviceName…\n")
-            requestStartVpn(serviceName, url)
-        } else {
-            verifyAndOpenGoogleService(serviceName, url)
+        setBusy(true)
+        postStatus("Preparing best route for $serviceName…")
+        setStatusDot(DotState.ORANGE)
+        thread(isDaemon = true, name = "dastyab-google-launch") {
+            val settings = TunnelConfig.load(this)
+            var route = GeoBypassEngine.resolveCurrentRoute(this, settings)
+            if (route.shouldStartLocalBridge) {
+                LocalProxyService.startSafely(this)
+                var waited = 0
+                while (LocalProxyService.activePort() == null && waited < 900) {
+                    try { Thread.sleep(60) } catch (_: InterruptedException) { break }
+                    waited += 60
+                }
+                route = GeoBypassEngine.resolveCurrentRoute(this, settings)
+            }
+            postUi {
+                setBusy(false)
+                if (route.shouldStartDastyabVpn && !DastyabVpnService.isConnected()) {
+                    postOutput("Starting ${settings.mode.label} encrypted tunnel before checking $serviceName…\n")
+                    requestStartVpn(serviceName, url)
+                } else {
+                    if (route.externalVpnActive) {
+                        postOutput("External VPN (e.g. Lantern) active — keeping OS VPN untouched.\n")
+                    } else if (route.webViewHttpProxyPort != null) {
+                        postOutput("Using Internal App Proxy (${route.routeLabel}) without conflicting with system VPN.\n")
+                    }
+                    verifyAndOpenGoogleService(serviceName, url, route)
+                }
+            }
         }
     }
 
     /**
-     * Smart AI Studio / Flow launcher: verifies real HTTPS reachability first so the user
-     * never lands on a broken page, and offers 1-tap Newbie Autopilot if the ISP blocks it.
+     * Smart AI Studio / Flow launcher: verifies BOTH egress country (151-country Flow allowlist)
+     * and real HTTPS reachability through the active VPN/proxy path before opening.
      */
-    private fun verifyAndOpenGoogleService(serviceName: String, url: String) {
+    private fun verifyAndOpenGoogleService(
+        serviceName: String,
+        url: String,
+        resolvedRoute: GeoBypassEngine.RouteResolution? = null
+    ) {
         setBusy(true)
-        postStatus("Verifying $serviceName reachability…")
+        postStatus("Verifying $serviceName geo & reachability…")
         setStatusDot(DotState.ORANGE)
-        postOutput("Verifying live HTTPS reachability for $serviceName ($url)…\n")
+        postOutput("Verifying live geo country & HTTPS access for $serviceName ($url)…\n")
 
         thread(isDaemon = true, name = "dastyab-verify-google") {
-            val check = ReachabilityVerifier.verifyHttpsEndpoint(serviceName, url, timeoutMs = 3500)
+            val route = resolvedRoute ?: GeoBypassEngine.resolveCurrentRoute(this)
+            val probe = GeoBypassEngine.runAccessProbe(route, timeoutMs = 3800)
+            val isFlowTarget = url.contains("flow.google.com", ignoreCase = true)
+            val targetOk = if (isFlowTarget) probe.readyForFlow else probe.readyForAiStudio
+
             postUi {
                 setBusy(false)
-                if (check.isOk) {
-                    tvReachabilityBadge.text = "$serviceName ✓ (${check.latencyMs}ms · HTTP ${check.httpCode})"
-                    postOutput("OK: $serviceName verified reachable → ${check.detail}\n")
+                val ccTag = probe.egress?.countryCode ?: "??"
+                if (targetOk) {
+                    val lat = if (isFlowTarget) probe.flow.latencyMs else probe.aiStudio.latencyMs
+                    tvReachabilityBadge.text = "$serviceName ✓ ($ccTag · ${lat}ms · ${probe.routeLabel})"
+                    postOutput("OK: $serviceName verified via ${probe.routeLabel} (Exit $ccTag ${probe.egress?.ip ?: ""})\n")
                     openBrowserUrl(serviceName, url)
                 } else {
-                    tvReachabilityBadge.text = "$serviceName blocked (${check.status.name}) → Tap 1-Tap Autopilot"
-                    postOutput("WARNING: $serviceName unreachable (${check.detail})\n")
-                    postStatus("$serviceName unreachable — tap Autopilot to auto-fix")
+                    val reason = when {
+                        probe.egress != null && !probe.flowCountrySupported ->
+                            "Geo-blocked country $ccTag (Flow requires foreign IP)"
+                        isFlowTarget && probe.flow.unsupportedRegion ->
+                            "Flow returned /unsupported-country ($ccTag)"
+                        isFlowTarget -> probe.flow.detail
+                        else -> probe.aiStudio.detail
+                    }
+                    tvReachabilityBadge.text = "$serviceName blocked ($ccTag) → Tap Route & Proxy"
+                    postOutput("WARNING: $serviceName check failed via ${probe.routeLabel}: $reason\n")
+                    postStatus("$serviceName geo/access issue — switch route or open anyway")
                     setStatusDot(DotState.RED)
                     UiSafety.safeShowDialog(
                         this,
                         AlertDialog.Builder(this)
-                            .setTitle("$serviceName Not Reachable Yet")
-                            .setMessage("Live check: ${check.detail}\n\nLet 1-Tap Autopilot automatically find the fastest DoH DNS, harvest & benchmark working configs, and fix access?")
-                            .setPositiveButton("Run 1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
-                            .setNeutralButton("Open Anyway") { _, _ -> openBrowserUrl(serviceName, url) }
-                            .setNegativeButton("Rescue Tools") { _, _ -> showGoogleRescueDialog(serviceName, url) }
+                            .setTitle(probe.headline)
+                            .setMessage(
+                                "Route: ${probe.routeLabel}\n" +
+                                    "Exit IP: ${probe.egress?.ip ?: "Unknown"} ($ccTag)\n" +
+                                    "Issue: $reason\n\n" +
+                                    probe.recommendation
+                            )
+                            .setPositiveButton("Route / Proxy Modes") { _, _ ->
+                                GoogleAccessSheet.show(this, serviceName, url) { refreshVpnCard() }
+                            }
+                            .setNeutralButton("Open Browser Anyway") { _, _ ->
+                                openBrowserUrl(serviceName, url)
+                            }
+                            .setNegativeButton("1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
                     )
                 }
             }
@@ -830,10 +927,12 @@ class MainActivity : Activity() {
         if (!UiSafety.isActivityAlive(this)) return
         val statusObj = DastyabVpnService.getStatus()
         val settings = TunnelConfig.load(this)
+        val externalVpn = NetworkUtils.hasActiveExternalVpn(this)
+        val bridgePort = LocalProxyService.activePort()
         val activeMode = if (statusObj.state == DastyabVpnService.State.CONNECTED) statusObj.mode else settings.mode
 
-        when (statusObj.state) {
-            DastyabVpnService.State.CONNECTED -> {
+        when {
+            statusObj.state == DastyabVpnService.State.CONNECTED -> {
                 vpnDot.background = getDrawable(R.drawable.status_dot_green)
                 simpleStatusDot.background = getDrawable(R.drawable.status_dot_green)
                 tvVpnState.text = "${getString(R.string.vpn_status_connected)} · ${activeMode.label}"
@@ -841,7 +940,7 @@ class MainActivity : Activity() {
                 btnVpnToggle.text = getString(R.string.vpn_btn_disconnect)
                 btnSimpleQuickToggle.text = getString(R.string.vpn_btn_disconnect)
             }
-            DastyabVpnService.State.CONNECTING -> {
+            statusObj.state == DastyabVpnService.State.CONNECTING -> {
                 vpnDot.background = getDrawable(R.drawable.status_dot_orange)
                 simpleStatusDot.background = getDrawable(R.drawable.status_dot_orange)
                 tvVpnState.text = getString(R.string.vpn_status_connecting)
@@ -849,7 +948,20 @@ class MainActivity : Activity() {
                 btnVpnToggle.text = getString(R.string.vpn_btn_disconnect)
                 btnSimpleQuickToggle.text = getString(R.string.vpn_btn_disconnect)
             }
-            DastyabVpnService.State.DISCONNECTED -> {
+            externalVpn || bridgePort != null -> {
+                vpnDot.background = getDrawable(R.drawable.status_dot_green)
+                simpleStatusDot.background = getDrawable(R.drawable.status_dot_green)
+                val extLabel = when {
+                    externalVpn && bridgePort != null -> "External VPN + Proxy :$bridgePort"
+                    externalVpn -> "External VPN Active (Lantern / System)"
+                    else -> "Local Proxy Active (:$bridgePort)"
+                }
+                tvVpnState.text = extLabel
+                tvSimpleHeroTitle.text = extLabel
+                btnVpnToggle.text = getString(R.string.vpn_btn_connect)
+                btnSimpleQuickToggle.text = getString(R.string.vpn_btn_connect)
+            }
+            else -> {
                 vpnDot.background = getDrawable(R.drawable.status_dot_gray)
                 simpleStatusDot.background = getDrawable(R.drawable.status_dot_gray)
                 tvVpnState.text = "${getString(R.string.vpn_status_disconnected)} · ${activeMode.label}"
@@ -875,7 +987,13 @@ class MainActivity : Activity() {
         } else {
             ""
         }
-        tvVpnDetails.text = "$endpoint · DNS ${settings.dnsPrimary}$splitSuffix$iranBypassTag$watchdogTag"
+        val proxyTag = when {
+            bridgePort != null -> " · LocalPort :$bridgePort"
+            settings.upstreamProxyScheme != TunnelConfig.ProxyScheme.DIRECT ->
+                " · ${settings.upstreamProxyScheme.name}:${settings.upstreamProxyPort}"
+            else -> ""
+        }
+        tvVpnDetails.text = "$endpoint · DNS ${settings.dnsPrimary}$splitSuffix$iranBypassTag$watchdogTag$proxyTag"
 
         // Highlight active quick-mode chip
         val isSplit = activeMode == TunnelConfig.Mode.SPLIT_INCLUDE || activeMode == TunnelConfig.Mode.SPLIT_EXCLUDE
@@ -890,44 +1008,239 @@ class MainActivity : Activity() {
         catch (_: android.content.ActivityNotFoundException) { postStatus("Screen unavailable") }
     }
 
-    /** Switches between Simple Mode (1-click automatic UI) and Advanced Mode (full pro control plane). */
+    /** Switches between Simple Mode, Advanced Mode, and Terminal Mode (CPython 3.12). */
     private fun applyUiMode(mode: UiModePrefs.Mode, persist: Boolean = true) {
         if (persist) UiModePrefs.setMode(this, mode)
-        val isSimple = mode == UiModePrefs.Mode.SIMPLE
-        simpleModeContainer.visibility = if (isSimple) View.VISIBLE else View.GONE
-        advancedModeContainer.visibility = if (isSimple) View.GONE else View.VISIBLE
-        btnTabSimple.alpha = if (isSimple) 1.0f else 0.55f
-        btnTabAdvanced.alpha = if (isSimple) 0.55f else 1.0f
+        simpleModeContainer.visibility = if (mode == UiModePrefs.Mode.SIMPLE) View.VISIBLE else View.GONE
+        advancedModeContainer.visibility = if (mode == UiModePrefs.Mode.ADVANCED) View.VISIBLE else View.GONE
+        terminalModeContainer.visibility = if (mode == UiModePrefs.Mode.TERMINAL) View.VISIBLE else View.GONE
+        btnTabSimple.alpha = if (mode == UiModePrefs.Mode.SIMPLE) 1.0f else 0.55f
+        btnTabAdvanced.alpha = if (mode == UiModePrefs.Mode.ADVANCED) 1.0f else 0.55f
+        btnTabTerminal.alpha = if (mode == UiModePrefs.Mode.TERMINAL) 1.0f else 0.55f
+        if (mode == UiModePrefs.Mode.TERMINAL) {
+            initTerminalSessionIfNeeded()
+        }
     }
 
-    /** 1-tap Speed, Exit IP & AI Studio / Flow live check right from Simple Mode. */
+    private fun setupTerminalModeUi() {
+        buildTerminalPresetChips(R.id.terminalChipsFlow, TerminalCommandRouter.PYTHON_FLOW_PRESETS)
+        buildTerminalPresetChips(R.id.terminalChipsShell, TerminalCommandRouter.LINUX_PYTHON_PRESETS)
+
+        btnTerminalRun.setOnClickListener {
+            runTerminalCommand(terminalInput.text.toString())
+        }
+        btnTerminalStop.setOnClickListener { cancelTerminalCommand() }
+        findViewById<Button>(R.id.btnTerminalClear).setOnClickListener {
+            tvTerminalOutput.text = ""
+        }
+        findViewById<Button>(R.id.btnTerminalCopy).setOnClickListener {
+            if (UiSafety.copyTextSafely(this, "Dastyab Terminal", tvTerminalOutput.text.toString())) {
+                Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+            }
+        }
+        findViewById<Button>(R.id.btnTerminalSyncNodes).setOnClickListener {
+            thread(isDaemon = true, name = "dastyab-term-sync") {
+                val count = PythonRuntimeBridge.syncProfile(this)
+                postUi {
+                    appendTerminalOutput("[sync] Synced $count node(s) + active route into ~/.dastyab/profiles/default/\n")
+                }
+            }
+        }
+        findViewById<Button>(R.id.btnTerminalOpenAiStudio).setOnClickListener {
+            launchGoogleServiceViaVpn("Google AI Studio", CommandCompat.AISTUDIO_URL)
+        }
+        findViewById<Button>(R.id.btnTerminalOpenFlow).setOnClickListener {
+            launchGoogleServiceViaVpn("Google Flow", CommandCompat.FLOW_URL)
+        }
+        terminalInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE) {
+                runTerminalCommand(terminalInput.text.toString())
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun buildTerminalPresetChips(containerId: Int, presets: List<TerminalCommandRouter.QuickPreset>) {
+        val container = findViewById<LinearLayout>(containerId)
+        presets.forEach { preset ->
+            container.addView(Button(this, null, 0, R.style.DastyabChip).apply {
+                text = preset.label
+                setOnClickListener {
+                    if (!terminalRunning.get()) {
+                        terminalInput.setText(preset.command)
+                        if (preset.autoRun) {
+                            runTerminalCommand(preset.command)
+                        }
+                    }
+                }
+            })
+        }
+    }
+
+    private fun initTerminalSessionIfNeeded() {
+        if (terminalBannerShown) return
+        terminalBannerShown = true
+        appendTerminalOutput("Booting embedded CPython 3.12 Linux-compatible shell...\n")
+        thread(isDaemon = true, name = "dastyab-cpython-boot") {
+            val ver = PythonRuntimeBridge.getPythonVersion(this)
+            val synced = PythonRuntimeBridge.syncProfile(this)
+            val cwd = PythonRuntimeBridge.getPromptPath(this)
+            postUi {
+                tvTerminalRuntimeBadge.text = ver
+                tvTerminalPromptHeader.text = TerminalCommandRouter.formatPrompt(cwd).trimEnd()
+                appendTerminalOutput(
+                    "Ready: $ver | Synced $synced node(s) to ~/.dastyab/profiles/default/\n" +
+                        "Run `dastyab flow best`, `dastyab flow start`, `dastyab aistudio verify`, or `python3 -c \"...\"`.\n\n"
+                )
+            }
+        }
+    }
+
+    private fun runTerminalCommand(rawCommand: String) {
+        if (!terminalRunning.compareAndSet(false, true)) return
+        val cmd = TerminalCommandRouter.normalizeInput(rawCommand)
+        when (TerminalCommandRouter.classify(cmd)) {
+            TerminalCommandRouter.Action.EMPTY -> {
+                terminalRunning.set(false)
+                return
+            }
+            TerminalCommandRouter.Action.CLEAR -> {
+                tvTerminalOutput.text = ""
+                terminalInput.setText("")
+                terminalRunning.set(false)
+                return
+            }
+            TerminalCommandRouter.Action.PYTHON_SHELL -> { /* execute */ }
+        }
+
+        val currentPrompt = tvTerminalPromptHeader.text.toString()
+        appendTerminalOutput("$currentPrompt $cmd\n")
+        terminalInput.setText("")
+        setTerminalBusy(true)
+
+        thread(isDaemon = true, name = "dastyab-cpython-exec") {
+            val exitCode = try {
+                PythonRuntimeBridge.executeCommand(
+                    context = this,
+                    commandLine = cmd,
+                    callbacks = object : PythonRuntimeBridge.HostCallbacks {
+                        override fun onStdout(text: String) {
+                            postUi { appendTerminalOutput(text) }
+                        }
+
+                        override fun onEvent(kind: String, payloadJson: String) {
+                            postUi { handleTerminalHostEvent(kind, payloadJson) }
+                        }
+
+                        override fun runNativeCli(args: List<String>, outputCallback: (String) -> Unit): Int {
+                            return PythonRuntimeBridge.execNativeBinary(
+                                context = this@MainActivity,
+                                binary = binary,
+                                args = args,
+                                onChunk = outputCallback,
+                                processHolder = terminalProcessHolder
+                            )
+                        }
+                    }
+                )
+            } finally {
+                terminalRunning.set(false)
+            }
+            val nextCwd = PythonRuntimeBridge.getPromptPath(this)
+            postUi {
+                setTerminalBusy(false)
+                tvTerminalPromptHeader.text = TerminalCommandRouter.formatPrompt(nextCwd).trimEnd()
+                if (exitCode != 0) {
+                    appendTerminalOutput("[exit $exitCode]\n")
+                }
+                refreshVpnCard()
+            }
+        }
+    }
+
+    private fun cancelTerminalCommand() {
+        PythonRuntimeBridge.requestStop(this)
+        terminalProcessHolder.get()?.let { terminate(it) }
+        appendTerminalOutput("\n^C Stop requested\n")
+    }
+
+    private fun setTerminalBusy(busy: Boolean) {
+        btnTerminalRun.isEnabled = !busy
+        terminalInput.isEnabled = !busy
+        btnTerminalStop.visibility = if (busy) View.VISIBLE else View.GONE
+        terminalProgress.visibility = if (busy) View.VISIBLE else View.GONE
+    }
+
+    private fun appendTerminalOutput(text: String) {
+        tvTerminalOutput.append(formatOutput(text))
+        if (tvTerminalOutput.length() > MAX_OUTPUT_CHARS) {
+            val full = tvTerminalOutput.text
+            tvTerminalOutput.text = full.subSequence(full.length - MAX_OUTPUT_CHARS, full.length)
+        }
+        terminalOutputScroll.post {
+            terminalOutputScroll.fullScroll(View.FOCUS_DOWN)
+        }
+    }
+
+    private fun handleTerminalHostEvent(kind: String, payloadJson: String) {
+        val obj = runCatching { JSONObject(payloadJson) }.getOrNull() ?: JSONObject()
+        when (kind) {
+            "CLEAR_TERMINAL" -> tvTerminalOutput.text = ""
+            "OPEN_BROWSER" -> {
+                val url = obj.optString("url", CommandCompat.FLOW_URL)
+                val title = obj.optString("title", "DastYab Browser")
+                openBrowserUrl(title, url)
+            }
+            "SYNC_BEST_VLESS" -> {
+                val uri = obj.optString("uri", "")
+                if (uri.startsWith("vless://", ignoreCase = true)) {
+                    val cur = TunnelConfig.load(this)
+                    if (cur.vlessUri.isBlank()) {
+                        TunnelConfig.saveVlessUri(this, uri)
+                        appendTerminalOutput("[android] Synced fastest VLESS endpoint to active profile.\n")
+                    }
+                }
+            }
+        }
+    }
+
+    /** 1-tap Speed, Exit Country/Geo & AI Studio / Flow live check right from Simple Mode. */
     private fun runQuickSpeedAndIpCheck() {
         simpleProgress.visibility = View.VISIBLE
-        tvSimpleReachability.text = "Testing Exit IP, AI Studio & Google Flow…"
+        tvSimpleReachability.text = "Testing Exit Country, AI Studio & Google Flow…"
         thread(isDaemon = true, name = "dastyab-quick-speed") {
-            val trace = NetworkTools.fetchExitTrace(timeoutMs = 3500)
-            val check = ReachabilityVerifier.verifyAll(timeoutMs = 3000)
+            val route = GeoBypassEngine.resolveCurrentRoute(this)
+            val probe = GeoBypassEngine.runAccessProbe(route, timeoutMs = 3800)
             postUi {
                 simpleProgress.visibility = View.GONE
-                val webMark = if (check.internet.isOk) "Web ✓" else "Web ✗"
-                val aiMark = if (check.aiStudio.isOk) "AI Studio ✓" else "AI Studio ✗"
-                val flowMark = if (check.flow.isOk) "Flow ✓" else "Flow ✗"
-                val badge = "$webMark · $aiMark · $flowMark"
+                val egress = probe.egress
+                val ccMark = if (egress != null) {
+                    if (probe.flowCountrySupported) "${egress.countryCode} ✓" else "${egress.countryCode} ✗"
+                } else "Geo ?"
+                val aiMark = if (probe.readyForAiStudio) "AI Studio ✓" else "AI Studio ✗"
+                val flowMark = if (probe.readyForFlow) "Flow ✓" else "Flow ✗"
+                val badge = "$ccMark · $aiMark · $flowMark"
                 tvSimpleReachability.text = badge
                 tvReachabilityBadge.text = badge
 
-                val ipLine = if (trace != null) {
-                    "Exit IP: ${trace.ip} (${trace.location} · ${trace.colo})\nTLS: ${trace.tls} · HTTP: ${trace.http}"
+                val ipLine = if (egress != null) {
+                    val supportTag = if (probe.flowCountrySupported) "Supported for Flow ✓" else "Geo-blocked for Flow ✗"
+                    "Route  : ${probe.routeLabel}\nExit IP: ${egress.ip} (${egress.countryCode} · ${egress.countryName})\nGeo Gate: $supportTag"
                 } else {
-                    "Exit IP: Unreachable (try 1-Tap Autopilot or DNS Blackout)"
+                    "Route  : ${probe.routeLabel}\nExit IP: Unreachable (check Lantern, proxy port, or Autopilot)"
                 }
-                val msg = "$ipLine\n\nWeb: ${check.internet.detail}\nAI Studio: ${check.aiStudio.detail}\nGoogle Flow: ${check.flow.detail}"
+                val msg = "$ipLine\n\nAI Studio: ${probe.aiStudio.detail}\nGoogle Flow: ${probe.flow.detail}\n\n${probe.recommendation}"
                 UiSafety.safeShowDialog(
                     this,
                     AlertDialog.Builder(this)
-                        .setTitle("Live Speed & Reachability")
+                        .setTitle(probe.headline)
                         .setMessage(msg)
-                        .setPositiveButton("Run 1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
+                        .setPositiveButton("Route / Proxy Modes") { _, _ ->
+                            GoogleAccessSheet.show(this) { refreshVpnCard() }
+                        }
+                        .setNeutralButton("1-Tap Autopilot") { _, _ -> runNewbieAutopilot() }
                         .setNegativeButton(android.R.string.ok, null)
                 )
             }
@@ -999,6 +1312,7 @@ class MainActivity : Activity() {
             handler.removeCallbacksAndMessages(null)
         }
         cancelCurrentOperation()
+        cancelTerminalCommand()
         super.onDestroy()
     }
 

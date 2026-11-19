@@ -17,3 +17,16 @@
 
 -keepnames class kotlinx.** { *; }
 -dontwarn kotlinx.**
+
+# Keep AndroidX WebKit ProxyController classes used for per-app browser proxy routing
+-keep class androidx.webkit.** { *; }
+-dontwarn androidx.webkit.**
+
+# Keep Chaquopy Python runtime classes and native JNI bridge methods
+-keep class com.chaquo.python.** { *; }
+-keepclassmembers class com.chaquo.python.** { *; }
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+-dontwarn com.chaquo.python.**
+

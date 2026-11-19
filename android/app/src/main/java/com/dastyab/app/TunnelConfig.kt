@@ -29,6 +29,12 @@ object TunnelConfig {
     private const val KEY_HARVESTED_CONFIGS = "harvested_configs"
     private const val KEY_AUTO_CONNECT_BOOT = "auto_connect_on_boot"
     private const val KEY_WATCHDOG_ENABLED = "watchdog_enabled"
+    private const val KEY_GOOGLE_ACCESS_MODE = "google_access_mode"
+    private const val KEY_UPSTREAM_PROXY_SCHEME = "upstream_proxy_scheme"
+    private const val KEY_UPSTREAM_PROXY_HOST = "upstream_proxy_host"
+    private const val KEY_UPSTREAM_PROXY_PORT = "upstream_proxy_port"
+    private const val KEY_LOCAL_BRIDGE_PORT = "local_bridge_port"
+    private const val KEY_AUTO_START_LOCAL_BRIDGE = "auto_start_local_bridge"
 
     const val DEFAULT_DNS_PRIMARY = "1.1.1.1"
     const val DEFAULT_DNS_SECONDARY = "8.8.8.8"
@@ -36,6 +42,11 @@ object TunnelConfig {
     const val DEFAULT_MTU = 1500
     const val MIN_MTU = 1280
     const val MAX_MTU = 1500
+    const val DEFAULT_PROXY_HOST = "127.0.0.1"
+    const val DEFAULT_UPSTREAM_PROXY_PORT = 10809
+    const val DEFAULT_LOCAL_BRIDGE_PORT = 10850
+    const val MIN_LOCAL_PORT = 1024
+    const val MAX_PORT = 65535
 
     enum class Mode(val label: String, val subtitle: String) {
         SMART(
@@ -63,6 +74,49 @@ object TunnelConfig {
             fun fromName(name: String?): Mode {
                 if (name.isNullOrBlank()) return SMART
                 return values().firstOrNull { it.name.equals(name, ignoreCase = true) } ?: SMART
+            }
+        }
+    }
+
+    enum class GoogleAccessMode(val label: String, val subtitle: String) {
+        AUTO_SMART(
+            "Auto Smart (Lantern / Proxy / VPN)",
+            "Never steals an active external VPN like Lantern; auto-uses listening local proxies or DastYab VPN"
+        ),
+        EXTERNAL_VPN(
+            "External VPN (Lantern / System)",
+            "Keeps Android VPN slot free so Lantern or another VPN app runs on top cleanly"
+        ),
+        IN_APP_PROXY(
+            "Internal App Proxy (Multi-Layer)",
+            "Routes AI Studio & Flow inside DastYab Browser via local proxy while another VPN runs on top"
+        ),
+        VPN_CHAIN_PROXY(
+            "DastYab VPN + Local Proxy Chain",
+            "Runs DastYab VpnService chaining HTTP/HTTPS traffic through a local proxy port (API 29+)"
+        ),
+        LOCAL_BRIDGE(
+            "DastYab Local Proxy Port (For v2rayNG)",
+            "Exposes DastYab local HTTP + SOCKS5 port (127.0.0.1:<port>) for v2rayNG, Chrome & browser"
+        );
+
+        companion object {
+            fun fromName(name: String?): GoogleAccessMode {
+                if (name.isNullOrBlank()) return AUTO_SMART
+                return values().firstOrNull { it.name.equals(name, ignoreCase = true) } ?: AUTO_SMART
+            }
+        }
+    }
+
+    enum class ProxyScheme(val label: String) {
+        DIRECT("Direct / Active System VPN"),
+        HTTP("HTTP Proxy"),
+        SOCKS5("SOCKS5 Proxy");
+
+        companion object {
+            fun fromName(name: String?): ProxyScheme {
+                if (name.isNullOrBlank()) return DIRECT
+                return values().firstOrNull { it.name.equals(name, ignoreCase = true) } ?: DIRECT
             }
         }
     }
@@ -96,7 +150,13 @@ object TunnelConfig {
         val dnsTunnelDomain: String = "",
         val bootstrapConfig: String = "",
         val autoConnectOnBoot: Boolean = false,
-        val watchdogEnabled: Boolean = true
+        val watchdogEnabled: Boolean = true,
+        val googleAccessMode: GoogleAccessMode = GoogleAccessMode.AUTO_SMART,
+        val upstreamProxyScheme: ProxyScheme = ProxyScheme.DIRECT,
+        val upstreamProxyHost: String = DEFAULT_PROXY_HOST,
+        val upstreamProxyPort: Int = DEFAULT_UPSTREAM_PROXY_PORT,
+        val localBridgePort: Int = DEFAULT_LOCAL_BRIDGE_PORT,
+        val autoStartLocalBridge: Boolean = false
     ) {
         fun parsedEndpoint(): VlessEndpoint? = parseVlessUri(vlessUri)
     }
@@ -117,7 +177,13 @@ object TunnelConfig {
             dnsTunnelDomain = (prefs.getString(KEY_DNS_TUNNEL_DOMAIN, "") ?: "").trim(),
             bootstrapConfig = (prefs.getString(KEY_BOOTSTRAP_CONFIG, "") ?: "").trim(),
             autoConnectOnBoot = prefs.getBoolean(KEY_AUTO_CONNECT_BOOT, false),
-            watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+            watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true),
+            googleAccessMode = GoogleAccessMode.fromName(prefs.getString(KEY_GOOGLE_ACCESS_MODE, GoogleAccessMode.AUTO_SMART.name)),
+            upstreamProxyScheme = ProxyScheme.fromName(prefs.getString(KEY_UPSTREAM_PROXY_SCHEME, ProxyScheme.DIRECT.name)),
+            upstreamProxyHost = sanitizeProxyHost(prefs.getString(KEY_UPSTREAM_PROXY_HOST, DEFAULT_PROXY_HOST)),
+            upstreamProxyPort = clampPort(prefs.getInt(KEY_UPSTREAM_PROXY_PORT, DEFAULT_UPSTREAM_PROXY_PORT), DEFAULT_UPSTREAM_PROXY_PORT, min = 1),
+            localBridgePort = clampPort(prefs.getInt(KEY_LOCAL_BRIDGE_PORT, DEFAULT_LOCAL_BRIDGE_PORT), DEFAULT_LOCAL_BRIDGE_PORT, min = MIN_LOCAL_PORT),
+            autoStartLocalBridge = prefs.getBoolean(KEY_AUTO_START_LOCAL_BRIDGE, false)
         )
     }
 
@@ -136,7 +202,36 @@ object TunnelConfig {
             .putString(KEY_BOOTSTRAP_CONFIG, settings.bootstrapConfig.trim())
             .putBoolean(KEY_AUTO_CONNECT_BOOT, settings.autoConnectOnBoot)
             .putBoolean(KEY_WATCHDOG_ENABLED, settings.watchdogEnabled)
+            .putString(KEY_GOOGLE_ACCESS_MODE, settings.googleAccessMode.name)
+            .putString(KEY_UPSTREAM_PROXY_SCHEME, settings.upstreamProxyScheme.name)
+            .putString(KEY_UPSTREAM_PROXY_HOST, sanitizeProxyHost(settings.upstreamProxyHost))
+            .putInt(KEY_UPSTREAM_PROXY_PORT, clampPort(settings.upstreamProxyPort, DEFAULT_UPSTREAM_PROXY_PORT, min = 1))
+            .putInt(KEY_LOCAL_BRIDGE_PORT, clampPort(settings.localBridgePort, DEFAULT_LOCAL_BRIDGE_PORT, min = MIN_LOCAL_PORT))
+            .putBoolean(KEY_AUTO_START_LOCAL_BRIDGE, settings.autoStartLocalBridge)
             .apply()
+    }
+
+    fun saveGoogleProxyConfig(
+        context: Context,
+        accessMode: GoogleAccessMode,
+        scheme: ProxyScheme,
+        host: String,
+        port: Int,
+        localBridgePort: Int = load(context).localBridgePort,
+        autoStartBridge: Boolean = load(context).autoStartLocalBridge
+    ) {
+        val current = load(context)
+        save(
+            context,
+            current.copy(
+                googleAccessMode = accessMode,
+                upstreamProxyScheme = scheme,
+                upstreamProxyHost = sanitizeProxyHost(host),
+                upstreamProxyPort = clampPort(port, DEFAULT_UPSTREAM_PROXY_PORT, min = 1),
+                localBridgePort = clampPort(localBridgePort, DEFAULT_LOCAL_BRIDGE_PORT, min = MIN_LOCAL_PORT),
+                autoStartLocalBridge = autoStartBridge
+            )
+        )
     }
 
     fun saveMode(context: Context, mode: Mode) {
@@ -191,6 +286,18 @@ object TunnelConfig {
     }
 
     fun clampMtu(mtu: Int): Int = mtu.coerceIn(MIN_MTU, MAX_MTU)
+
+    fun clampPort(port: Int, fallback: Int = DEFAULT_UPSTREAM_PROXY_PORT, min: Int = 1): Int {
+        return if (port in min..MAX_PORT) port else fallback
+    }
+
+    fun sanitizeProxyHost(input: String?): String {
+        val candidate = input?.trim().orEmpty()
+        if (candidate.isEmpty() || candidate.any { it.isWhitespace() || it == '/' || it == '@' || it == ':' }) {
+            return DEFAULT_PROXY_HOST
+        }
+        return candidate
+    }
 
     fun isValidIpv4(ip: String): Boolean {
         val trimmed = ip.trim()

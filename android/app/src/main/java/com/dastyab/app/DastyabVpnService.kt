@@ -184,7 +184,7 @@ class DastyabVpnService : VpnService() {
         // even if establish() returns null or fails below.
         enterForegroundCompat(settings, "Connecting…")
 
-        val localHttpProxyPort = detectLocalHttpProxyPort()
+        val localHttpProxyPort = resolveLocalHttpProxyPort(settings)
         val dohLabel = settings.dohUrl.removePrefix("https://")
         val endpointSummary = when {
             localHttpProxyPort != null -> "Proxy 127.0.0.1:$localHttpProxyPort + DoH"
@@ -506,10 +506,20 @@ class DastyabVpnService : VpnService() {
     }
 
     /**
-     * Checks if a local HTTP proxy (e.g. v2rayNG 10809, Hiddify 12334, NekoBox 2081, Orbot 8118)
-     * is already listening on loopback so Android 10+ can transparently chain HTTP/HTTPS through it.
+     * Resolves an HTTP proxy port on loopback for Android 10+ `VpnService.Builder.setHttpProxy`.
+     * Priority: active DastYab [LocalProxyService] bridge (which can also translate SOCKS5 -> HTTP),
+     * explicit HTTP proxy port from [TunnelConfig.Settings], or well-known loopback ports.
      */
-    private fun detectLocalHttpProxyPort(): Int? {
+    private fun resolveLocalHttpProxyPort(settings: TunnelConfig.Settings): Int? {
+        LocalProxyService.activePort()?.let { return it }
+        if (settings.upstreamProxyScheme == TunnelConfig.ProxyScheme.HTTP &&
+            settings.upstreamProxyPort in 1..65535 &&
+            (settings.upstreamProxyHost == "127.0.0.1" || settings.upstreamProxyHost == "localhost")
+        ) {
+            if (CleanEndpointScout.probeTcpLatency("127.0.0.1", settings.upstreamProxyPort, 140) >= 0) {
+                return settings.upstreamProxyPort
+            }
+        }
         val ports = listOf(10809, 12334, 2081, 8118, 7890, 8080)
         for (port in ports) {
             if (CleanEndpointScout.probeTcpLatency("127.0.0.1", port, 120) >= 0) {

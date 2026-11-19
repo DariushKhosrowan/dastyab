@@ -47,9 +47,21 @@
             android:ellipsize="end" />
 
         <Button
+            android:id="@+id/btnBrowserProxyMode"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:layout_marginEnd="4dp"
+            android:text="@string/browser_btn_proxy"
+            android:textSize="11sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            style="@style/DastyabChip" />
+
+        <Button
             android:id="@+id/btnBrowserAutoFix"
             android:layout_width="wrap_content"
             android:layout_height="34dp"
+            android:layout_marginEnd="4dp"
             android:text="@string/browser_btn_autofix"
             android:textSize="11sp"
             android:paddingStart="8dp"
@@ -62,6 +74,52 @@
             android:layout_height="34dp"
             android:text="@string/browser_btn_chrome"
             android:textSize="11sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            style="@style/DastyabChip" />
+    </LinearLayout>
+
+    <!-- Live Geo & Route Banner -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/colorCard"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp">
+
+        <TextView
+            android:id="@+id/tvBrowserRouteStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/browser_route_checking"
+            android:textSize="11sp"
+            android:textColor="@color/colorTextSecondary"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <Button
+            android:id="@+id/btnBrowserGeoCheck"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:layout_marginStart="6dp"
+            android:text="@string/browser_btn_geocheck"
+            android:textSize="10sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            style="@style/DastyabChip" />
+
+        <Button
+            android:id="@+id/btnBrowserSwitchSite"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:layout_marginStart="4dp"
+            android:text="@string/browser_btn_switch_site"
+            android:textSize="10sp"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
             style="@style/DastyabChip" />
