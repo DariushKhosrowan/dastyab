@@ -6,6 +6,7 @@
     <color name="colorBackground">#0A0806</color>
     <color name="colorSurface">#15110C</color>
     <color name="colorSurfaceElevated">#1C1710</color>
+    <color name="colorCard">#1C1710</color>
     <color name="colorCardBorder">#2D2519</color>
     <color name="colorCardBorderGold">#4F3F1D</color>
     <color name="colorTextPrimary">#F3ECDA</color>

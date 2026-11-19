@@ -111,6 +111,16 @@ jobs:
             exit "$status"
           }
 
+      - name: Verify Android resources (AAPT2)
+        working-directory: android
+        run: |
+          set -o pipefail
+          bash ./gradlew :app:processDebugResources -PskipNativeCheck --no-daemon --stacktrace --console=plain 2>&1 | tee gradle-resources.log || {
+            status=$?
+            grep -n -E "Caused by:|FAILURE:|ERROR:|AAPT:|What went wrong|not found|failed" gradle-resources.log | tail -n 80 || true
+            exit "$status"
+          }
+
       - name: Run Android unit tests
         working-directory: android
         run: |
