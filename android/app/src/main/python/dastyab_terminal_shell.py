@@ -359,7 +359,7 @@ def _dispatch(prog, args, native_cli_cb, event_cb):
         rc = 0
         for name in args:
             if name in ("python3", "python"):
-                print(sys.executable or "/usr/bin/python3 (embedded CPython 3.12)")
+                print(sys.executable or "/usr/bin/python3 (embedded CPython 3.11)")
             elif name == "dastyab":
                 print(os.path.join(os.environ.get("DASTYAB_NATIVE_DIR", "/app/bin"), "libdastyab.so"))
             elif name in ("dastyab-flow.py", "dastyab-aistudio.py"):

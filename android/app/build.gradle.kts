@@ -8,6 +8,14 @@ plugins {
     id("com.chaquo.python")
 }
 
+val supportedAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+val abiElfSpecs = mapOf(
+    "arm64-v8a" to (2 to 183),
+    "armeabi-v7a" to (1 to 40),
+    "x86_64" to (2 to 62),
+    "x86" to (1 to 3)
+)
+
 android {
     namespace = "com.dastyab.app"
     compileSdk = 34
@@ -21,7 +29,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         if (!project.hasProperty("abiSplits")) {
             ndk {
-                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+                abiFilters += supportedAbis
             }
         }
     }
@@ -40,7 +48,7 @@ android {
             abi {
                 isEnable = true
                 reset()
-                include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+                include(*supportedAbis.toTypedArray())
                 isUniversalApk = true
             }
         }
@@ -115,8 +123,14 @@ android {
 
 chaquopy {
     defaultConfig {
-        version = "3.12"
-        buildPython("python3")
+        // Chaquopy 16.1.0 supports all 4 ABIs (including 32-bit armeabi-v7a and x86) on Python 3.11;
+        // Python 3.12+ drops 32-bit ABI support in Chaquopy.
+        version = "3.11"
+        buildPython(
+            System.getenv("CHAQUOPY_PYTHON")
+                ?: System.getenv("PYTHON")
+                ?: "python3"
+        )
     }
 }
 
@@ -145,13 +159,7 @@ val verifyNativeJniLibs by tasks.registering {
     val jniDir: File = layout.projectDirectory.dir("src/main/jniLibs").asFile
     doLast {
         if (skipCheck) return@doLast
-        val expected = mapOf(
-            "arm64-v8a" to (2 to 183),
-            "armeabi-v7a" to (1 to 40),
-            "x86_64" to (2 to 62),
-            "x86" to (1 to 3)
-        )
-        for ((abi, spec) in expected) {
+        for ((abi, spec) in abiElfSpecs) {
             val so = File(jniDir, "$abi/libdastyab.so")
             if (!so.isFile || so.length() < 4096L) {
                 throw GradleException(

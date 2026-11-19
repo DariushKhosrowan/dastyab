@@ -46,10 +46,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Python 3.12 for embedded CPython core
+      - name: Set up Python 3.11 for embedded CPython core
+        id: setup-python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
+
+      - name: Export Chaquopy Python
+        run: echo "CHAQUOPY_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> "$GITHUB_ENV"
 
       - name: Ensure Android SDK components
         run: |
@@ -78,30 +82,76 @@ jobs:
           echo "ANDROID_NDK_ROOT=$SDK/ndk/27.0.12077973" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_VERSION=27.0.12077973" >> "$GITHUB_ENV"
 
+      - name: Preflight toolchain & Android environment
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -d "${ANDROID_NDK_ROOT}"
+          test -f android/dastyab-release.keystore
+          test -x "${CHAQUOPY_PYTHON}"
+          java -version
+          "${CHAQUOPY_PYTHON}" --version
+          (cd android && bash ./gradlew --version)
+
       - name: Cache Gradle
         uses: actions/cache@v5
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-v2-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle.properties', 'android/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-v2-
+          key: ${{ runner.os }}-gradle-v3-java17-py3.11-ndk27.0.12077973-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle.properties', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Verify Gradle project configuration
+        working-directory: android
+        run: |
+          set -o pipefail
+          bash ./gradlew help --no-daemon --stacktrace --console=plain 2>&1 | tee gradle-config.log || {
+            status=$?
+            grep -n -E "Caused by:|FAILURE:|What went wrong|Could not|No such|not found|failed" gradle-config.log | tail -n 80 || true
+            exit "$status"
+          }
 
       - name: Run Android unit tests
         working-directory: android
-        run: bash ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace --info
+        run: |
+          set -o pipefail
+          bash ./gradlew :app:testDebugUnitTest -PskipNativeCheck --no-daemon --stacktrace --info --console=plain 2>&1 | tee gradle-test.log || {
+            status=$?
+            grep -n -E "Caused by:|FAILURE:|What went wrong|Could not|No such|not found|failed" gradle-test.log | tail -n 80 || true
+            exit "$status"
+          }
 
       - name: Stage native CLI for all Android ABIs
         run: bash scripts/android-build-native.sh android/app/src/main/jniLibs
 
       - name: Build debug APK with packaged native binaries
         working-directory: android
-        run: bash ./gradlew :app:assembleDebug --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          bash ./gradlew :app:assembleDebug --no-daemon --stacktrace --console=plain 2>&1 | tee gradle-debug.log || {
+            status=$?
+            grep -n -E "Caused by:|FAILURE:|What went wrong|Could not|No such|not found|failed" gradle-debug.log | tail -n 80 || true
+            exit "$status"
+          }
 
       - name: Build signed release APK
         working-directory: android
-        run: bash ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          bash ./gradlew :app:assembleRelease --no-daemon --stacktrace --info --console=plain 2>&1 | tee gradle-release.log || {
+            status=$?
+            grep -n -E "Caused by:|FAILURE:|What went wrong|Could not|No such|not found|failed" gradle-release.log | tail -n 80 || true
+            exit "$status"
+          }
+
+      - name: Upload Gradle diagnostic logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: android-gradle-failure-logs
+          path: android/gradle-*.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Verify release APK installability, alignment, ABIs, and signatures
         shell: bash

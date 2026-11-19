@@ -331,10 +331,10 @@
     <string name="tunnel_btn_bridge_toggle_stop">Stop DastYab Local Proxy Port</string>
     <string name="tunnel_btn_copy_v2rayng">Copy SOCKS URI for v2rayNG</string>
 
-    <!-- v3.2.0: Embedded CPython 3.12 Linux-Compatible Terminal Mode -->
+    <!-- v3.2.0: Embedded CPython 3.11 Linux-Compatible Terminal Mode -->
     <string name="tab_terminal_mode">Terminal</string>
     <string name="terminal_title">Linux Python Core</string>
-    <string name="terminal_subtitle">Embedded CPython 3.12 executing the exact Linux dastyab-flow.py &amp; dastyab-aistudio.py algorithms, plus python3 &amp; Linux shell built-ins.</string>
+    <string name="terminal_subtitle">Embedded CPython 3.11 executing the exact Linux dastyab-flow.py &amp; dastyab-aistudio.py algorithms, plus python3 &amp; Linux shell built-ins.</string>
     <string name="terminal_btn_sync">Sync Nodes</string>
     <string name="terminal_btn_open_flow">Open Flow</string>
     <string name="terminal_btn_open_ai">Open AI Studio</string>

@@ -2106,7 +2106,7 @@
         </LinearLayout>
         </LinearLayout>
 
-        <!-- ============ TERMINAL MODE (EMBEDDED CPYTHON 3.12 LINUX SHELL) ============ -->
+        <!-- ============ TERMINAL MODE (EMBEDDED CPYTHON 3.11 LINUX SHELL) ============ -->
         <LinearLayout
             android:id="@+id/terminalModeContainer"
             android:layout_width="match_parent"
@@ -2146,7 +2146,7 @@
                         android:paddingEnd="10dp"
                         android:paddingTop="3dp"
                         android:paddingBottom="3dp"
-                        android:text="CPython 3.12"
+                        android:text="CPython 3.11"
                         android:textSize="11sp"
                         android:textStyle="bold"
                         android:textColor="@color/colorChipText" />

@@ -5,7 +5,7 @@ import android.content.Context
 /**
  * UiModePrefs — persists whether the user prefers Simple Mode (1-tap automatic UI),
  * Advanced Mode (full pro VPN layers, harvester editor, toolbox, and CLI),
- * or Terminal Mode (embedded CPython 3.12 Linux-compatible shell).
+ * or Terminal Mode (embedded CPython 3.11 Linux-compatible shell).
  */
 object UiModePrefs {
 

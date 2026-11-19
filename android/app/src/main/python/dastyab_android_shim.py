@@ -1,7 +1,7 @@
 """dastyab_android_shim — Linux compatibility & pure-Python net/proxy bridge for Android CPython.
 
 Allows Linux `dastyab-aistudio.py` and `dastyab-flow.py` algorithms to run cleanly inside
-embedded CPython 3.12 on non-rooted Android devices without requiring `/usr/bin/curl`,
+embedded CPython 3.11 on non-rooted Android devices without requiring `/usr/bin/curl`,
 `/tmp` write access, or `/usr/bin/google-chrome`, while seamlessly using a real `xray`
 binary whenever present (bundled, `~/.dastyab/bin/xray`, or Termux) OR falling back to
 active Android local proxies (`v2rayNG`, `NekoBox`, `Hiddify`, `Clash`, `Orbot`, DastYab

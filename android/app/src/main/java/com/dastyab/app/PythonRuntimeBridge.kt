@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * PythonRuntimeBridge — embeds real CPython 3.12 via Chaquopy and bridges DastYab's
+ * PythonRuntimeBridge — embeds real CPython 3.11 via Chaquopy and bridges DastYab's
  * Android storage, harvested VLESS pool, active VPN/proxy ports, InAppBrowserActivity,
  * and native `libdastyab.so` CLI directly to `dastyab_terminal_shell.py`.
  */
@@ -65,7 +65,7 @@ object PythonRuntimeBridge {
                 true
             } catch (t: Throwable) {
                 lastError.set(t.message ?: t.javaClass.simpleName)
-                DastyabLogger.e("PythonRuntime", t, "Failed to start embedded CPython 3.12")
+                DastyabLogger.e("PythonRuntime", t, "Failed to start embedded CPython 3.11")
                 false
             }
         }
@@ -79,7 +79,7 @@ object PythonRuntimeBridge {
             val py = Python.getInstance()
             val platform = py.getModule("platform")
             "CPython " + platform.callAttr("python_version").toString()
-        }.getOrElse { "CPython 3.12" }
+        }.getOrElse { "CPython 3.11" }
     }
 
     fun getPromptPath(context: Context): String {

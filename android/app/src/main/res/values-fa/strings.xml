@@ -316,10 +316,10 @@
     <string name="tunnel_btn_bridge_toggle_stop">توقف پورت پروکسی محلی دستیاب</string>
     <string name="tunnel_btn_copy_v2rayng">کپی لینک SOCKS برای v2rayNG</string>
 
-    <!-- v3.2.0: Embedded CPython 3.12 Terminal Mode -->
+    <!-- v3.2.0: Embedded CPython 3.11 Terminal Mode -->
     <string name="tab_terminal_mode">ترمینال</string>
     <string name="terminal_title">هسته لینوکسی پایتون</string>
-    <string name="terminal_subtitle">پایتون ۳.۱۲ داخلی برای اجرای دقیق الگوریتم‌های لینوکسی dastyab-flow.py و dastyab-aistudio.py به همراه دستورات python3 و پوسته لینوکس.</string>
+    <string name="terminal_subtitle">پایتون ۳.۱۱ داخلی برای اجرای دقیق الگوریتم‌های لینوکسی dastyab-flow.py و dastyab-aistudio.py به همراه دستورات python3 و پوسته لینوکس.</string>
     <string name="terminal_btn_sync">همگام‌سازی نودها</string>
     <string name="terminal_btn_open_flow">باز کردن Flow</string>
     <string name="terminal_btn_open_ai">AI Studio</string>

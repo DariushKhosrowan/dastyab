@@ -73,7 +73,7 @@ class MainActivity : Activity() {
     private lateinit var btnSimpleMagicAutopilot: Button
     private lateinit var btnSimpleQuickToggle: Button
 
-    // Terminal Mode views (CPython 3.12 Linux-compatible shell)
+    // Terminal Mode views (CPython 3.11 Linux-compatible shell)
     private lateinit var tvTerminalRuntimeBadge: TextView
     private lateinit var tvTerminalPromptHeader: TextView
     private lateinit var terminalOutputScroll: ScrollView
@@ -1008,7 +1008,7 @@ class MainActivity : Activity() {
         catch (_: android.content.ActivityNotFoundException) { postStatus("Screen unavailable") }
     }
 
-    /** Switches between Simple Mode, Advanced Mode, and Terminal Mode (CPython 3.12). */
+    /** Switches between Simple Mode, Advanced Mode, and Terminal Mode (CPython 3.11). */
     private fun applyUiMode(mode: UiModePrefs.Mode, persist: Boolean = true) {
         if (persist) UiModePrefs.setMode(this, mode)
         simpleModeContainer.visibility = if (mode == UiModePrefs.Mode.SIMPLE) View.VISIBLE else View.GONE
@@ -1082,7 +1082,7 @@ class MainActivity : Activity() {
     private fun initTerminalSessionIfNeeded() {
         if (terminalBannerShown) return
         terminalBannerShown = true
-        appendTerminalOutput("Booting embedded CPython 3.12 Linux-compatible shell...\n")
+        appendTerminalOutput("Booting embedded CPython 3.11 Linux-compatible shell...\n")
         thread(isDaemon = true, name = "dastyab-cpython-boot") {
             val ver = PythonRuntimeBridge.getPythonVersion(this)
             val synced = PythonRuntimeBridge.syncProfile(this)
