@@ -49,7 +49,7 @@
         <item name="android:colorPrimary">#0F172A</item>
         <item name="android:colorPrimaryDark">#090D16</item>
         <item name="android:colorAccent">#38BDF8</item>
-        <item name="android:windowBackground">@color/colorBackground</item>
+        <item name="android:windowBackground">#090D16</item>
         <item name="android:statusBarColor">#090D16</item>
         <item name="android:navigationBarColor">#090D16</item>
         <item name="android:textColorPrimary">#F1F5F9</item>
@@ -93,7 +93,7 @@
         <item name="android:colorPrimary">#FAF8F4</item>
         <item name="android:colorPrimaryDark">#EDE8DC</item>
         <item name="android:colorAccent">#A87B0A</item>
-        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowBackground">#FAF8F4</item>
         <item name="android:statusBarColor">#EDE8DC</item>
         <item name="android:navigationBarColor">#FAF8F4</item>
         <item name="android:textColorPrimary">#1C1917</item>
@@ -137,7 +137,7 @@
         <item name="android:colorPrimary">#F3F7FC</item>
         <item name="android:colorPrimaryDark">#E2EAF4</item>
         <item name="android:colorAccent">#1D4ED8</item>
-        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowBackground">#F3F7FC</item>
         <item name="android:statusBarColor">#E2EAF4</item>
         <item name="android:navigationBarColor">#F3F7FC</item>
         <item name="android:textColorPrimary">#0F172A</item>
@@ -181,7 +181,7 @@
         <item name="android:colorPrimary">#F2F7F4</item>
         <item name="android:colorPrimaryDark">#E0ECE5</item>
         <item name="android:colorAccent">#047857</item>
-        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowBackground">#F2F7F4</item>
         <item name="android:statusBarColor">#E0ECE5</item>
         <item name="android:navigationBarColor">#F2F7F4</item>
         <item name="android:textColorPrimary">#0F291E</item>
@@ -225,7 +225,7 @@
         <item name="android:colorPrimary">#FCF5EF</item>
         <item name="android:colorPrimaryDark">#F2E2D5</item>
         <item name="android:colorAccent">#C2410C</item>
-        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowBackground">#FCF5EF</item>
         <item name="android:statusBarColor">#F2E2D5</item>
         <item name="android:navigationBarColor">#FCF5EF</item>
         <item name="android:textColorPrimary">#2A1A12</item>

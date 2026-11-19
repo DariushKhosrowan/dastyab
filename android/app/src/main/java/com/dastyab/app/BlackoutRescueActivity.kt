@@ -1,9 +1,7 @@
 package com.dastyab.app
 
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.net.VpnService
@@ -34,7 +32,7 @@ import kotlin.concurrent.thread
  *  5. Installed Fallback VPN Launcher & Official GitHub Links (WhiteDNS, WhiteVPN,
  *     IP Range Scout, SlipNet, ShiroKhorshid, Lantern, Tor/Orbot, v2rayNG, Hiddify, NekoBox, Psiphon, WARP)
  */
-class BlackoutRescueActivity : Activity() {
+class BlackoutRescueActivity : DastyabActivity() {
 
     companion object {
         const val EXTRA_AUTO_ACTION = "extra_auto_action"
@@ -56,13 +54,8 @@ class BlackoutRescueActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val busy = AtomicBoolean(false)
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_blackout_rescue)
 
         progress = findViewById(R.id.rescueProgress)

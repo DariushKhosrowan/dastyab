@@ -1,8 +1,6 @@
 package com.dastyab.app
 
-import android.app.Activity
 import android.app.AlertDialog
-import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -24,20 +22,15 @@ import kotlin.concurrent.thread
  *  6. CIDR IPv4 Candidate Generator
  *  7. VLESS URI Decoder & Clean-IP Rewriter
  */
-class NetworkToolboxActivity : Activity() {
+class NetworkToolboxActivity : DastyabActivity() {
 
     private lateinit var progress: ProgressBar
     private lateinit var etHost: EditText
     private lateinit var tvOutput: TextView
     private val handler = Handler(Looper.getMainLooper())
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_network_toolbox)
 
         progress = findViewById(R.id.toolboxProgress)

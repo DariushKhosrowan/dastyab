@@ -1,7 +1,6 @@
 package com.dastyab.app
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -39,7 +38,7 @@ import kotlin.concurrent.thread
  *  • Live Egress IP + Country ISO banner checking Google Flow's 151-country gate & `/unsupported-country`
  *  • 1-tap Access Switcher (`Proxy / VPN`), `Geo Check`, and `AI Studio ↔ Flow` switcher
  */
-class InAppBrowserActivity : Activity() {
+class InAppBrowserActivity : DastyabActivity() {
 
     companion object {
         const val EXTRA_URL = "extra_browser_url"
@@ -69,14 +68,9 @@ class InAppBrowserActivity : Activity() {
         }
     }
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
-    }
-
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.applyTheme(this)
         val title = intent.getStringExtra(EXTRA_TITLE) ?: getString(R.string.browser_default_aistudio)
         initialUrl = intent.getStringExtra(EXTRA_URL) ?: CommandCompat.AISTUDIO_URL
 

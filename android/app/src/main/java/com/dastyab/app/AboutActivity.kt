@@ -1,25 +1,16 @@
 package com.dastyab.app
 
-import android.app.Activity
-import android.content.Context
 import android.os.Bundle
-import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 
 /**
  * AboutActivity — shows app name, version, description, and a list of
  * available dastyab commands with descriptions.
  */
-class AboutActivity : Activity() {
-
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
-    }
+class AboutActivity : DastyabActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_about)
 
         DastyabLogger.i("AboutActivity", "onCreate")

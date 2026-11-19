@@ -1,6 +1,5 @@
 package com.dastyab.app
 
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.ClipboardManager
 import android.content.Context
@@ -24,7 +23,7 @@ import android.widget.Toast
  *  • Custom Primary & Secondary DNS servers + MTU (1280–1500)
  *  • Interactive Split-Tunnel App Picker
  */
-class TunnelSettingsActivity : Activity() {
+class TunnelSettingsActivity : DastyabActivity() {
 
     private lateinit var spinnerMode: Spinner
     private lateinit var tvModeHint: TextView
@@ -52,13 +51,8 @@ class TunnelSettingsActivity : Activity() {
     private val proxySchemes = TunnelConfig.ProxyScheme.values().toList()
     private val selectedPackages = mutableSetOf<String>()
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_tunnel_settings)
 
         spinnerMode = findViewById(R.id.spinnerTunnelMode)

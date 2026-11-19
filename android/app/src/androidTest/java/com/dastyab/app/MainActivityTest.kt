@@ -95,6 +95,10 @@ class MainActivityTest {
                 scenario.onActivity { act ->
                     assertTrue("${cls.simpleName} should remain alive", UiSafety.isActivityAlive(act))
                 }
+                scenario.recreate()
+                scenario.onActivity { act ->
+                    assertTrue("${cls.simpleName} should remain alive after recreate", UiSafety.isActivityAlive(act))
+                }
             }
         }
     }

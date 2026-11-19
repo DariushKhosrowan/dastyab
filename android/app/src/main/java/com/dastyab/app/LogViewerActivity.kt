@@ -1,7 +1,5 @@
 package com.dastyab.app
 
-import android.app.Activity
-import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -21,7 +19,7 @@ import kotlin.concurrent.thread
  * Reads log files asynchronously off the main thread (bounded to the trailing 256 KB)
  * so large crash/diagnostic logs never trigger ANR or OutOfMemoryError.
  */
-class LogViewerActivity : Activity() {
+class LogViewerActivity : DastyabActivity() {
 
     private lateinit var listLogs: ListView
     private lateinit var tvLogContent: TextView
@@ -29,13 +27,8 @@ class LogViewerActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     @Volatile private var displayedFiles: List<File> = emptyList()
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_log_viewer)
 
         listLogs = findViewById(R.id.listLogs)

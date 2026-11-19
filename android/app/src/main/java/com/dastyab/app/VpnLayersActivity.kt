@@ -1,8 +1,6 @@
 package com.dastyab.app
 
-import android.app.Activity
 import android.app.AlertDialog
-import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
@@ -29,7 +27,7 @@ import kotlin.concurrent.thread
  *  • Add (single or bulk) and remove custom Telegram channels (`@channel` or `t.me/s/channel`)
  *  • Benchmark the harvested config pool in parallel and promote the fastest working config into a VPN layer
  */
-class VpnLayersActivity : Activity() {
+class VpnLayersActivity : DastyabActivity() {
 
     companion object {
         private const val REQ_VPN_LAYER_START = 6001
@@ -45,13 +43,8 @@ class VpnLayersActivity : Activity() {
 
     private val handler = Handler(Looper.getMainLooper())
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_vpn_layers)
 
         progress = findViewById(R.id.layersProgress)

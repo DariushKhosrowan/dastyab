@@ -1,7 +1,5 @@
 package com.dastyab.app
 
-import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
@@ -24,19 +22,14 @@ import java.io.File
  *  • Force re-download binary button
  *  • About button
  */
-class SettingsActivity : Activity() {
+class SettingsActivity : DastyabActivity() {
 
     private lateinit var levelSpinner: Spinner
     private lateinit var cbAutoUpdate: CheckBox
     private lateinit var tvStatus: TextView
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_settings)
 
         val tvCurrentTheme = findViewById<TextView>(R.id.tvCurrentTheme)

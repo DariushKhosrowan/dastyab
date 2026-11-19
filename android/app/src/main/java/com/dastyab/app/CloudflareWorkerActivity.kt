@@ -1,6 +1,5 @@
 package com.dastyab.app
 
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.ClipboardManager
 import android.content.Context
@@ -38,7 +37,7 @@ import kotlin.concurrent.thread
  * `filesDir`, so every token, deployed worker base link, clean IP, and config record
  * stays 100% synchronized with `libdastyab.so` and Terminal Mode.
  */
-class CloudflareWorkerActivity : Activity() {
+class CloudflareWorkerActivity : DastyabActivity() {
 
     private companion object {
         const val REQ_VPN_PREPARE = 4101
@@ -110,13 +109,8 @@ class CloudflareWorkerActivity : Activity() {
     private lateinit var btnStudioCancelCli: Button
     private lateinit var tvStudioConsole: TextView
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_cloudflare_worker)
         binary = File(applicationInfo.nativeLibraryDir, "libdastyab.so")
 

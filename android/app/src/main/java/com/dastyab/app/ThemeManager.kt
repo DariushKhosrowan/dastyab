@@ -90,29 +90,40 @@ object ThemeManager {
 
     fun isCurrentlyLightTheme(context: Context): Boolean = resolveEffectiveTheme(context).isLight
 
+    /**
+     * Applies only the selected style resource BEFORE [Activity.setContentView].
+     * Never touches [android.view.Window.getInsetsController] or decor views here,
+     * preventing NullPointerException inside PhoneWindow during Activity.recreate().
+     */
     fun applyTheme(activity: Activity) {
         val effective = resolveEffectiveTheme(activity)
         activity.setTheme(effective.styleRes)
+    }
+
+    /**
+     * Configures window background, status/navigation bar colors, and light-bar icon contrast
+     * ONLY once the activity's DecorView is already installed.
+     */
+    fun applySystemBars(activity: Activity) {
+        if (!UiSafety.isActivityAlive(activity)) return
+        val window = activity.window ?: return
+        val decor = window.peekDecorView() ?: return
+        val effective = resolveEffectiveTheme(activity)
 
         val bg = resolveColor(activity, R.attr.dastyabBackground, R.color.colorBackground)
         val statusBarColor = resolveColor(activity, R.attr.dastyabPrimaryDark, R.color.colorPrimaryDark)
         val navBarColor = resolveColor(activity, R.attr.dastyabBackground, R.color.colorBackground)
 
-        val window = activity.window ?: return
         window.setBackgroundDrawable(ColorDrawable(bg))
         window.statusBarColor = statusBarColor
         window.navigationBarColor = navBarColor
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val controller = window.insetsController
-            if (controller != null) {
-                val flags = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-                controller.setSystemBarsAppearance(if (effective.isLight) flags else 0, flags)
-            }
+            val controller = decor.windowInsetsController ?: return
+            val flags = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            controller.setSystemBarsAppearance(if (effective.isLight) flags else 0, flags)
         } else {
-            @Suppress("DEPRECATION")
-            val decor = window.decorView
             @Suppress("DEPRECATION")
             var vis = decor.systemUiVisibility
             @Suppress("DEPRECATION")
@@ -131,6 +142,19 @@ object ThemeManager {
             }
             @Suppress("DEPRECATION")
             decor.systemUiVisibility = vis
+        }
+    }
+
+    /**
+     * Defers system-bar styling to the attached DecorView message queue (safe across recreate()).
+     */
+    fun scheduleSystemBars(activity: Activity) {
+        if (!UiSafety.isActivityAlive(activity)) return
+        val decor = activity.window?.peekDecorView() ?: return
+        decor.post {
+            if (UiSafety.isActivityAlive(activity)) {
+                applySystemBars(activity)
+            }
         }
     }
 

@@ -46,7 +46,7 @@ import kotlin.concurrent.thread
  *    Clean IP scanning, Profiles, Tokens, Configs, Security Audit, Doctor, Backup, and Zones
  *  • Full interactive CLI console with history, quick-command chips, and clickable URLs
  */
-class MainActivity : Activity() {
+class MainActivity : DastyabActivity() {
     private lateinit var status: TextView
     private lateinit var output: TextView
     private lateinit var outputEmptyState: LinearLayout
@@ -148,15 +148,13 @@ class MainActivity : Activity() {
         private const val REQ_VPN_PREPARE = 4001
     }
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
+    override fun initializeBeforeTheme() {
+        DastyabLogger.init(filesDir)
+        CrashHandler.install(applicationContext, filesDir)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        DastyabLogger.init(filesDir)
-        CrashHandler.install(applicationContext, filesDir)
-        ThemeManager.applyTheme(this)
         setContentView(R.layout.activity_main)
 
         status = findViewById(R.id.status)
