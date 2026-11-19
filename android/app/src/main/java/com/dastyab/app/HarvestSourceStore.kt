@@ -1,7 +1,6 @@
 package com.dastyab.app
 
 import android.content.Context
-import java.net.URI
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -50,13 +49,11 @@ object HarvestSourceStore {
         return trimmed
     }
 
-    /** Normalizes `@channel`, `t.me/channel`, `https://t.me/s/channel`, or bare username to `channel`. */
+    /** Normalizes `@channel`, `t.me/channel`, `Telegram.me/channel`, `https://t.me/s/channel`, or bare username to `channel`. */
     fun normalizeTelegramChannel(raw: String): String? {
         var s = raw.trim()
         if (s.isEmpty()) return null
-        s = s.removePrefix("https://").removePrefix("http://")
-        s = s.removePrefix("www.")
-        s = s.removePrefix("t.me/s/").removePrefix("t.me/").removePrefix("telegram.me/s/").removePrefix("telegram.me/")
+        s = s.replace(Regex("^(?i)(?:https?://)?(?:www\\.)?(?:t\\.me|telegram\\.me)/(?:s/)?"), "")
         s = s.removePrefix("@")
         s = s.substringBefore('/').substringBefore('?').trim()
         if (s.length < 3 || !s.all { it.isLetterOrDigit() || it == '_' }) return null
@@ -133,19 +130,9 @@ object HarvestSourceStore {
             .apply()
     }
 
-    /** Extracts `(host, port)` from any proxy URI (`vless://`, `trojan://`, `hy2://`, `tuic://`, `ss://`) for TCP ping. */
+    /** Extracts `(host, port)` from any supported proxy/VPN URI or WireGuard INI config for TCP latency probing. */
     fun extractHostAndPort(uri: String): Pair<String, Int>? {
-        val vless = TunnelConfig.parseVlessUri(uri)
-        if (vless != null) return vless.host to vless.port
-        return try {
-            val parsed = URI(uri.trim())
-            val host = parsed.host?.trim().orEmpty()
-            if (host.isEmpty()) return null
-            val port = if (parsed.port in 1..65535) parsed.port else 443
-            host to port
-        } catch (_: Exception) {
-            null
-        }
+        return UniversalConfig.extractHostAndPort(uri)
     }
 
     /** Benchmarks up to [maxToTest] harvested configs in parallel over TCP and sorts reachable ones fastest-first. */

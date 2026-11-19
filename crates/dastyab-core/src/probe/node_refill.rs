@@ -44,8 +44,39 @@ pub const DEFAULT_REFILL_DEPTH: usize = 6;
 /// failures are tolerated (a 404/empty preview just contributes zero links).
 /// Users may override via `dastyab configs refill --channels …`.
 pub const DEFAULT_REFILL_CHANNELS: &[&str] = &[
-    "v2ray_configs_pools", // ~286 links/page (top yield)
+    "whitedns",            // WhiteDNS public config feed
+    "FarazV2ray",
+    "ProxGp",
+    "letsproxys1",
+    "napsternetv",
+    "AarazV2ray",
+    "filembad",
+    "v2ray1_ng",
+    "proxymtprotoir",
+    "ConfigX2ray",
+    "ShadowProxy66",
+    "V2ray_confiig",
+    "daddynetwork",
+    "AR14N24B",
+    "cpy_teeL",
     "MARAMBASHI",          // ~180 links/page
+    "Zed_NetMeli",
+    "purland",
+    "myseaproxy",
+    "v2rayngvpn",
+    "Broz_time",
+    "V2rayng_Fast",
+    "meliproxyy",
+    "Kamkarstore",
+    "marambashi2",
+    "KiaNet_GP",
+    "ConfigWireguard",
+    "AzadInternet_TV",
+    "blackRay",
+    "npvfree11",
+    "chatnekonvaslshim",
+    "ServerNettGap",
+    "v2ray_configs_pools", // ~286 links/page (top yield)
     "v2raycollector",      // ~59 links/page
     "v2rayann",            // ~31 links/page
     "FreeV2rayConfigs",    // ~20 links/page

@@ -57,6 +57,7 @@ class VpnLayersActivity : DastyabActivity() {
 
         findViewById<Button>(R.id.btnAddLayer).setOnClickListener { showLayerEditorDialog(null) }
         findViewById<Button>(R.id.btnAutoBestLayer).setOnClickListener { benchmarkAndSwitchBestLayer() }
+        findViewById<Button>(R.id.btnAutoBuildShield).setOnClickListener { buildStrongMultiLayerShield() }
         findViewById<Button>(R.id.btnExportLayers).setOnClickListener { exportLayersToClipboard() }
         findViewById<Button>(R.id.btnImportLayers).setOnClickListener { showImportLayersDialog() }
 
@@ -236,6 +237,30 @@ class VpnLayersActivity : DastyabActivity() {
                     sb.append("\n✗ No layers responded — try DNS Blackout VPN or IP Scout.")
                 }
                 tvLayersLog.text = sb.toString()
+            }
+        }
+    }
+
+    private fun buildStrongMultiLayerShield() {
+        progress.visibility = View.VISIBLE
+        tvLayersLog.text = getString(R.string.layers_shield_building)
+        thread(isDaemon = true, name = "dastyab-build-shield") {
+            val stack = VpnLayerStore.buildHardenedResilienceStack(this)
+            val bench = VpnLayerStore.benchmarkLayers(stack, timeoutMs = 1800)
+            UiSafety.safePostUi(this, handler) {
+                progress.visibility = View.GONE
+                val best = bench.firstOrNull { it.reachable }
+                if (best != null) {
+                    VpnLayerStore.activateLayer(this, best.layer, restartIfConnected = true)
+                }
+                refreshLayersUi()
+                val sb = StringBuilder("=== STRONG MULTI-LAYER SHIELD (${stack.size} LAYERS) ===\n")
+                bench.forEach { r ->
+                    val status = if (r.reachable) "${r.latencyMs}ms" else "STANDBY"
+                    sb.append("• ${r.layer.name} [$status]\n  ${r.layer.subtitle()}\n")
+                }
+                tvLayersLog.text = sb.toString()
+                Toast.makeText(this, getString(R.string.layers_shield_built_toast, stack.size), Toast.LENGTH_LONG).show()
             }
         }
     }

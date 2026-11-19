@@ -312,7 +312,7 @@ object TunnelConfig {
     }
 
     fun saveHarvestedConfigs(context: Context, configs: List<String>) {
-        val cleaned = configs.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(120)
+        val cleaned = configs.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(300)
         prefs(context).edit()
             .putString(KEY_HARVESTED_CONFIGS, cleaned.joinToString("\n"))
             .apply()

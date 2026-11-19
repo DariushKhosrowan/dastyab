@@ -770,4 +770,38 @@
     <string name="cf_dialog_route_script_hint">Worker script name</string>
     <string name="cf_dialog_profile_title">Create New Profile</string>
     <string name="cf_dialog_profile_hint">Profile name (e.g. backup-cf)</string>
+
+    <!-- Universal Config Harvester Actions -->
+    <string name="rescue_action_title">%1$s Config (%2$s)</string>
+    <string name="rescue_action_apply_vpn">Apply &amp; Connect DastYab VPN</string>
+    <string name="rescue_action_promote_layer">Save as VPN Layer</string>
+    <string name="rescue_action_copy_uri">Copy Config URI</string>
+    <string name="rescue_action_copy_wg_ini">Copy WireGuard .conf (INI)</string>
+    <string name="rescue_action_open_telegram">Open Proxy in Telegram</string>
+    <string name="rescue_action_open_client">Copy &amp; Open %1$s</string>
+    <string name="rescue_layer_promoted_toast">Saved %1$s layer!</string>
+    <string name="rescue_wg_ini_copied_toast">Copied WireGuard .conf INI!</string>
+    <string name="rescue_btn_file_vault">Config Files Vault (.ovpn / .npvs / .hc / .custom)</string>
+    <string name="rescue_action_copy_ovpn">Copy OpenVPN (.ovpn)</string>
+    <string name="rescue_action_save_open_file">Save File &amp; Open in Client</string>
+    <string name="rescue_ovpn_copied_toast">Copied OpenVPN .ovpn profile!</string>
+    <string name="rescue_vault_title">Config Files Vault (%1$d)</string>
+    <string name="rescue_vault_btn_download_url">+ Download Config File from URL</string>
+    <string name="rescue_vault_btn_import_local">+ Import Local File (.ovpn/.npvs/.hc/.custom)</string>
+    <string name="rescue_vault_download_title">Download Config File</string>
+    <string name="rescue_vault_download_hint">https://…/config.ovpn, .npvs, .hc, .custom, .conf</string>
+    <string name="rescue_vault_download_ok">Downloaded %1$s</string>
+    <string name="rescue_vault_download_fail">Could not download config file</string>
+    <string name="rescue_vault_import_ok">Imported %1$s (%2$d endpoints extracted)</string>
+    <string name="rescue_vault_import_fail">Could not import selected file</string>
+    <string name="rescue_vault_file_open_client">Open with %1$s</string>
+    <string name="rescue_vault_file_open_any">Open / Share Config File</string>
+    <string name="rescue_vault_file_save_downloads">Save Copy to Downloads/DastYab</string>
+    <string name="rescue_vault_file_extract_promote">Extract &amp; Promote to VPN Layer</string>
+    <string name="rescue_vault_file_open_tg_post">Open Channel Post (Telegram)</string>
+    <string name="rescue_vault_saved_downloads_toast">Saved %1$s to Downloads/DastYab</string>
+    <string name="rescue_vault_no_endpoints_toast">File saved intact (binary/encrypted config)</string>
+    <string name="layers_btn_build_shield">Auto-Build Strong Multi-Layer Shield</string>
+    <string name="layers_shield_building">Building &amp; benchmarking multi-protocol VPN layers…</string>
+    <string name="layers_shield_built_toast">Built %1$d-layer resilient VPN shield!</string>
 </resources>

@@ -2,6 +2,7 @@ package com.dastyab.app
 
 import android.app.AlertDialog
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.net.VpnService
@@ -41,6 +42,7 @@ class BlackoutRescueActivity : DastyabActivity() {
         const val ACTION_TROUBLESHOOT = "troubleshoot"
         const val ACTION_DNS_VPN = "dns_vpn"
         private const val REQ_VPN_BLACKOUT = 5001
+        private const val REQ_OPEN_CONFIG_FILE = 5002
     }
 
     private lateinit var progress: ProgressBar
@@ -72,6 +74,7 @@ class BlackoutRescueActivity : DastyabActivity() {
 
         findViewById<Button>(R.id.btnRunHarvest).setOnClickListener { runSmartHarvest() }
         findViewById<Button>(R.id.btnPickHarvested).setOnClickListener { showHarvestedConfigsDialog() }
+        findViewById<Button>(R.id.btnOpenFileVault).setOnClickListener { showConfigFileVaultDialog() }
         findViewById<Button>(R.id.btnSetBootstrap).setOnClickListener { showBootstrapConfigDialog() }
         findViewById<Button>(R.id.btnActivateDnsBlackout).setOnClickListener { activateDnsBlackoutVpn() }
         findViewById<Button>(R.id.btnScoutEdgeIps).setOnClickListener { runEdgeIpScout() }
@@ -102,12 +105,14 @@ class BlackoutRescueActivity : DastyabActivity() {
 
     private fun refreshHarvestSummary() {
         val cached = TunnelConfig.loadHarvestedConfigs(this)
+        val vaultFiles = ConfigFileHarvester.loadVault(this)
         val settings = TunnelConfig.load(this)
         val bootstrapNote = if (settings.bootstrapConfig.isNotBlank()) getString(R.string.rescue_bootstrap_saved_tag) else ""
-        tvHarvestSummary.text = if (cached.isEmpty()) {
+        val fileNote = if (vaultFiles.isNotEmpty()) " · ${vaultFiles.size} files (.ovpn/.npvs/.hc/…)" else ""
+        tvHarvestSummary.text = if (cached.isEmpty() && vaultFiles.isEmpty()) {
             getString(R.string.rescue_harvester_hint) + bootstrapNote
         } else {
-            getString(R.string.rescue_cached_summary, cached.size, bootstrapNote)
+            getString(R.string.rescue_cached_summary, cached.size, bootstrapNote) + fileNote
         }
     }
 
@@ -166,7 +171,11 @@ class BlackoutRescueActivity : DastyabActivity() {
                     ConfigHarvester.HarvestOutcome.SUCCESS_TELEGRAM,
                     ConfigHarvester.HarvestOutcome.SUCCESS_MIXED -> {
                         Toast.makeText(this, getString(R.string.rescue_harvested_toast, report.configs.size), Toast.LENGTH_SHORT).show()
-                        showHarvestedConfigsDialog()
+                        if (report.configs.isNotEmpty()) {
+                            showHarvestedConfigsDialog()
+                        } else {
+                            showConfigFileVaultDialog()
+                        }
                     }
                     ConfigHarvester.HarvestOutcome.NEEDS_ALTERNATE_VPN,
                     ConfigHarvester.HarvestOutcome.NEEDS_BOOTSTRAP_CONFIG,
@@ -217,12 +226,13 @@ class BlackoutRescueActivity : DastyabActivity() {
             return
         }
         val labels = configs.mapIndexed { idx, uri ->
-            val proto = ConfigHarvester.protocolOf(uri).uppercase()
+            val parsed = UniversalConfig.parse(uri)
+            val proto = (parsed?.protocol ?: UniversalConfig.protocolOf(uri)).uppercase()
             val vless = TunnelConfig.parseVlessUri(uri)
-            if (vless != null) {
-                "${idx + 1}. [$proto] ${vless.summary()}"
-            } else {
-                "${idx + 1}. [$proto] ${uri.take(48)}…"
+            when {
+                vless != null -> "${idx + 1}. [$proto] ${vless.summary()}"
+                parsed != null -> "${idx + 1}. [$proto] ${parsed.summary()}"
+                else -> "${idx + 1}. [$proto] ${uri.take(48)}…"
             }
         }.toTypedArray()
 
@@ -231,25 +241,275 @@ class BlackoutRescueActivity : DastyabActivity() {
             AlertDialog.Builder(this)
                 .setTitle(getString(R.string.rescue_pool_title, configs.size))
                 .setItems(labels) { _, which ->
-                    val chosen = configs[which]
-                    if (chosen.startsWith("vless://", ignoreCase = true)) {
-                        TunnelConfig.saveVlessUri(this, chosen)
-                        Toast.makeText(this, getString(R.string.rescue_applied_vless_toast), Toast.LENGTH_SHORT).show()
-                        appendLog("Applied harvested config #${which + 1} as active VPN endpoint.\n")
-                        if (DastyabVpnService.isConnected()) {
-                            DastyabVpnService.start(this)
-                        }
-                    } else {
-                        if (UiSafety.copyTextSafely(this, "DastYab Config", chosen)) {
-                            Toast.makeText(
-                                this,
-                                getString(R.string.rescue_copied_proto_toast, ConfigHarvester.protocolOf(chosen).uppercase()),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                        TunnelConfig.saveBootstrapConfig(this, chosen)
-                        appendLog("Copied harvested config #${which + 1} to clipboard.\n")
+                    showHarvestedConfigActionsDialog(which, configs[which])
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
+    }
+
+    private fun showHarvestedConfigActionsDialog(index: Int, rawUri: String) {
+        val parsed = UniversalConfig.parse(rawUri)
+        val proto = (parsed?.protocol ?: UniversalConfig.protocolOf(rawUri)).uppercase()
+        val targetLabel = parsed?.let { "${it.host}:${it.port}" } ?: proto
+        val isVless = rawUri.startsWith("vless://", ignoreCase = true)
+        val wgIni = if (UniversalConfig.isWireGuardUri(rawUri)) UniversalConfig.wireGuardUriToIni(rawUri) else null
+        val ovpnProfile = if (UniversalConfig.isOpenVpnUri(rawUri)) UniversalConfig.openVpnUriToOvpn(rawUri) else null
+        val isMtProto = UniversalConfig.isMtProtoUri(rawUri)
+        val installedTools = ConfigHarvester.detectFallbackTools(this).filter { it.isInstalled }
+        val matchingClient = pickMatchingClientTool(proto, installedTools)
+
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        if (isVless) {
+            actions.add(getString(R.string.rescue_action_apply_vpn) to {
+                TunnelConfig.saveVlessUri(this, rawUri)
+                TunnelConfig.saveMode(this, TunnelConfig.Mode.SMART)
+                Toast.makeText(this, getString(R.string.rescue_applied_vless_toast), Toast.LENGTH_SHORT).show()
+                appendLog("Applied harvested VLESS #${index + 1} as active VPN endpoint.\n")
+                requestStartVpnNow()
+            })
+        }
+        if (isMtProto) {
+            actions.add(getString(R.string.rescue_action_open_telegram) to {
+                UiSafety.copyTextSafely(this, "Telegram MTProto", rawUri)
+                UiSafety.safeStartActivity(this, Intent(Intent.ACTION_VIEW, Uri.parse(rawUri)))
+            })
+        }
+        if (wgIni != null) {
+            actions.add(getString(R.string.rescue_action_copy_wg_ini) to {
+                if (UiSafety.copyTextSafely(this, "WireGuard Config", wgIni)) {
+                    Toast.makeText(this, getString(R.string.rescue_wg_ini_copied_toast), Toast.LENGTH_SHORT).show()
+                    appendLog("Copied WireGuard .conf INI for config #${index + 1}.\n")
+                }
+                TunnelConfig.saveBootstrapConfig(this, rawUri)
+                refreshHarvestSummary()
+            })
+            actions.add(getString(R.string.rescue_action_save_open_file) to {
+                val entry = ConfigFileHarvester.saveGeneratedTextFile(
+                    this,
+                    "dastyab_${parsed?.host ?: "wg"}.conf",
+                    wgIni,
+                    "WireGuard"
+                )
+                refreshHarvestSummary()
+                ConfigFileHarvester.openVaultFileInExternalApp(this, entry, matchingClient?.installedPackage)
+            })
+        }
+        if (ovpnProfile != null) {
+            actions.add(getString(R.string.rescue_action_copy_ovpn) to {
+                if (UiSafety.copyTextSafely(this, "OpenVPN Config", ovpnProfile)) {
+                    Toast.makeText(this, getString(R.string.rescue_ovpn_copied_toast), Toast.LENGTH_SHORT).show()
+                    appendLog("Copied OpenVPN .ovpn profile for config #${index + 1}.\n")
+                }
+                TunnelConfig.saveBootstrapConfig(this, rawUri)
+                refreshHarvestSummary()
+            })
+            actions.add(getString(R.string.rescue_action_save_open_file) to {
+                val entry = ConfigFileHarvester.saveGeneratedTextFile(
+                    this,
+                    "dastyab_${parsed?.host ?: "ovpn"}.ovpn",
+                    ovpnProfile,
+                    "OpenVPN"
+                )
+                refreshHarvestSummary()
+                ConfigFileHarvester.openVaultFileInExternalApp(this, entry, matchingClient?.installedPackage)
+            })
+        }
+        actions.add(getString(R.string.rescue_action_promote_layer) to {
+            val layerName = parsed?.label?.takeIf { it.isNotBlank() }
+                ?: "$proto ${parsed?.host ?: "#${index + 1}"}"
+            val layer = VpnLayerStore.VpnLayer(
+                id = "harvest-${proto.lowercase()}-${(parsed?.host ?: "node").hashCode()}",
+                name = layerName,
+                mode = TunnelConfig.Mode.SMART,
+                configUri = rawUri
+            )
+            VpnLayerStore.addOrUpdate(this, layer)
+            VpnLayerStore.activateLayer(this, layer, restartIfConnected = isVless)
+            refreshHarvestSummary()
+            Toast.makeText(this, getString(R.string.rescue_layer_promoted_toast, proto), Toast.LENGTH_SHORT).show()
+            appendLog("Saved harvested [$proto] config #${index + 1} as VPN layer '$layerName'.\n")
+        })
+        actions.add(getString(R.string.rescue_action_copy_uri) to {
+            if (UiSafety.copyTextSafely(this, "DastYab $proto Config", rawUri)) {
+                Toast.makeText(this, getString(R.string.rescue_copied_proto_toast, proto), Toast.LENGTH_SHORT).show()
+            }
+            TunnelConfig.saveBootstrapConfig(this, rawUri)
+            refreshHarvestSummary()
+            appendLog("Copied harvested [$proto] config #${index + 1} to clipboard.\n")
+        })
+        if (matchingClient != null && matchingClient.installedPackage != null) {
+            actions.add(getString(R.string.rescue_action_open_client, matchingClient.name) to {
+                val copyPayload = wgIni ?: ovpnProfile ?: rawUri
+                UiSafety.copyTextSafely(this, "DastYab $proto Config", copyPayload)
+                TunnelConfig.saveBootstrapConfig(this, rawUri)
+                packageManager.getLaunchIntentForPackage(matchingClient.installedPackage)?.let {
+                    UiSafety.safeStartActivity(this, it)
+                }
+            })
+        }
+
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.rescue_action_title, proto, targetLabel))
+                .setItems(actions.map { it.first }.toTypedArray()) { _, actIdx ->
+                    actions[actIdx].second.invoke()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
+    }
+
+    private fun pickMatchingClientTool(
+        protoOrExtUpper: String,
+        installed: List<ConfigHarvester.FallbackTool>
+    ): ConfigHarvester.FallbackTool? {
+        val preferredNames = when (protoOrExtUpper) {
+            "OPENVPN", "OVPN" -> listOf("OpenVPN for Android", "OpenVPN Connect", "Hiddify")
+            "WIREGUARD", "WG", "WARP", "AMNEZIAWG", "CONF" -> listOf("WireGuard", "Hiddify", "NekoBox", "NapsternetV")
+            "NPV", "NPV4", "NPVS", "NPVT", "NAPSTERNETV" -> listOf("NapsternetV", "Hiddify", "NekoBox")
+            "HC" -> listOf("HTTP Custom", "HTTP Injector")
+            "EHI", "CUSTOM", "COSTUM" -> listOf("HTTP Injector", "HTTP Custom")
+            "DARK" -> listOf("DarkTunnel")
+            "HAT" -> listOf("HA Tunnel Plus")
+            "TLS" -> listOf("TLS Tunnel")
+            "NM" -> listOf("NetMod")
+            else -> listOf("v2rayNG", "Hiddify", "NekoBox", "NapsternetV", "WhiteVPN")
+        }
+        for (name in preferredNames) {
+            installed.firstOrNull { it.name.equals(name, ignoreCase = true) }?.let { return it }
+        }
+        return installed.firstOrNull()
+    }
+
+    private fun showConfigFileVaultDialog() {
+        val vault = ConfigFileHarvester.loadVault(this)
+        val entries = mutableListOf<String>()
+        entries.add(getString(R.string.rescue_vault_btn_download_url))
+        entries.add(getString(R.string.rescue_vault_btn_import_local))
+        vault.forEach { entries.add(it.label()) }
+
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.rescue_vault_title, vault.size))
+                .setItems(entries.toTypedArray()) { _, which ->
+                    when (which) {
+                        0 -> showDownloadConfigFileUrlDialog()
+                        1 -> launchLocalConfigFilePicker()
+                        else -> showVaultFileActionsDialog(vault[which - 2])
                     }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
+    }
+
+    private fun showDownloadConfigFileUrlDialog() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.rescue_vault_download_hint)
+        }
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.rescue_vault_download_title))
+                .setView(input)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    val url = input.text.toString().trim()
+                    if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) {
+                        Toast.makeText(this, getString(R.string.rescue_vault_download_fail), Toast.LENGTH_SHORT).show()
+                        return@setPositiveButton
+                    }
+                    setLoading(true)
+                    thread(isDaemon = true, name = "dastyab-dl-cfg") {
+                        val (entry, extracted) = ConfigFileHarvester.downloadAndStoreFile(this, url, sourceLabel = "Manual URL")
+                        if (extracted.isNotEmpty()) {
+                            val merged = UniversalConfig.mergeBalanced(TunnelConfig.loadHarvestedConfigs(this) + extracted, 250)
+                            TunnelConfig.saveHarvestedConfigs(this, merged)
+                        }
+                        UiSafety.safePostUi(this, handler) {
+                            setLoading(false)
+                            refreshHarvestSummary()
+                            if (entry != null) {
+                                Toast.makeText(this, getString(R.string.rescue_vault_download_ok, entry.fileName), Toast.LENGTH_SHORT).show()
+                                showVaultFileActionsDialog(entry)
+                            } else {
+                                Toast.makeText(this, getString(R.string.rescue_vault_download_fail), Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        )
+    }
+
+    private fun launchLocalConfigFilePicker() {
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(picker, REQ_OPEN_CONFIG_FILE)
+        } catch (_: Exception) {
+            Toast.makeText(this, getString(R.string.rescue_vault_import_fail), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showVaultFileActionsDialog(entry: ConfigFileHarvester.VaultEntry) {
+        val installedTools = ConfigHarvester.detectFallbackTools(this).filter { it.isInstalled }
+        val match = pickMatchingClientTool(entry.extension.uppercase(), installedTools)
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+
+        if (entry.isDownloadedLocally) {
+            if (match != null && match.installedPackage != null) {
+                actions.add(getString(R.string.rescue_vault_file_open_client, match.name) to {
+                    ConfigFileHarvester.openVaultFileInExternalApp(this, entry, match.installedPackage)
+                })
+            }
+            actions.add(getString(R.string.rescue_vault_file_open_any) to {
+                ConfigFileHarvester.openVaultFileInExternalApp(this, entry, null)
+            })
+            actions.add(getString(R.string.rescue_vault_file_save_downloads) to {
+                val ok = ConfigFileHarvester.exportToDownloads(this, entry)
+                val msg = if (ok) getString(R.string.rescue_vault_saved_downloads_toast, entry.fileName)
+                else getString(R.string.rescue_vault_download_fail)
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            })
+            if (entry.extension.lowercase() in ConfigFileHarvester.STRUCTURED_TEXT_EXTENSIONS) {
+                actions.add(getString(R.string.rescue_vault_file_extract_promote) to {
+                    val content = runCatching { java.io.File(entry.localPath).readText(Charsets.UTF_8) }.getOrDefault("")
+                    val extracted = ConfigFileHarvester.extractEndpointsFromFileText(entry.fileName, content)
+                    if (extracted.isEmpty()) {
+                        Toast.makeText(this, getString(R.string.rescue_vault_no_endpoints_toast), Toast.LENGTH_SHORT).show()
+                    } else {
+                        val merged = UniversalConfig.mergeBalanced(extracted + TunnelConfig.loadHarvestedConfigs(this), 250)
+                        TunnelConfig.saveHarvestedConfigs(this, merged)
+                        val firstUri = extracted.first()
+                        val layer = VpnLayerStore.VpnLayer(
+                            name = "${entry.extension.uppercase()} · ${entry.fileName}",
+                            mode = TunnelConfig.Mode.SMART,
+                            configUri = firstUri
+                        )
+                        VpnLayerStore.addOrUpdate(this, layer)
+                        VpnLayerStore.activateLayer(this, layer, restartIfConnected = firstUri.startsWith("vless://", true))
+                        refreshHarvestSummary()
+                        Toast.makeText(this, getString(R.string.rescue_vault_import_ok, entry.fileName, extracted.size), Toast.LENGTH_LONG).show()
+                    }
+                })
+            }
+        }
+        val postUrl = entry.postUrl ?: entry.downloadUrl
+        if (!postUrl.isNullOrBlank()) {
+            actions.add(getString(R.string.rescue_vault_file_open_tg_post) to {
+                openExternalUrl(postUrl)
+            })
+        }
+
+        UiSafety.safeShowDialog(
+            this,
+            AlertDialog.Builder(this)
+                .setTitle(entry.fileName)
+                .setItems(actions.map { it.first }.toTypedArray()) { _, idx ->
+                    actions[idx].second.invoke()
                 }
                 .setNegativeButton(android.R.string.cancel, null)
         )
@@ -270,20 +530,22 @@ class BlackoutRescueActivity : DastyabActivity() {
                 .setMessage(getString(R.string.rescue_bootstrap_msg))
                 .setView(input)
                 .setPositiveButton(getString(R.string.rescue_bootstrap_save_connect)) { _, _ ->
-                    val cfg = input.text.toString().trim()
-                    if (cfg.isEmpty()) {
+                    val rawCfg = input.text.toString().trim()
+                    if (rawCfg.isEmpty()) {
                         TunnelConfig.saveBootstrapConfig(this, "")
                         refreshHarvestSummary()
                         return@setPositiveButton
                     }
-                    TunnelConfig.saveBootstrapConfig(this, cfg)
+                    val normalizedCfg = UniversalConfig.extractAll(rawCfg, maxConfigs = 1).firstOrNull() ?: rawCfg
+                    TunnelConfig.saveBootstrapConfig(this, normalizedCfg)
                     refreshHarvestSummary()
-                    appendLog("Saved temporary bootstrap config (${ConfigHarvester.protocolOf(cfg).uppercase()}).\n")
-                    if (cfg.startsWith("vless://", ignoreCase = true)) {
+                    appendLog("Saved temporary bootstrap config (${UniversalConfig.protocolOf(normalizedCfg).uppercase()}).\n")
+                    if (normalizedCfg.startsWith("vless://", ignoreCase = true)) {
                         TunnelConfig.saveMode(this, TunnelConfig.Mode.SMART)
                         requestStartVpnNow()
                     } else {
-                        if (UiSafety.copyTextSafely(this, "Bootstrap Config", cfg)) {
+                        val copyText = UniversalConfig.wireGuardUriToIni(normalizedCfg) ?: normalizedCfg
+                        if (UiSafety.copyTextSafely(this, "Bootstrap Config", copyText)) {
                             Toast.makeText(this, getString(R.string.rescue_bootstrap_copied_toast), Toast.LENGTH_LONG).show()
                         }
                     }
@@ -337,6 +599,20 @@ class BlackoutRescueActivity : DastyabActivity() {
             DastyabVpnService.start(this)
             Toast.makeText(this, getString(R.string.rescue_vpn_activated), Toast.LENGTH_SHORT).show()
             appendLog("OK: DastYab VPN is now active.\n")
+        } else if (requestCode == REQ_OPEN_CONFIG_FILE && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            val (entry, extracted) = ConfigFileHarvester.importLocalUri(this, uri)
+            if (entry != null) {
+                if (extracted.isNotEmpty()) {
+                    val merged = UniversalConfig.mergeBalanced(extracted + TunnelConfig.loadHarvestedConfigs(this), 250)
+                    TunnelConfig.saveHarvestedConfigs(this, merged)
+                }
+                refreshHarvestSummary()
+                Toast.makeText(this, getString(R.string.rescue_vault_import_ok, entry.fileName, extracted.size), Toast.LENGTH_LONG).show()
+                showVaultFileActionsDialog(entry)
+            } else {
+                Toast.makeText(this, getString(R.string.rescue_vault_import_fail), Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

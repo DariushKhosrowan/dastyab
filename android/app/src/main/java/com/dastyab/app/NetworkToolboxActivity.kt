@@ -209,21 +209,42 @@ class NetworkToolboxActivity : DastyabActivity() {
                 .setTitle(getString(R.string.toolbox_btn_uri_inspect))
                 .setView(input)
                 .setPositiveButton(getString(R.string.toolbox_uri_inspect_btn)) { _, _ ->
-                    val parsed = TunnelConfig.parseVlessUri(input.text.toString())
-                    if (parsed == null) {
-                        Toast.makeText(this, getString(R.string.tunnel_vless_invalid), Toast.LENGTH_SHORT).show()
-                    } else {
+                    val raw = input.text.toString().trim()
+                    val vless = TunnelConfig.parseVlessUri(raw)
+                    val anyParsed = UniversalConfig.parse(raw)
+                    if (vless != null) {
                         tvOutput.text = buildString {
                             append("=== VLESS URI DECODED ===\n")
-                            append("Label    : ${parsed.label.ifBlank { "(none)" }}\n")
-                            append("UUID     : ${parsed.uuid}\n")
-                            append("Host     : ${parsed.host}\n")
-                            append("Port     : ${parsed.port}\n")
-                            append("SNI      : ${parsed.sni}\n")
-                            append("Path     : ${parsed.path}\n")
-                            append("Transport: ${parsed.transport}\n")
-                            append("Security : ${parsed.security}\n")
+                            append("Label    : ${vless.label.ifBlank { "(none)" }}\n")
+                            append("UUID     : ${vless.uuid}\n")
+                            append("Host     : ${vless.host}\n")
+                            append("Port     : ${vless.port}\n")
+                            append("SNI      : ${vless.sni}\n")
+                            append("Path     : ${vless.path}\n")
+                            append("Transport: ${vless.transport}\n")
+                            append("Security : ${vless.security}\n")
                         }
+                    } else if (anyParsed != null) {
+                        val wgIni = UniversalConfig.wireGuardUriToIni(anyParsed.uri)
+                        val ovpnText = UniversalConfig.openVpnUriToOvpn(anyParsed.uri)
+                        tvOutput.text = buildString {
+                            append("=== ${anyParsed.protocol.uppercase()} CONFIG DECODED ===\n")
+                            append("Family   : ${anyParsed.family.displayName}\n")
+                            append("Label    : ${anyParsed.label.ifBlank { "(none)" }}\n")
+                            append("Host     : ${anyParsed.host}\n")
+                            append("Port     : ${anyParsed.port}\n")
+                            append("Summary  : ${anyParsed.summary()}\n")
+                            if (wgIni != null) {
+                                append("\n--- WireGuard .conf INI ---\n")
+                                append(wgIni).append('\n')
+                            }
+                            if (ovpnText != null) {
+                                append("\n--- OpenVPN .ovpn Profile ---\n")
+                                append(ovpnText).append('\n')
+                            }
+                        }
+                    } else {
+                        Toast.makeText(this, getString(R.string.tunnel_vless_invalid), Toast.LENGTH_SHORT).show()
                     }
                 }
                 .setNegativeButton(android.R.string.cancel, null)

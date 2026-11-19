@@ -465,7 +465,15 @@ class DastyabVpnService : VpnService() {
                 dnsCache.clear()
                 TunnelConfig.saveDohAndDns(this, dohUrl = nextDoh, primaryDns = null)
                 swaps++
-                summary = "Auto-swapped DoH → ${nextDoh.removePrefix("https://")} (check #$tick)"
+                val currentLayerId = runCatching { VpnLayerStore.getActiveLayerId(this) }.getOrDefault("")
+                val backup = runCatching { VpnLayerStore.findFastestBackupLayer(this, currentLayerId, timeoutMs = 1500) }.getOrNull()
+                summary = if (backup != null && backup.layer.dohUrl != nextDoh) {
+                    activeDohUrl = backup.layer.dohUrl
+                    VpnLayerStore.activateLayer(this, backup.layer, restartIfConnected = false)
+                    "Auto-failover → ${backup.layer.name} (${backup.latencyMs}ms · check #$tick)"
+                } else {
+                    "Auto-swapped DoH → ${nextDoh.removePrefix("https://")} (check #$tick)"
+                }
                 DastyabLogger.w("Watchdog", "Health degraded — %s", summary)
             } else {
                 val ms = check.aiStudio.latencyMs.takeIf { it >= 0 } ?: check.internet.latencyMs

@@ -168,37 +168,280 @@ fn extract_message_ids(body: &str) -> Vec<i64> {
 }
 
 /// Extract and HTML-decode every supported proxy share-link from a preview
-/// body — vless, vmess, trojan, ss, ssr, hysteria2, tuic. Handles `&amp;`
-/// → `&` so links are importable.
+/// body — Xray/Sing-box URIs, WireGuard/WARP/AmneziaWG URIs & INI blocks,
+/// NapsternetV (`npv://`, `npv4://`), SOCKS/SSH/SlipNet, and Telegram MTProto.
+/// Handles `&amp;` → `&` so links are importable.
 pub fn extract_proxy_links(body: &str) -> Vec<String> {
     let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut push_unique = |link: String| {
+        if seen.insert(link.clone()) {
+            out.push(link);
+        }
+    };
+
     for scheme in crate::net::proxy_uri::SUPPORTED_SCHEMES {
         let marker = format!("{scheme}://");
-        for (i, token) in body.split(marker.as_str()).enumerate() {
-            // Index 0 is everything before the FIRST delimiter — not a link
-            // tail.
-            if i == 0 || token.is_empty() {
+        for (pos, _) in body.match_indices(marker.as_str()) {
+            if pos > 0 {
+                if let Some(prev) = body[..pos].chars().last() {
+                    // Reject suffix matches like `ss://` inside `vless://` or `wg://` inside `amneziawg://`.
+                    if prev.is_ascii_alphanumeric() || matches!(prev, '+' | '-' | '.') {
+                        continue;
+                    }
+                }
+            }
+            let token = &body[pos + marker.len()..];
+            if token.is_empty() {
                 continue;
             }
             // A link ends at whitespace, `"`, `<`, or `>`.
             let end = token
                 .find(|c: char| c.is_whitespace() || c == '"' || c == '<' || c == '>')
                 .unwrap_or(token.len());
-            let tail = &token[..end];
-            // Strip a trailing `#` (Telegram appends it with no fragment).
-            let tail = tail.trim_end_matches('#');
-            // @-based schemes need at least an `identity@host` core; the
-            // base64 schemes (vmess/ssr) carry no '@' — the parser validates
-            // those, so invalid tails are dropped below.
-            if !tail.contains('@') && !matches!(*scheme, "vmess" | "ssr") {
+            let tail = token[..end].trim_end_matches('#');
+            if !tail.contains('@')
+                && !matches!(
+                    *scheme,
+                    "vmess"
+                        | "ssr"
+                        | "npv"
+                        | "npv4"
+                        | "napsternetv"
+                        | "wireguard"
+                        | "wg"
+                        | "warp"
+                        | "amneziawg"
+                        | "openvpn"
+                        | "ovpn"
+                        | "socks5"
+                        | "socks4"
+                        | "socks"
+                        | "sn"
+                        | "dnstt"
+                        | "slipnet"
+                )
+            {
                 continue;
             }
             let decoded = tail.replace("&amp;", "&");
             let link = format!("{scheme}://{decoded}");
             if crate::net::proxy_uri::ProxyUri::parse(&link).is_some() {
-                out.push(link);
+                push_unique(link);
             }
         }
+    }
+
+    for prefix in [
+        "tg://proxy?",
+        "https://t.me/proxy?",
+        "http://t.me/proxy?",
+        "https://telegram.me/proxy?",
+    ] {
+        for (pos, _) in body.match_indices(prefix) {
+            let slice = &body[pos..];
+            let end = slice
+                .find(|c: char| c.is_whitespace() || c == '"' || c == '<' || c == '>')
+                .unwrap_or(slice.len());
+            let decoded = slice[..end].trim_end_matches('#').replace("&amp;", "&");
+            if crate::net::proxy_uri::ProxyUri::parse(&decoded).is_some() {
+                push_unique(decoded);
+            }
+        }
+    }
+
+    for wg_link in extract_wireguard_ini_links(body) {
+        if crate::net::proxy_uri::ProxyUri::parse(&wg_link).is_some() {
+            push_unique(wg_link);
+        }
+    }
+
+    for ovpn_link in extract_openvpn_links(body) {
+        if crate::net::proxy_uri::ProxyUri::parse(&ovpn_link).is_some() {
+            push_unique(ovpn_link);
+        }
+    }
+
+    out
+}
+
+/// Supported VPN config file extensions for channel / GitHub file harvesting.
+pub const VPN_CONFIG_FILE_EXTENSIONS: &[&str] = &[
+    "ovpn", "openvpn", "npvs", "npv4", "npv", "npvt", "hc", "ehi", "custom", "costum",
+    "dark", "hat", "tls", "nm", "conf", "wg", "sks", "sip", "inp", "json", "yaml", "yml",
+    "sub",
+];
+
+/// Extract direct downloadable VPN config file URLs (`.ovpn`, `.openvpn`, `.npvs`, `.hc`, `.custom`, etc.)
+/// from Telegram HTML previews or plain text feeds.
+pub fn extract_config_file_urls(body: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for scheme in ["https://", "http://"] {
+        for (pos, _) in body.match_indices(scheme) {
+            let slice = &body[pos..];
+            let end = slice
+                .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | ')' | ']'))
+                .unwrap_or(slice.len());
+            let candidate = slice[..end].replace("&amp;", "&");
+            let path_no_query = candidate.split(['?', '#']).next().unwrap_or(&candidate);
+            let lower = path_no_query.to_ascii_lowercase();
+            let has_ext = VPN_CONFIG_FILE_EXTENSIONS
+                .iter()
+                .any(|ext| lower.ends_with(&format!(".{ext}")));
+            if has_ext && seen.insert(candidate.clone()) {
+                out.push(candidate);
+            }
+        }
+    }
+    out
+}
+
+/// Extract inline OpenVPN (`.ovpn` / `.openvpn`) profile directives posted as text
+/// (`remote <host> <port>` paired with `client` / `dev tun` / `proto tcp|udp`).
+fn extract_openvpn_links(body: &str) -> Vec<String> {
+    let text = body
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
+        .replace("<br>", "\n")
+        .replace("&amp;", "&");
+    if !text.contains("remote ") {
+        return Vec::new();
+    }
+    let has_ovpn_marker = text.lines().any(|l| {
+        let t = l.trim().to_ascii_lowercase();
+        t == "client"
+            || t.starts_with("dev ")
+            || t.starts_with("proto ")
+            || t.starts_with("<ca>")
+            || t.starts_with("<tls-")
+    });
+    if !has_ovpn_marker {
+        return Vec::new();
+    }
+    let mut proto = "udp".to_string();
+    let mut dev = "tun".to_string();
+    let mut remotes: Vec<(String, u16)> = Vec::new();
+    for raw_line in text.lines() {
+        let line = raw_line.split(['#', ';']).next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.is_empty() {
+            continue;
+        }
+        match parts[0].to_ascii_lowercase().as_str() {
+            "proto" if parts.len() >= 2 => proto = parts[1].to_ascii_lowercase(),
+            "dev" if parts.len() >= 2 => dev = parts[1].to_ascii_lowercase(),
+            "remote" if parts.len() >= 2 => {
+                let host = parts[1].trim();
+                let port = parts
+                    .get(2)
+                    .and_then(|p| p.parse::<u16>().ok())
+                    .unwrap_or(1194);
+                let line_proto = parts
+                    .get(3)
+                    .map(|p| p.to_ascii_lowercase())
+                    .unwrap_or_else(|| proto.clone());
+                if !host.is_empty() && port > 0 && !host.contains('/') {
+                    proto = line_proto;
+                    remotes.push((host.to_string(), port));
+                }
+            }
+            _ => {}
+        }
+    }
+    remotes
+        .into_iter()
+        .map(|(h, p)| {
+            let formatted_host = if h.contains(':') && !h.starts_with('[') {
+                format!("[{h}]")
+            } else {
+                h
+            };
+            format!("openvpn://{formatted_host}:{p}?proto={proto}&dev={dev}#OpenVPN")
+        })
+        .collect()
+}
+
+/// Extract raw WireGuard `.conf` INI blocks (`[Interface] ... [Peer]`) into canonical
+/// `wireguard://PrivateKey@Endpoint?publickey=...` share links.
+fn extract_wireguard_ini_links(body: &str) -> Vec<String> {
+    let text = body
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
+        .replace("<br>", "\n")
+        .replace("&amp;", "&");
+    if !text.contains("[Interface]") || !text.contains("[Peer]") {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for block in text.split("[Interface]").skip(1) {
+        if !block.contains("[Peer]") {
+            continue;
+        }
+        let mut private_key = String::new();
+        let mut address = String::new();
+        let mut dns = String::new();
+        let mut mtu = String::new();
+        let mut public_key = String::new();
+        let mut endpoint = String::new();
+        let mut in_peer = false;
+        for raw_line in block.lines() {
+            let line = raw_line.split('#').next().unwrap_or("").trim();
+            if line.is_empty() {
+                continue;
+            }
+            if line.eq_ignore_ascii_case("[Peer]") {
+                in_peer = true;
+                continue;
+            }
+            if line.starts_with('[') && line.ends_with(']') {
+                break;
+            }
+            let Some((k, v)) = line.split_once('=') else {
+                continue;
+            };
+            let key = k.trim().to_ascii_lowercase();
+            let val = v.trim().to_string();
+            match (in_peer, key.as_str()) {
+                (false, "privatekey") => private_key = val,
+                (false, "address") => address = val,
+                (false, "dns") => dns = val,
+                (false, "mtu") => mtu = val,
+                (true, "publickey") => public_key = val,
+                (true, "endpoint") => endpoint = val,
+                _ => {}
+            }
+        }
+        if endpoint.is_empty() || (private_key.is_empty() && public_key.is_empty()) {
+            continue;
+        }
+        let user = if private_key.is_empty() {
+            "wireguard"
+        } else {
+            private_key.as_str()
+        };
+        let mut params = Vec::new();
+        if !public_key.is_empty() {
+            params.push(format!("publickey={public_key}"));
+        }
+        if !address.is_empty() {
+            params.push(format!("address={address}"));
+        }
+        if !dns.is_empty() {
+            params.push(format!("dns={dns}"));
+        }
+        if !mtu.is_empty() {
+            params.push(format!("mtu={mtu}"));
+        }
+        let query = if params.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", params.join("&"))
+        };
+        out.push(format!("wireguard://{user}@{endpoint}{query}#WireGuard"));
     }
     out
 }
@@ -286,8 +529,39 @@ pub fn discovery_enabled() -> bool {
 /// roughly by historical reliability; `discover_channel_yields` rank them by
 /// *live* yield.
 pub const DISCOVER_CANDIDATE_CHANNELS: &[&str] = &[
-    "v2ray_configs_pools",
+    "whitedns",
+    "FarazV2ray",
+    "ProxGp",
+    "letsproxys1",
+    "napsternetv",
+    "AarazV2ray",
+    "filembad",
+    "v2ray1_ng",
+    "proxymtprotoir",
+    "ConfigX2ray",
+    "ShadowProxy66",
+    "V2ray_confiig",
+    "daddynetwork",
+    "AR14N24B",
+    "cpy_teeL",
     "MARAMBASHI",
+    "Zed_NetMeli",
+    "purland",
+    "myseaproxy",
+    "v2rayngvpn",
+    "Broz_time",
+    "V2rayng_Fast",
+    "meliproxyy",
+    "Kamkarstore",
+    "marambashi2",
+    "KiaNet_GP",
+    "ConfigWireguard",
+    "AzadInternet_TV",
+    "blackRay",
+    "npvfree11",
+    "chatnekonvaslshim",
+    "ServerNettGap",
+    "v2ray_configs_pools",
     "v2raycollector",
     "v2rayann",
     "FreeV2rayConfigs",
@@ -871,6 +1145,45 @@ mod tests {
         assert_eq!(links.len(), 2);
         assert!(links.iter().any(|l| l.starts_with("vmess://")));
         assert!(links.iter().any(|l| l.starts_with("ssr://")));
+    }
+
+    #[test]
+    fn extract_wireguard_ini_napsternet_and_mtproto() {
+        let html = concat!(
+            "<div class=\"tgme_widget_message_text\">",
+            "[Interface]<br/>PrivateKey = privABC==<br/>Address = 172.16.0.2/32<br/>",
+            "[Peer]<br/>PublicKey = pubXYZ==<br/>Endpoint = 162.159.192.1:2408<br/>",
+            "npv4://user@npv.example.com:443#NpvNode ",
+            "tg://proxy?server=9.9.9.9&amp;port=443&amp;secret=ee001122",
+            "</div>"
+        );
+        let links = extract_proxy_links(html);
+        assert!(links.iter().any(|l| l.starts_with("wireguard://privABC==@162.159.192.1:2408")));
+        assert!(links.iter().any(|l| l.starts_with("npv4://user@npv.example.com:443")));
+        assert!(links.iter().any(|l| l == "tg://proxy?server=9.9.9.9&port=443&secret=ee001122"));
+    }
+
+    #[test]
+    fn extract_openvpn_blocks_and_config_file_urls() {
+        let html = concat!(
+            "<div class=\"tgme_widget_message_text\">",
+            "client<br/>dev tun<br/>proto tcp<br/>remote 45.12.34.56 443<br/>",
+            "Download files: ",
+            "https://cdn.example.com/vpn/iran_tcp.ovpn ",
+            "https://cdn.example.com/vpn/fast.npvs ",
+            "https://cdn.example.com/vpn/mobile.hc ",
+            "https://cdn.example.com/vpn/bypass.custom",
+            "</div>"
+        );
+        let links = extract_proxy_links(html);
+        assert!(links.iter().any(|l| l.starts_with("openvpn://45.12.34.56:443")));
+
+        let file_urls = extract_config_file_urls(html);
+        assert_eq!(file_urls.len(), 4);
+        assert!(file_urls.iter().any(|u| u.ends_with(".ovpn")));
+        assert!(file_urls.iter().any(|u| u.ends_with(".npvs")));
+        assert!(file_urls.iter().any(|u| u.ends_with(".hc")));
+        assert!(file_urls.iter().any(|u| u.ends_with(".custom")));
     }
 
     #[test]

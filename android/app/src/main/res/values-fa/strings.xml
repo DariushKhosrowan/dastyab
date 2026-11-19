@@ -755,4 +755,38 @@
     <string name="cf_dialog_route_script_hint">نام اسکریپت ورکر</string>
     <string name="cf_dialog_profile_title">ساخت پروفایل جدید</string>
     <string name="cf_dialog_profile_hint">نام پروفایل (مثلاً backup-cf)</string>
+
+    <!-- Universal Config Harvester Actions -->
+    <string name="rescue_action_title">کانفیگ %1$s (%2$s)</string>
+    <string name="rescue_action_apply_vpn">اعمال و اتصال با VPN دستیاب</string>
+    <string name="rescue_action_promote_layer">ذخیره به‌عنوان لایه VPN</string>
+    <string name="rescue_action_copy_uri">کپی لینک کانفیگ</string>
+    <string name="rescue_action_copy_wg_ini">کپی فایل WireGuard .conf (INI)</string>
+    <string name="rescue_action_open_telegram">باز کردن پروکسی در تلگرام</string>
+    <string name="rescue_action_open_client">کپی و باز کردن %1$s</string>
+    <string name="rescue_layer_promoted_toast">لایه %1$s ذخیره شد!</string>
+    <string name="rescue_wg_ini_copied_toast">کانفیگ WireGuard .conf کپی شد!</string>
+    <string name="rescue_btn_file_vault">مخزن فایل‌های کانفیگ (.ovpn / .npvs / .hc / .custom)</string>
+    <string name="rescue_action_copy_ovpn">کپی پروفایل OpenVPN (.ovpn)</string>
+    <string name="rescue_action_save_open_file">ذخیره فایل و باز کردن در برنامه</string>
+    <string name="rescue_ovpn_copied_toast">پروفایل OpenVPN .ovpn کپی شد!</string>
+    <string name="rescue_vault_title">مخزن فایل‌های کانفیگ (%1$d)</string>
+    <string name="rescue_vault_btn_download_url">+ دانلود فایل کانفیگ از لینک</string>
+    <string name="rescue_vault_btn_import_local">+ وارد کردن فایل از دستگاه (.ovpn/.npvs/.hc/.custom)</string>
+    <string name="rescue_vault_download_title">دانلود فایل کانفیگ</string>
+    <string name="rescue_vault_download_hint">https://…/config.ovpn, .npvs, .hc, .custom, .conf</string>
+    <string name="rescue_vault_download_ok">%1$s دانلود شد</string>
+    <string name="rescue_vault_download_fail">دانلود فایل کانفیگ ناموفق بود</string>
+    <string name="rescue_vault_import_ok">%1$s وارد شد (%2$d سرور استخراج شد)</string>
+    <string name="rescue_vault_import_fail">وارد کردن فایل انتخابی ناموفق بود</string>
+    <string name="rescue_vault_file_open_client">باز کردن با %1$s</string>
+    <string name="rescue_vault_file_open_any">باز کردن / اشتراک‌گذاری فایل</string>
+    <string name="rescue_vault_file_save_downloads">ذخیره در Downloads/DastYab</string>
+    <string name="rescue_vault_file_extract_promote">استخراج و افزودن به لایه VPN</string>
+    <string name="rescue_vault_file_open_tg_post">باز کردن پست کانال (تلگرام)</string>
+    <string name="rescue_vault_saved_downloads_toast">%1$s در Downloads/DastYab ذخیره شد</string>
+    <string name="rescue_vault_no_endpoints_toast">فایل به‌صورت کامل ذخیره شد (فرمت باینری/رمزگذاری‌شده)</string>
+    <string name="layers_btn_build_shield">ساخت خودکار سپر چندلایه قدرتمند VPN</string>
+    <string name="layers_shield_building">در حال ساخت و تست سرعت لایه‌های چندپروتکلی VPN…</string>
+    <string name="layers_shield_built_toast">سپر مقاوم %1$d لایه‌ای VPN ساخته شد!</string>
 </resources>

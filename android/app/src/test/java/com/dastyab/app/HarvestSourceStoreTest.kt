@@ -27,6 +27,8 @@ class HarvestSourceStoreTest {
         assertEquals("v2rayng_org", HarvestSourceStore.normalizeTelegramChannel("@v2rayng_org"))
         assertEquals("PrivateVPNs", HarvestSourceStore.normalizeTelegramChannel("https://t.me/s/PrivateVPNs"))
         assertEquals("DirectVPN", HarvestSourceStore.normalizeTelegramChannel("t.me/DirectVPN/1234"))
+        assertEquals("whitedns", HarvestSourceStore.normalizeTelegramChannel("Telegram.me/whitedns"))
+        assertEquals("whitedns", HarvestSourceStore.normalizeTelegramChannel("https://telegram.me/s/whitedns"))
         assertNull(HarvestSourceStore.normalizeTelegramChannel("a"))
         assertNull(HarvestSourceStore.normalizeTelegramChannel("bad channel!"))
     }
@@ -43,7 +45,7 @@ class HarvestSourceStoreTest {
     }
 
     @Test
-    fun extractHostAndPort_supportsVlessAndTrojan() {
+    fun extractHostAndPort_supportsAllProtocols() {
         assertEquals(
             "edge.example.com" to 443,
             HarvestSourceStore.extractHostAndPort("vless://uuid@edge.example.com:443?security=tls")
@@ -51,6 +53,18 @@ class HarvestSourceStoreTest {
         assertEquals(
             "tr.example.com" to 8443,
             HarvestSourceStore.extractHostAndPort("trojan://pass@tr.example.com:8443#Node")
+        )
+        assertEquals(
+            "162.159.192.1" to 2408,
+            HarvestSourceStore.extractHostAndPort("wireguard://privKey@162.159.192.1:2408?publickey=pub#WARP")
+        )
+        assertEquals(
+            "npv.example.com" to 443,
+            HarvestSourceStore.extractHostAndPort("npv4://user@npv.example.com:443#NPV")
+        )
+        assertEquals(
+            "185.1.2.3" to 8443,
+            HarvestSourceStore.extractHostAndPort("tg://proxy?server=185.1.2.3&port=8443&secret=dd00")
         )
     }
 }

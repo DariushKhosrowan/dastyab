@@ -48,4 +48,86 @@ class ConfigHarvesterTest {
         assertTrue(urls.contains("https://github.com/getlantern"))
         assertTrue(urls.contains("https://github.com/thetorproject"))
     }
+
+    @Test
+    fun defaultTelegramChannels_includesWhiteDnsAndAllRequestedChannels() {
+        val expected = listOf(
+            "whitedns",
+            "FarazV2ray",
+            "ProxGp",
+            "letsproxys1",
+            "napsternetv",
+            "AarazV2ray",
+            "filembad",
+            "v2ray1_ng",
+            "proxymtprotoir",
+            "ConfigX2ray",
+            "ShadowProxy66",
+            "V2ray_confiig",
+            "daddynetwork",
+            "AR14N24B",
+            "cpy_teeL",
+            "MARAMBASHI",
+            "Zed_NetMeli",
+            "purland",
+            "myseaproxy",
+            "v2rayngvpn",
+            "Broz_time",
+            "V2rayng_Fast",
+            "meliproxyy",
+            "Kamkarstore",
+            "marambashi2",
+            "KiaNet_GP",
+            "ConfigWireguard",
+            "AzadInternet_TV",
+            "blackRay",
+            "npvfree11",
+            "chatnekonvaslshim",
+            "ServerNettGap"
+        )
+        val channels = ConfigHarvester.DEFAULT_TELEGRAM_CHANNELS
+        expected.forEach { ch ->
+            assertTrue("Missing channel $ch", channels.contains(ch))
+        }
+        assertEquals("DEFAULT_TELEGRAM_CHANNELS must not have duplicate handles", channels.distinct().size, channels.size)
+    }
+
+    @Test
+    fun extractProxyConfigs_extractsWireGuardIniNapsternetVAndMtproto() {
+        val html = """
+            <div class="tgme_widget_message_text">
+                [Interface]<br/>
+                PrivateKey = priv12345=<br/>
+                [Peer]<br/>
+                PublicKey = pub12345=<br/>
+                Endpoint = 162.159.192.1:2408<br/>
+                npv4://user@npv.example.com:443#NpvFast<br/>
+                tg://proxy?server=1.2.3.4&amp;port=443&amp;secret=dd000011<br/>
+                vless://11111111-2222-3333-4444-555555555555@edge.example.com:443#VlessEdge
+            </div>
+        """.trimIndent()
+        val configs = ConfigHarvester.extractProxyConfigs(html)
+        assertTrue(configs.any { it.startsWith("vless://") })
+        assertTrue(configs.any { it.startsWith("wireguard://") })
+        assertTrue(configs.any { it.startsWith("npv4://") })
+        assertTrue(configs.any { it == "tg://proxy?server=1.2.3.4&port=443&secret=dd000011" })
+
+        val ovpnConfigs = ConfigHarvester.extractProxyConfigs("client\ndev tun\nproto udp\nremote 91.2.3.4 1194")
+        assertTrue(ovpnConfigs.any { it.startsWith("openvpn://91.2.3.4:1194") })
+    }
+
+    @Test
+    fun knownFallbackTools_coversOpenVpnWireGuardNapsternetAndTunnelFileClients() {
+        val names = ConfigHarvester.KNOWN_FALLBACK_TOOLS.map { it.name }.toSet()
+        assertTrue("OpenVPN for Android" in names)
+        assertTrue("OpenVPN Connect" in names)
+        assertTrue("HTTP Custom" in names)
+        assertTrue("HTTP Injector" in names)
+        assertTrue("DarkTunnel" in names)
+        assertTrue("TLS Tunnel" in names)
+        assertTrue("HA Tunnel Plus" in names)
+        assertTrue("NetMod" in names)
+        assertTrue("WireGuard" in names)
+        assertTrue("NapsternetV" in names)
+    }
 }

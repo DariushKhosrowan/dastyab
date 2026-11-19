@@ -26,20 +26,48 @@
 use base64::Engine;
 
 /// Proxy URI schemes the node store / harvester understand.
-pub const SUPPORTED_SCHEMES: &[&str] =
-    &["vless", "vmess", "trojan", "ss", "ssr", "hysteria2", "tuic"];
+pub const SUPPORTED_SCHEMES: &[&str] = &[
+    "vless",
+    "vmess",
+    "trojan",
+    "ss",
+    "ssr",
+    "hysteria2",
+    "hysteria",
+    "hy2",
+    "tuic",
+    "wireguard",
+    "wg",
+    "warp",
+    "amneziawg",
+    "openvpn",
+    "ovpn",
+    "npv",
+    "npv4",
+    "napsternetv",
+    "juicity",
+    "anytls",
+    "socks5",
+    "socks4",
+    "socks",
+    "ssh",
+    "sn",
+    "dnstt",
+    "slipnet",
+];
 
 /// Normalized view of a single share-link.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProxyUri {
-    /// Lowercase scheme (e.g. `vless`, `trojan`).
+    /// Lowercase scheme (e.g. `vless`, `trojan`, `wireguard`, `npv4`, `mtproto`).
     pub scheme: String,
     /// Server host (IP or domain).
     pub host: String,
     /// Server port.
     pub port: u16,
     /// Identity used for dedup: uuid (vless/vmess/tuic), password
-    /// (trojan), auth token (hysteria2), or `method:password` (ss/ssr).
+    /// (trojan), auth token (hysteria2), private key (wireguard), secret (mtproto),
+    /// or `method:password` (ss/ssr).
     pub id: String,
     /// Fragment after `#` (v2rayN alias), percent-decoded.
     pub alias: String,
@@ -52,18 +80,28 @@ impl ProxyUri {
     /// unsupported input.
     pub fn parse(raw: &str) -> Option<ProxyUri> {
         let raw = raw.trim();
-        let (scheme, rest) = split_scheme(raw)?;
+        if let Some(mt) = parse_mtproto(raw) {
+            return Some(mt);
+        }
+        let (scheme_raw, rest) = split_scheme(raw)?;
+        let scheme = scheme_raw.to_ascii_lowercase();
         let mut out = ProxyUri {
-            scheme: scheme.to_string(),
+            scheme: scheme.clone(),
             host: String::new(),
             port: 0,
             id: String::new(),
             alias: String::new(),
             raw: raw.to_string(),
         };
-        let ok = match scheme {
-            "vless" | "trojan" | "hysteria2" => parse_userinfo_host(&mut out, rest, 1),
+        let ok = match scheme.as_str() {
+            "vless" | "trojan" | "hysteria2" | "hysteria" | "hy2" | "juicity" | "anytls"
+            | "ssh" => parse_userinfo_host(&mut out, rest, 1),
             "tuic" => parse_userinfo_host(&mut out, rest, 2),
+            "wireguard" | "wg" | "warp" | "amneziawg" | "openvpn" | "ovpn" | "socks5"
+            | "socks4" | "socks" | "sn" | "dnstt" | "slipnet" => {
+                parse_optional_userinfo_host(&mut out, rest)
+            }
+            "npv" | "npv4" | "napsternetv" => parse_napsternet(&mut out, rest),
             "ss" => parse_ss(&mut out, rest),
             "vmess" => parse_vmess(&mut out, rest),
             "ssr" => parse_ssr(&mut out, rest),
@@ -99,12 +137,22 @@ fn strip_query_frag(host_part: &str) -> &str {
     host_part.split('/').next().unwrap_or(host_part)
 }
 
-/// Parse `host:port` into `out.host` / `out.port`.
+/// Parse `host:port` (including bracketed IPv6 `[host]:port`) into `out.host` / `out.port`.
 fn set_host_port(out: &mut ProxyUri, host_port: &str) -> bool {
-    let host_port = strip_query_frag(host_port);
-    let (host, port) = match host_port.rsplit_once(':') {
-        Some(x) => x,
-        None => return false,
+    let host_port = strip_query_frag(host_port).trim();
+    let (host, port) = if let Some(after_open) = host_port.strip_prefix('[') {
+        let Some((ipv6, rest)) = after_open.split_once(']') else {
+            return false;
+        };
+        let Some(port_str) = rest.strip_prefix(':') else {
+            return false;
+        };
+        (ipv6, port_str)
+    } else {
+        match host_port.rsplit_once(':') {
+            Some(x) => x,
+            None => return false,
+        }
     };
     let Ok(port) = port.trim().parse::<u16>() else {
         return false;
@@ -141,6 +189,131 @@ fn parse_userinfo_host(out: &mut ProxyUri, rest: &str, split_at: usize) -> bool 
     }
     out.id = id;
     true
+}
+
+/// For schemes where userinfo before `@` is optional (`wireguard`, `wg`, `warp`, `socks5`, `sn`, `dnstt`).
+fn parse_optional_userinfo_host(out: &mut ProxyUri, rest: &str) -> bool {
+    if rest.contains('@') {
+        return parse_userinfo_host(out, rest, 1);
+    }
+    if !set_host_port(out, rest) {
+        return false;
+    }
+    out.id = format!("{}:{}", out.host, out.port);
+    true
+}
+
+/// NapsternetV (`npv://`, `npv4://`, `napsternetv://`) supports both authority URIs and Base64 JSON blobs.
+fn parse_napsternet(out: &mut ProxyUri, rest: &str) -> bool {
+    if rest.contains('@') && parse_userinfo_host(out, rest, 1) {
+        return true;
+    }
+    let clean = rest.split(['?', '#']).next().unwrap_or(rest);
+    if let Some(decoded) = b64_decode(clean) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&decoded) {
+            let host = v
+                .get("add")
+                .or_else(|| v.get("host"))
+                .or_else(|| v.get("server"))
+                .or_else(|| v.get("address"))
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
+            let port_opt = v
+                .get("port")
+                .or_else(|| v.get("serverPort"))
+                .and_then(|x| {
+                    x.as_str()
+                        .map(|s| s.to_string())
+                        .or_else(|| x.as_u64().map(|n| n.to_string()))
+                });
+            let id = v
+                .get("id")
+                .or_else(|| v.get("uuid"))
+                .or_else(|| v.get("password"))
+                .or_else(|| v.get("username"))
+                .and_then(|x| x.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("napsternetv");
+            if let Some(port_str) = port_opt {
+                if let Ok(port) = port_str.parse::<u16>() {
+                    if !host.is_empty() && port > 0 {
+                        out.host = host.to_string();
+                        out.port = port;
+                        out.id = id.to_string();
+                        if let Some(ps) = v
+                            .get("ps")
+                            .or_else(|| v.get("remarks"))
+                            .or_else(|| v.get("name"))
+                            .and_then(|x| x.as_str())
+                        {
+                            if !ps.is_empty() {
+                                out.alias = ps.to_string();
+                            }
+                        }
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    if set_host_port(out, rest) {
+        out.id = format!("{}:{}", out.host, out.port);
+        return true;
+    }
+    false
+}
+
+/// Telegram MTProto links (`tg://proxy?server=...&port=...&secret=...` or `https://t.me/proxy?...`).
+fn parse_mtproto(raw: &str) -> Option<ProxyUri> {
+    let lower = raw.to_ascii_lowercase();
+    let query = if lower.starts_with("tg://proxy?") {
+        &raw["tg://proxy?".len()..]
+    } else if let Some(idx) = lower.find("t.me/proxy?") {
+        if !(lower.starts_with("https://") || lower.starts_with("http://")) {
+            return None;
+        }
+        &raw[idx + "t.me/proxy?".len()..]
+    } else if let Some(idx) = lower.find("telegram.me/proxy?") {
+        if !(lower.starts_with("https://") || lower.starts_with("http://")) {
+            return None;
+        }
+        &raw[idx + "telegram.me/proxy?".len()..]
+    } else {
+        return None;
+    };
+
+    let query_clean = query.split('#').next().unwrap_or(query);
+    let mut server = String::new();
+    let mut port: u16 = 0;
+    let mut secret = String::new();
+    for pair in query_clean.split('&') {
+        let Some((k, v)) = pair.split_once('=') else {
+            continue;
+        };
+        let key = k.trim().to_ascii_lowercase();
+        let val = crate::artifact::vless::decode_query(v.trim());
+        match key.as_str() {
+            "server" | "host" => server = val,
+            "port" => port = val.parse::<u16>().unwrap_or(0),
+            "secret" => secret = val,
+            _ => {}
+        }
+    }
+    if server.is_empty() || port == 0 {
+        return None;
+    }
+    Some(ProxyUri {
+        scheme: "mtproto".to_string(),
+        host: server.clone(),
+        port,
+        id: if secret.is_empty() {
+            format!("{server}:{port}")
+        } else {
+            secret
+        },
+        alias: "MTProto".to_string(),
+        raw: raw.to_string(),
+    })
 }
 
 /// Shadowsocks: plain `method:password@host:port`, SIP002
@@ -401,5 +574,47 @@ mod tests {
         }
         assert!(SUPPORTED_SCHEMES.contains(&"vless"));
         assert!(SUPPORTED_SCHEMES.contains(&"ss"));
+        assert!(SUPPORTED_SCHEMES.contains(&"wireguard"));
+        assert!(SUPPORTED_SCHEMES.contains(&"npv4"));
+    }
+
+    #[test]
+    fn parses_wireguard_napsternet_hy2_and_mtproto() {
+        let wg = ProxyUri::parse("wireguard://privKey==@162.159.192.1:2408?publickey=pubKey==#WARP").unwrap();
+        assert_eq!(wg.scheme, "wireguard");
+        assert_eq!(wg.host, "162.159.192.1");
+        assert_eq!(wg.port, 2408);
+        assert_eq!(wg.id, "privKey==");
+        assert_eq!(wg.alias, "WARP");
+
+        let wg6 = ProxyUri::parse("warp://[2606:4700:d0::a29f:c001]:2408#WARPv6").unwrap();
+        assert_eq!(wg6.scheme, "warp");
+        assert_eq!(wg6.host, "2606:4700:d0::a29f:c001");
+        assert_eq!(wg6.port, 2408);
+
+        let npv_json = r#"{"server":"npv.example.com","port":8443,"uuid":"abc-123","remarks":"NPV-Fast"}"#;
+        let npv_b64 = base64::engine::general_purpose::STANDARD.encode(npv_json);
+        let npv = ProxyUri::parse(&format!("npv4://{npv_b64}")).unwrap();
+        assert_eq!(npv.scheme, "npv4");
+        assert_eq!(npv.host, "npv.example.com");
+        assert_eq!(npv.port, 8443);
+        assert_eq!(npv.id, "abc-123");
+        assert_eq!(npv.alias, "NPV-Fast");
+
+        let hy2 = ProxyUri::parse("hy2://tok@hy.example.com:443?sni=hy.example.com#Hy2Node").unwrap();
+        assert_eq!(hy2.scheme, "hy2");
+        assert_eq!(hy2.port, 443);
+
+        let mt = ProxyUri::parse("tg://proxy?server=1.2.3.4&port=443&secret=dd00001111").unwrap();
+        assert_eq!(mt.scheme, "mtproto");
+        assert_eq!(mt.host, "1.2.3.4");
+        assert_eq!(mt.port, 443);
+        assert_eq!(mt.id, "dd00001111");
+
+        let ovpn = ProxyUri::parse("openvpn://198.51.100.77:1194?proto=tcp&dev=tun#OpenVPN-TCP").unwrap();
+        assert_eq!(ovpn.scheme, "openvpn");
+        assert_eq!(ovpn.host, "198.51.100.77");
+        assert_eq!(ovpn.port, 1194);
+        assert_eq!(ovpn.alias, "OpenVPN-TCP");
     }
 }

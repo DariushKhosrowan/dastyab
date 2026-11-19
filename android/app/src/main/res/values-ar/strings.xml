@@ -751,4 +751,38 @@
     <string name="cf_dialog_route_script_hint">اسم سكربت Worker</string>
     <string name="cf_dialog_profile_title">إنشاء ملف جديد</string>
     <string name="cf_dialog_profile_hint">اسم الملف (مثل backup-cf)</string>
+
+    <!-- Universal Config Harvester Actions -->
+    <string name="rescue_action_title">إعداد %1$s (%2$s)</string>
+    <string name="rescue_action_apply_vpn">تطبيق والاتصال عبر DastYab VPN</string>
+    <string name="rescue_action_promote_layer">حفظ كطبقة VPN</string>
+    <string name="rescue_action_copy_uri">نسخ رابط الإعداد</string>
+    <string name="rescue_action_copy_wg_ini">نسخ ملف WireGuard .conf (INI)</string>
+    <string name="rescue_action_open_telegram">فتح البروكسي في تيليجرام</string>
+    <string name="rescue_action_open_client">نسخ وفتح %1$s</string>
+    <string name="rescue_layer_promoted_toast">تم حفظ طبقة %1$s!</string>
+    <string name="rescue_wg_ini_copied_toast">تم نسخ إعداد WireGuard .conf!</string>
+    <string name="rescue_btn_file_vault">خزينة ملفات الإعداد (.ovpn / .npvs / .hc / .custom)</string>
+    <string name="rescue_action_copy_ovpn">نسخ ملف OpenVPN (.ovpn)</string>
+    <string name="rescue_action_save_open_file">حفظ الملف وفتحه في التطبيق</string>
+    <string name="rescue_ovpn_copied_toast">تم نسخ ملف OpenVPN .ovpn!</string>
+    <string name="rescue_vault_title">خزينة ملفات الإعداد (%1$d)</string>
+    <string name="rescue_vault_btn_download_url">+ تنزيل ملف إعداد من رابط</string>
+    <string name="rescue_vault_btn_import_local">+ استيراد ملف من الجهاز (.ovpn/.npvs/.hc/.custom)</string>
+    <string name="rescue_vault_download_title">تنزيل ملف إعداد</string>
+    <string name="rescue_vault_download_hint">https://…/config.ovpn, .npvs, .hc, .custom, .conf</string>
+    <string name="rescue_vault_download_ok">تم تنزيل %1$s</string>
+    <string name="rescue_vault_download_fail">تعذر تنزيل ملف الإعداد</string>
+    <string name="rescue_vault_import_ok">تم استيراد %1$s (استُخرجت %2$d نقطة)</string>
+    <string name="rescue_vault_import_fail">تعذر استيراد الملف المحدد</string>
+    <string name="rescue_vault_file_open_client">فتح باستخدام %1$s</string>
+    <string name="rescue_vault_file_open_any">فتح / مشاركة ملف الإعداد</string>
+    <string name="rescue_vault_file_save_downloads">حفظ نسخة في Downloads/DastYab</string>
+    <string name="rescue_vault_file_extract_promote">استخراج وترقية إلى طبقة VPN</string>
+    <string name="rescue_vault_file_open_tg_post">فتح منشور القناة (تيليجرام)</string>
+    <string name="rescue_vault_saved_downloads_toast">تم حفظ %1$s في Downloads/DastYab</string>
+    <string name="rescue_vault_no_endpoints_toast">تم حفظ الملف بالكامل (ملف ثنائي/مشفر)</string>
+    <string name="layers_btn_build_shield">إنشاء درع VPN متعدد الطبقات تلقائياً</string>
+    <string name="layers_shield_building">جارٍ بناء واختبار سرعة طبقات VPN متعددة البروتوكولات…</string>
+    <string name="layers_shield_built_toast">تم بناء درع VPN مرن من %1$d طبقات!</string>
 </resources>

@@ -9,7 +9,9 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.Base64
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * ConfigHarvester — 5-stage resilient proxy/VPN config harvester designed for
@@ -61,7 +63,8 @@ object ConfigHarvester {
         val activeVpnDetected: Boolean,
         val installedFallbackTools: List<FallbackTool>,
         val stepsLog: List<String>,
-        val guidance: String
+        val guidance: String,
+        val downloadedFilesCount: Int = 0
     )
 
     /** Curated GitHub feeds with jsDelivr CDN mirrors when raw.githubusercontent.com is throttled. */
@@ -89,11 +92,55 @@ object ConfigHarvester {
             primaryUrl = "https://raw.githubusercontent.com/yebekhe/TVC/main/subscriptions/xray/normal/vless",
             mirrorUrl = "https://cdn.jsdelivr.net/gh/yebekhe/TVC@main/subscriptions/xray/normal/vless",
             kind = SourceKind.GITHUB
+        ),
+        FeedSource(
+            name = "barry-far V2ray-Configs (All Protocols)",
+            primaryUrl = "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/barry-far/V2ray-Configs@main/All_Configs_Sub.txt",
+            kind = SourceKind.GITHUB
+        ),
+        FeedSource(
+            name = "Epodonios v2ray-configs (All Protocols)",
+            primaryUrl = "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/Epodonios/v2ray-configs@main/All_Configs_Sub.txt",
+            kind = SourceKind.GITHUB
         )
     )
 
     /** Public Telegram channels parsed via `https://t.me/s/<channel>`. */
     val DEFAULT_TELEGRAM_CHANNELS = listOf(
+        "whitedns",
+        "FarazV2ray",
+        "ProxGp",
+        "letsproxys1",
+        "napsternetv",
+        "AarazV2ray",
+        "filembad",
+        "v2ray1_ng",
+        "proxymtprotoir",
+        "ConfigX2ray",
+        "ShadowProxy66",
+        "V2ray_confiig",
+        "daddynetwork",
+        "AR14N24B",
+        "cpy_teeL",
+        "MARAMBASHI",
+        "Zed_NetMeli",
+        "purland",
+        "myseaproxy",
+        "v2rayngvpn",
+        "Broz_time",
+        "V2rayng_Fast",
+        "meliproxyy",
+        "Kamkarstore",
+        "marambashi2",
+        "KiaNet_GP",
+        "ConfigWireguard",
+        "AzadInternet_TV",
+        "blackRay",
+        "npvfree11",
+        "chatnekonvaslshim",
+        "ServerNettGap",
         "v2rayng_org",
         "PrivateVPNs",
         "DirectVPN",
@@ -185,50 +232,89 @@ object ConfigHarvester {
             packageNames = listOf("com.cloudflare.onedotonedotonedotone"),
             githubUrl = "https://1.1.1.1/",
             description = "1.1.1.1 DNS + WireGuard edge tunnel"
+        ),
+        FallbackTool(
+            name = "WireGuard",
+            category = "WireGuard Client",
+            packageNames = listOf("com.wireguard.android"),
+            githubUrl = "https://github.com/WireGuard/wireguard-android",
+            description = "Official WireGuard .conf / wireguard:// VPN client"
+        ),
+        FallbackTool(
+            name = "NapsternetV",
+            category = "Multi-Protocol Client",
+            packageNames = listOf("com.napsternetv.app", "com.napsternetv.vpn"),
+            githubUrl = "https://t.me/napsternetv",
+            description = "Supports .npvs, .npv4, npv://, Xray & WireGuard configs"
+        ),
+        FallbackTool(
+            name = "OpenVPN for Android",
+            category = "OpenVPN Client",
+            packageNames = listOf("de.blinkt.openvpn"),
+            githubUrl = "https://github.com/schwabe/ics-openvpn",
+            description = "Open-source .ovpn / .openvpn client for TCP/UDP profiles"
+        ),
+        FallbackTool(
+            name = "OpenVPN Connect",
+            category = "OpenVPN Client",
+            packageNames = listOf("net.openvpn.openvpn"),
+            githubUrl = "https://openvpn.net/client/",
+            description = "Official OpenVPN .ovpn / .openvpn client"
+        ),
+        FallbackTool(
+            name = "HTTP Custom",
+            category = "Custom Payload (.hc)",
+            packageNames = listOf("xyz.easypro.httpcustom"),
+            githubUrl = "https://t.me/s/ConfigX2ray",
+            description = "Imports .hc SSH / V2Ray / UDP / SlowDNS config files"
+        ),
+        FallbackTool(
+            name = "HTTP Injector",
+            category = "Payload & SSH (.ehi/.custom)",
+            packageNames = listOf("com.evozi.injector"),
+            githubUrl = "https://t.me/s/letsproxys1",
+            description = "Imports .ehi / .custom / .costum SSH & V2Ray tunnels"
+        ),
+        FallbackTool(
+            name = "DarkTunnel",
+            category = "Stealth Tunnel (.dark)",
+            packageNames = listOf("net.darktunnel.app", "com.darktunnel.vpn"),
+            githubUrl = "https://t.me/s/blackRay",
+            description = "Imports .dark SSH, DNSTT & V2Ray tunnel files"
+        ),
+        FallbackTool(
+            name = "TLS Tunnel",
+            category = "TLS Tunnel (.tls)",
+            packageNames = listOf("com.tlsvpn.tlstunnel"),
+            githubUrl = "https://t.me/s/myseaproxy",
+            description = "Imports .tls SNI/TLS encapsulated VPN profiles"
+        ),
+        FallbackTool(
+            name = "HA Tunnel Plus",
+            category = "Custom SNI (.hat)",
+            packageNames = listOf("com.hatunnel.plus"),
+            githubUrl = "https://t.me/s/ShadowProxy66",
+            description = "Imports .hat custom header & payload profiles"
+        ),
+        FallbackTool(
+            name = "NetMod",
+            category = "Syna / NM (.nm)",
+            packageNames = listOf("com.netmod.syna"),
+            githubUrl = "https://t.me/s/ProxGp",
+            description = "Imports .nm SSH / Xray / OpenVPN multi-protocol configs"
         )
     )
 
-    private val PROXY_URI_REGEX = Regex(
-        """(vless|vmess|trojan|ss|hy2|hysteria2|tuic)://[^\s"'<>`\\]+""",
-        RegexOption.IGNORE_CASE
-    )
-
     /**
-     * Pure-Kotlin extractor: decodes HTML entities, optionally decodes Base64 subscription blobs,
-     * and returns deduplicated proxy URIs with `vless://` prioritized first.
+     * Pure-Kotlin universal extractor: decodes HTML entities, extracts all supported URI schemes
+     * (VLESS/VMess/Trojan/SS/SSR/Hy2/TUIC/WireGuard/WARP/NapsternetV/MTProto/SOCKS/SSH/SlipNet),
+     * parses WireGuard `[Interface]...[Peer]` INI blocks, and decodes nested Base64 blobs.
      */
-    fun extractProxyConfigs(rawPayload: String, maxConfigs: Int = 120): List<String> {
-        if (rawPayload.isBlank()) return emptyList()
-        val unescaped = unescapeHtml(rawPayload)
-        val found = LinkedHashSet<String>()
-
-        // 1. Direct scan on raw/HTML-unescaped text
-        PROXY_URI_REGEX.findAll(unescaped).forEach { match ->
-            val cleaned = cleanUri(match.value)
-            if (isPlausibleProxyUri(cleaned)) found.add(cleaned)
-        }
-
-        // 2. If nothing (or very few) found, try decoding as a Base64 subscription
-        if (found.isEmpty()) {
-            val decoded = tryDecodeBase64(unescaped)
-            if (decoded != null) {
-                PROXY_URI_REGEX.findAll(decoded).forEach { match ->
-                    val cleaned = cleanUri(match.value)
-                    if (isPlausibleProxyUri(cleaned)) found.add(cleaned)
-                }
-            }
-        }
-
-        // Prioritize VLESS first (directly supported by DastYab's VLESS parser), then Trojan/VMess/others
-        return found
-            .sortedWith(compareBy<String> { priorityRank(it) }.thenBy { it.length })
-            .take(maxConfigs)
+    fun extractProxyConfigs(rawPayload: String, maxConfigs: Int = 250): List<String> {
+        return UniversalConfig.extractAll(rawPayload, maxConfigs)
     }
 
-    fun protocolOf(uri: String): String {
-        val idx = uri.indexOf("://")
-        return if (idx > 0) uri.substring(0, idx).lowercase() else "unknown"
-    }
+    fun protocolOf(uri: String): String = UniversalConfig.protocolOf(uri)
 
     /** Builds a GitHub raw URL -> jsDelivr mirror URL if possible. */
     fun toJsDelivrMirror(rawGithubUrl: String): String? {
@@ -294,6 +380,7 @@ object ConfigHarvester {
         val allConfigs = LinkedHashSet<String>()
         var githubCount = 0
         var telegramCount = 0
+        var downloadedFilesCount = 0
         var usedMirror = false
 
         // ── STAGE 1: GitHub Direct + jsDelivr Mirror Fallback ──
@@ -311,11 +398,13 @@ object ConfigHarvester {
         for (feed in githubFeeds) {
             val body = httpGet(feed.primaryUrl, timeoutMs = 5500)
             if (body != null) {
-                val extracted = extractProxyConfigs(body, maxConfigs = 40)
-                if (extracted.isNotEmpty()) {
+                val (files, fileUris) = ConfigFileHarvester.harvestFilesFromBody(context, body, feed.name, maxDownloadsPerSource = 4)
+                downloadedFilesCount += files.count { it.isDownloadedLocally }
+                val extracted = (extractProxyConfigs(body, maxConfigs = 40) + fileUris).distinct()
+                if (extracted.isNotEmpty() || files.isNotEmpty()) {
                     allConfigs.addAll(extracted)
                     githubCount += extracted.size
-                    logStep("  ✓ GitHub direct [${feed.name}]: +${extracted.size} configs")
+                    logStep("  ✓ GitHub direct [${feed.name}]: +${extracted.size} configs, ${files.size} files")
                     if (githubCount >= 60) break
                     continue
                 }
@@ -325,12 +414,14 @@ object ConfigHarvester {
             if (mirror != null) {
                 val mirrorBody = httpGet(mirror, timeoutMs = 5500)
                 if (mirrorBody != null) {
-                    val extracted = extractProxyConfigs(mirrorBody, maxConfigs = 40)
-                    if (extracted.isNotEmpty()) {
+                    val (files, fileUris) = ConfigFileHarvester.harvestFilesFromBody(context, mirrorBody, feed.name, maxDownloadsPerSource = 4)
+                    downloadedFilesCount += files.count { it.isDownloadedLocally }
+                    val extracted = (extractProxyConfigs(mirrorBody, maxConfigs = 40) + fileUris).distinct()
+                    if (extracted.isNotEmpty() || files.isNotEmpty()) {
                         usedMirror = true
                         allConfigs.addAll(extracted)
                         githubCount += extracted.size
-                        logStep("  ✓ GitHub mirror (jsDelivr) [${feed.name}]: +${extracted.size} configs")
+                        logStep("  ✓ GitHub mirror (jsDelivr) [${feed.name}]: +${extracted.size} configs, ${files.size} files")
                         if (githubCount >= 60) break
                         continue
                     }
@@ -339,42 +430,62 @@ object ConfigHarvester {
             logStep("  ✗ Unreachable: ${feed.name}")
         }
 
-        // ── STAGE 2: Telegram Public Channels ──
+        // ── STAGE 2: Telegram Public Channels (Concurrent Multi-Channel Harvest) ──
         val customChannels = HarvestSourceStore.getCustomTelegramChannels(context)
         val channels = (customTelegramChannels + customChannels + DEFAULT_TELEGRAM_CHANNELS)
             .mapNotNull { HarvestSourceStore.normalizeTelegramChannel(it) }
-            .distinct()
-        logStep("Stage 2/4: Trying Telegram public channels (${customChannels.size} custom + ${DEFAULT_TELEGRAM_CHANNELS.size} built-in)…")
+            .distinctBy { it.lowercase() }
+        logStep("Stage 2/4: Checking ${channels.size} Telegram channels (${customChannels.size} custom + ${DEFAULT_TELEGRAM_CHANNELS.size} built-in) concurrently…")
 
-        for (channel in channels) {
-            val url = "https://t.me/s/$channel"
-            val body = httpGet(url, timeoutMs = 5000)
-            if (body != null) {
-                val extracted = extractProxyConfigs(body, maxConfigs = 30)
-                if (extracted.isNotEmpty()) {
-                    allConfigs.addAll(extracted)
-                    telegramCount += extracted.size
-                    logStep("  ✓ Telegram @$channel: +${extracted.size} configs")
-                    if (telegramCount >= 40) break
-                    continue
+        val tgPool = Executors.newFixedThreadPool(8)
+        try {
+            val tasks = channels.map { channel ->
+                Callable {
+                    val body = httpGet("https://t.me/s/$channel", timeoutMs = 4500)
+                    if (body == null) {
+                        Triple(channel, emptyList<String>(), 0)
+                    } else {
+                        val (files, fileUris) = ConfigFileHarvester.harvestFilesFromBody(
+                            context = context,
+                            rawBody = body,
+                            sourceLabel = "@$channel",
+                            maxDownloadsPerSource = 3
+                        )
+                        val extracted = (extractProxyConfigs(body, maxConfigs = 35) + fileUris).distinct()
+                        Triple(channel, extracted, files.size)
+                    }
                 }
             }
-            logStep("  ✗ Telegram @$channel unreachable")
+            val futures = tgPool.invokeAll(tasks, 20, TimeUnit.SECONDS)
+            for (future in futures) {
+                val (channel, extracted, fileCount) = runCatching { future.get() }.getOrNull() ?: continue
+                if (extracted.isNotEmpty() || fileCount > 0) {
+                    allConfigs.addAll(extracted)
+                    telegramCount += extracted.size
+                    downloadedFilesCount += fileCount
+                    val fileNote = if (fileCount > 0) ", $fileCount files" else ""
+                    logStep("  ✓ Telegram @$channel: +${extracted.size} configs$fileNote")
+                }
+            }
+        } finally {
+            tgPool.shutdownNow()
+        }
+        if (telegramCount == 0 && downloadedFilesCount == 0) {
+            logStep("  ✗ All ${channels.size} Telegram channels were unreachable.")
         }
 
-        val finalList = allConfigs
-            .sortedWith(compareBy<String> { priorityRank(it) }.thenBy { it.length })
-            .take(120)
+        val finalList = UniversalConfig.mergeBalanced(allConfigs, limit = 250)
 
-        if (finalList.isNotEmpty()) {
-            // Persist harvested configs so user has an offline pool during future blackouts
-            TunnelConfig.saveHarvestedConfigs(context, finalList)
+        if (finalList.isNotEmpty() || downloadedFilesCount > 0) {
+            if (finalList.isNotEmpty()) {
+                TunnelConfig.saveHarvestedConfigs(context, finalList)
+            }
             val outcome = when {
-                githubCount > 0 && telegramCount > 0 -> HarvestOutcome.SUCCESS_MIXED
+                githubCount > 0 && (telegramCount > 0 || downloadedFilesCount > 0) -> HarvestOutcome.SUCCESS_MIXED
                 githubCount > 0 -> HarvestOutcome.SUCCESS_GITHUB
                 else -> HarvestOutcome.SUCCESS_TELEGRAM
             }
-            val msg = "Harvested ${finalList.size} configs (GitHub: $githubCount, Telegram: $telegramCount). Saved for offline use."
+            val msg = "Harvested ${finalList.size} configs & $downloadedFilesCount files (GitHub: $githubCount, Telegram: $telegramCount). Saved offline."
             logStep("OK: $msg")
             return HarvestReport(
                 outcome = outcome,
@@ -385,7 +496,8 @@ object ConfigHarvester {
                 activeVpnDetected = activeVpn,
                 installedFallbackTools = installedTools,
                 stepsLog = log,
-                guidance = msg
+                guidance = msg,
+                downloadedFilesCount = downloadedFilesCount
             )
         }
 
@@ -499,56 +611,5 @@ object ConfigHarvester {
         }
     }
 
-    private fun unescapeHtml(input: String): String {
-        return input
-            .replace("&amp;", "&")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .replace("<br/>", "\n")
-            .replace("<br>", "\n")
-    }
-
-    private fun tryDecodeBase64(input: String): String? {
-        val compact = input.trim().replace("\r", "").replace("\n", "")
-        if (compact.length < 16 || compact.contains(' ')) return null
-        return try {
-            val bytes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                try {
-                    Base64.getDecoder().decode(compact)
-                } catch (_: Exception) {
-                    Base64.getUrlDecoder().decode(compact)
-                }
-            } else {
-                android.util.Base64.decode(compact, android.util.Base64.DEFAULT)
-            }
-            String(bytes, Charsets.UTF_8)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun cleanUri(raw: String): String {
-        return raw.trim().trimEnd(',', ';', '.', ')', ']', '}')
-    }
-
-    private fun isPlausibleProxyUri(uri: String): Boolean {
-        if (uri.length < 18 || uri.length > 2048) return false
-        return if (uri.startsWith("vless://", ignoreCase = true)) {
-            TunnelConfig.parseVlessUri(uri) != null
-        } else {
-            uri.contains("://") && (uri.contains("@") || uri.startsWith("vmess://", ignoreCase = true))
-        }
-    }
-
-    private fun priorityRank(uri: String): Int = when (protocolOf(uri)) {
-        "vless" -> 0
-        "trojan" -> 1
-        "hy2", "hysteria2" -> 2
-        "tuic" -> 3
-        "vmess" -> 4
-        "ss" -> 5
-        else -> 9
-    }
+    private fun priorityRank(uri: String): Int = UniversalConfig.priorityRank(uri)
 }

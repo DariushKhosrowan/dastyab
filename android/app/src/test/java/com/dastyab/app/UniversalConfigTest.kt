@@ -1,0 +1,206 @@
+package com.dastyab.app
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * Hermetic JVM unit tests for [UniversalConfig]:
+ *  - WireGuard `.conf` INI <-> `wireguard://` round-trip conversion
+ *  - NapsternetV (`npv://`, `npv4://`), VMess, SSR, Shadowsocks (plain, SIP002, Base64)
+ *  - Hysteria2 / TUIC / IPv6 WARP / SOCKS5 / SlipNet / Telegram MTProto links
+ *  - Inline Base64 subscription blobs inside Telegram HTML
+ *  - Protocol-balanced merging (`mergeBalanced`)
+ */
+class UniversalConfigTest {
+
+    @Test
+    fun wireGuardIni_roundTripsThroughUriAndPreservesEndpointAndKeys() {
+        val ini = """
+            [Interface]
+            PrivateKey = cPrivKeyExample1234567890=
+            Address = 172.16.0.2/32
+            DNS = 1.1.1.1
+            MTU = 1280
+
+            [Peer]
+            PublicKey = bPubKeyExample0987654321=
+            Endpoint = 162.159.192.1:2408
+        """.trimIndent()
+
+        val uri = UniversalConfig.wireGuardIniToUri(ini, "WARP-Clean")
+        assertNotNull(uri)
+        assertTrue(uri!!.startsWith("wireguard://"))
+
+        val parsed = UniversalConfig.parse(uri)
+        assertNotNull(parsed)
+        assertEquals("wireguard", parsed!!.protocol)
+        assertEquals(UniversalConfig.Family.WIREGUARD, parsed.family)
+        assertEquals("162.159.192.1", parsed.host)
+        assertEquals(2408, parsed.port)
+
+        val rebuiltIni = UniversalConfig.wireGuardUriToIni(uri)
+        assertNotNull(rebuiltIni)
+        assertTrue(rebuiltIni!!.contains("[Interface]"))
+        assertTrue(rebuiltIni.contains("PrivateKey = cPrivKeyExample1234567890="))
+        assertTrue(rebuiltIni.contains("[Peer]"))
+        assertTrue(rebuiltIni.contains("PublicKey = bPubKeyExample0987654321="))
+        assertTrue(rebuiltIni.contains("Endpoint = 162.159.192.1:2408"))
+    }
+
+    @Test
+    fun parse_supportsNapsternetV_vmess_ssr_shadowsocks_ipv6_and_mtproto() {
+        // NapsternetV Base64 JSON
+        val npvJson = """{"server":"npv.example.com","port":8443,"uuid":"u-1","remarks":"NpvNode"}"""
+        val npvUri = "npv4://${encodeBase64(npvJson)}"
+        val npvParsed = UniversalConfig.parse(npvUri)
+        assertNotNull(npvParsed)
+        assertEquals("npv4", npvParsed!!.protocol)
+        assertEquals(UniversalConfig.Family.NAPSTERNETV, npvParsed.family)
+        assertEquals("npv.example.com", npvParsed.host)
+        assertEquals(8443, npvParsed.port)
+        assertEquals("NpvNode", npvParsed.label)
+
+        // VMess Base64 JSON
+        val vmessJson = """{"v":"2","ps":"VM-Edge","add":"198.51.100.2","port":"443","id":"uuid-vm"}"""
+        val vmessParsed = UniversalConfig.parse("vmess://${encodeBase64(vmessJson)}")
+        assertNotNull(vmessParsed)
+        assertEquals("vmess", vmessParsed!!.protocol)
+        assertEquals("198.51.100.2", vmessParsed.host)
+        assertEquals(443, vmessParsed.port)
+        assertEquals("VM-Edge", vmessParsed.label)
+
+        // SSR Base64
+        val ssrPlain = "95.85.234.66:10001:auth_aes128_md5:aes-128-ctr:tls1.2_ticket_auth:Zm9vYmFy"
+        val ssrParsed = UniversalConfig.parse("ssr://${encodeBase64(ssrPlain)}#SSRNode")
+        assertNotNull(ssrParsed)
+        assertEquals("ssr", ssrParsed!!.protocol)
+        assertEquals("95.85.234.66", ssrParsed.host)
+        assertEquals(10001, ssrParsed.port)
+
+        // Shadowsocks SIP002 + Full Base64
+        val sip002User = encodeBase64("aes-256-gcm:pass123")
+        val ssSip = UniversalConfig.parse("ss://$sip002User@10.20.30.40:8388#London")
+        assertNotNull(ssSip)
+        assertEquals("10.20.30.40", ssSip!!.host)
+        assertEquals(8388, ssSip.port)
+
+        val ssFull = UniversalConfig.parse("ss://${encodeBase64("chacha20-ietf-poly1305:pw@5.6.7.8:9443")}#FullSS")
+        assertNotNull(ssFull)
+        assertEquals("5.6.7.8", ssFull!!.host)
+        assertEquals(9443, ssFull.port)
+
+        // IPv6 WARP / Hysteria2 / SlipNet / MTProto
+        val warp6 = UniversalConfig.parse("warp://[2606:4700:d0::a29f:c001]:2408#WARPv6")
+        assertNotNull(warp6)
+        assertEquals("2606:4700:d0::a29f:c001", warp6!!.host)
+        assertEquals(2408, warp6.port)
+
+        val hy2 = UniversalConfig.parse("hy2://token@hy.example.com:8443?sni=hy.example.com#Hy2")
+        assertNotNull(hy2)
+        assertEquals("hy2", hy2!!.protocol)
+        assertEquals(8443, hy2.port)
+
+        val mt = UniversalConfig.parse("tg://proxy?server=185.1.2.3&port=443&secret=dd000011")
+        assertNotNull(mt)
+        assertEquals("mtproto", mt!!.protocol)
+        assertEquals(UniversalConfig.Family.TELEGRAM_MTPROTO, mt.family)
+        assertEquals("185.1.2.3", mt.host)
+        assertEquals(443, mt.port)
+
+        assertNull(UniversalConfig.parse("https://example.com/not-a-proxy"))
+    }
+
+    @Test
+    fun extractAll_harvestsTelegramHtmlWireGuardIniInlineBase64AndIgnoresUnknownSchemes() {
+        val innerSub = """
+            npv://auth@npv-sub.example.com:443#NpvSub
+            hy2://pw@hy-sub.example.com:8443#HySub
+        """.trimIndent()
+        val html = """
+            <div class="tgme_widget_message_text">
+                bypass://user@ignored.example.com:443<br/>
+                [Interface]<br/>
+                PrivateKey = privKey1234567890=<br/>
+                Address = 10.0.0.2/32<br/>
+                [Peer]<br/>
+                PublicKey = pubKey1234567890=<br/>
+                Endpoint = 162.159.193.1:500<br/>
+                https://t.me/proxy?server=1.2.3.4&amp;port=8443&amp;secret=ee12345678<br/>
+                ${encodeBase64(innerSub)}
+            </div>
+        """.trimIndent()
+
+        val extracted = UniversalConfig.extractAll(html)
+        assertTrue(extracted.any { it.startsWith("wireguard://privKey1234567890%3D@162.159.193.1:500") })
+        assertTrue(extracted.any { it == "https://t.me/proxy?server=1.2.3.4&port=8443&secret=ee12345678" })
+        assertTrue(extracted.any { it.startsWith("npv://auth@npv-sub.example.com:443") })
+        assertTrue(extracted.any { it.startsWith("hy2://pw@hy-sub.example.com:8443") })
+        assertTrue(extracted.none { it.contains("ignored.example.com") })
+    }
+
+    @Test
+    fun mergeBalanced_preservesNonVlessDiversityUnderCap() {
+        val list = mutableListOf<String>()
+        for (i in 1..20) {
+            list += "vless://uuid-$i@v$i.example.com:443#v$i"
+        }
+        list += "wireguard://pk@162.159.192.1:2408#wg"
+        list += "npv4://u@npv.example.com:443#npv"
+        list += "tg://proxy?server=1.2.3.4&port=443&secret=dd00#mt"
+
+        val balanced = UniversalConfig.mergeBalanced(list, limit = 6)
+        assertEquals(6, balanced.size)
+        assertTrue(balanced.any { it.startsWith("wireguard://") })
+        assertTrue(balanced.any { it.startsWith("npv4://") })
+        assertTrue(balanced.any { it.startsWith("tg://proxy") })
+    }
+
+    @Test
+    fun openVpn_extractsDirectivesAndRoundTripsOvpnAndNpvs() {
+        val rawOvpn = """
+            client
+            dev tun
+            proto tcp
+            remote 45.77.12.90 443
+            cipher AES-256-GCM
+        """.trimIndent()
+        val uris = UniversalConfig.extractAll(rawOvpn)
+        assertTrue(uris.any { it.startsWith("openvpn://45.77.12.90:443") })
+        val parsed = UniversalConfig.parse(uris.first { it.startsWith("openvpn://") })
+        assertNotNull(parsed)
+        assertEquals(UniversalConfig.Family.OPENVPN, parsed!!.family)
+        assertEquals("45.77.12.90", parsed.host)
+        assertEquals(443, parsed.port)
+
+        val rebuiltOvpn = UniversalConfig.openVpnUriToOvpn(parsed.uri)
+        assertNotNull(rebuiltOvpn)
+        assertTrue(rebuiltOvpn!!.contains("remote 45.77.12.90 443"))
+        assertTrue(rebuiltOvpn.contains("proto tcp"))
+
+        val npvs = UniversalConfig.parse("npvs://user@npvs.example.com:8443#NPVS")
+        assertNotNull(npvs)
+        assertEquals(UniversalConfig.Family.NAPSTERNETV, npvs!!.family)
+        assertEquals(8443, npvs.port)
+    }
+
+    private fun encodeBase64(text: String): String {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        val out = StringBuilder(((bytes.size + 2) / 3) * 4)
+        var i = 0
+        while (i < bytes.size) {
+            val b0 = bytes[i].toInt() and 0xFF
+            val b1 = if (i + 1 < bytes.size) bytes[i + 1].toInt() and 0xFF else 0
+            val b2 = if (i + 2 < bytes.size) bytes[i + 2].toInt() and 0xFF else 0
+            out.append(alphabet[b0 ushr 2])
+            out.append(alphabet[((b0 and 0x03) shl 4) or (b1 ushr 4)])
+            out.append(if (i + 1 < bytes.size) alphabet[((b1 and 0x0F) shl 2) or (b2 ushr 6)] else '=')
+            out.append(if (i + 2 < bytes.size) alphabet[b2 and 0x3F] else '=')
+            i += 3
+        }
+        return out.toString()
+    }
+}

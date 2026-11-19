@@ -751,4 +751,38 @@
     <string name="cf_dialog_route_script_hint">Имя скрипта Worker</string>
     <string name="cf_dialog_profile_title">Создать новый профиль</string>
     <string name="cf_dialog_profile_hint">Имя профиля (напр. backup-cf)</string>
+
+    <!-- Universal Config Harvester Actions -->
+    <string name="rescue_action_title">Конфиг %1$s (%2$s)</string>
+    <string name="rescue_action_apply_vpn">Применить и подключить DastYab VPN</string>
+    <string name="rescue_action_promote_layer">Сохранить как слой VPN</string>
+    <string name="rescue_action_copy_uri">Копировать URI конфига</string>
+    <string name="rescue_action_copy_wg_ini">Копировать WireGuard .conf (INI)</string>
+    <string name="rescue_action_open_telegram">Открыть прокси в Telegram</string>
+    <string name="rescue_action_open_client">Копировать и открыть %1$s</string>
+    <string name="rescue_layer_promoted_toast">Слой %1$s сохранён!</string>
+    <string name="rescue_wg_ini_copied_toast">Конфиг WireGuard .conf скопирован!</string>
+    <string name="rescue_btn_file_vault">Хранилище файлов (.ovpn / .npvs / .hc / .custom)</string>
+    <string name="rescue_action_copy_ovpn">Копировать OpenVPN (.ovpn)</string>
+    <string name="rescue_action_save_open_file">Сохранить файл и открыть в клиенте</string>
+    <string name="rescue_ovpn_copied_toast">Профиль OpenVPN .ovpn скопирован!</string>
+    <string name="rescue_vault_title">Файлы конфигураций (%1$d)</string>
+    <string name="rescue_vault_btn_download_url">+ Скачать файл конфига по URL</string>
+    <string name="rescue_vault_btn_import_local">+ Импорт файла с устройства (.ovpn/.npvs/.hc/.custom)</string>
+    <string name="rescue_vault_download_title">Скачать файл конфига</string>
+    <string name="rescue_vault_download_hint">https://…/config.ovpn, .npvs, .hc, .custom, .conf</string>
+    <string name="rescue_vault_download_ok">Скачан файл %1$s</string>
+    <string name="rescue_vault_download_fail">Не удалось скачать файл конфига</string>
+    <string name="rescue_vault_import_ok">Импортирован %1$s (узлов: %2$d)</string>
+    <string name="rescue_vault_import_fail">Не удалось импортировать выбранный файл</string>
+    <string name="rescue_vault_file_open_client">Открыть в %1$s</string>
+    <string name="rescue_vault_file_open_any">Открыть / Поделиться файлом</string>
+    <string name="rescue_vault_file_save_downloads">Сохранить копию в Downloads/DastYab</string>
+    <string name="rescue_vault_file_extract_promote">Извлечь и добавить в слой VPN</string>
+    <string name="rescue_vault_file_open_tg_post">Открыть пост канала (Telegram)</string>
+    <string name="rescue_vault_saved_downloads_toast">Файл %1$s сохранён в Downloads/DastYab</string>
+    <string name="rescue_vault_no_endpoints_toast">Файл сохранён целиком (бинарный/шифрованный)</string>
+    <string name="layers_btn_build_shield">Автосборка многослойного щита VPN</string>
+    <string name="layers_shield_building">Сборка и тестирование многопротокольных слоёв VPN…</string>
+    <string name="layers_shield_built_toast">Создан многослойный щит VPN (%1$d слоёв)!</string>
 </resources>

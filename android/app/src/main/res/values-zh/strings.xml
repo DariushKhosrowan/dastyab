@@ -751,4 +751,38 @@
     <string name="cf_dialog_route_script_hint">Worker 脚本名称</string>
     <string name="cf_dialog_profile_title">创建新档案</string>
     <string name="cf_dialog_profile_hint">档案名称 (例如 backup-cf)</string>
+
+    <!-- Universal Config Harvester Actions -->
+    <string name="rescue_action_title">%1$s 配置 (%2$s)</string>
+    <string name="rescue_action_apply_vpn">应用并连接 DastYab VPN</string>
+    <string name="rescue_action_promote_layer">保存为 VPN 层</string>
+    <string name="rescue_action_copy_uri">复制配置 URI</string>
+    <string name="rescue_action_copy_wg_ini">复制 WireGuard .conf (INI)</string>
+    <string name="rescue_action_open_telegram">在 Telegram 中打开代理</string>
+    <string name="rescue_action_open_client">复制并打开 %1$s</string>
+    <string name="rescue_layer_promoted_toast">已保存 %1$s 层！</string>
+    <string name="rescue_wg_ini_copied_toast">已复制 WireGuard .conf INI！</string>
+    <string name="rescue_btn_file_vault">配置文件库 (.ovpn / .npvs / .hc / .custom)</string>
+    <string name="rescue_action_copy_ovpn">复制 OpenVPN (.ovpn)</string>
+    <string name="rescue_action_save_open_file">保存文件并在客户端打开</string>
+    <string name="rescue_ovpn_copied_toast">已复制 OpenVPN .ovpn 配置！</string>
+    <string name="rescue_vault_title">配置文件库 (%1$d)</string>
+    <string name="rescue_vault_btn_download_url">+ 从 URL 下载配置文件</string>
+    <string name="rescue_vault_btn_import_local">+ 从设备导入文件 (.ovpn/.npvs/.hc/.custom)</string>
+    <string name="rescue_vault_download_title">下载配置文件</string>
+    <string name="rescue_vault_download_hint">https://…/config.ovpn, .npvs, .hc, .custom, .conf</string>
+    <string name="rescue_vault_download_ok">已下载 %1$s</string>
+    <string name="rescue_vault_download_fail">无法下载配置文件</string>
+    <string name="rescue_vault_import_ok">已导入 %1$s（提取了 %2$d 个节点）</string>
+    <string name="rescue_vault_import_fail">无法导入所选文件</string>
+    <string name="rescue_vault_file_open_client">使用 %1$s 打开</string>
+    <string name="rescue_vault_file_open_any">打开 / 分享配置文件</string>
+    <string name="rescue_vault_file_save_downloads">保存副本到 Downloads/DastYab</string>
+    <string name="rescue_vault_file_extract_promote">提取并设为 VPN 层</string>
+    <string name="rescue_vault_file_open_tg_post">打开频道帖子 (Telegram)</string>
+    <string name="rescue_vault_saved_downloads_toast">已将 %1$s 保存到 Downloads/DastYab</string>
+    <string name="rescue_vault_no_endpoints_toast">文件已完整保存（二进制/加密配置）</string>
+    <string name="layers_btn_build_shield">自动构建强力多层 VPN 防护</string>
+    <string name="layers_shield_building">正在构建并测速多协议 VPN 层…</string>
+    <string name="layers_shield_built_toast">已构建 %1$d 层高抗封锁 VPN 防护！</string>
 </resources>
