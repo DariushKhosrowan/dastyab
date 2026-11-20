@@ -285,18 +285,19 @@ object GeoBypassEngine {
             firstHop.username.isEmpty() &&
             firstHop.password.isEmpty() &&
             TunnelConfig.isLoopbackHost(firstHop.host)
-        val isSingleUnauthSocks5 = effectiveHops.size == 1 &&
+        val isSingleLoopbackSocks5 = effectiveHops.size == 1 &&
             firstHop != null &&
             firstHop.scheme == TunnelConfig.ProxyScheme.SOCKS5 &&
             firstHop.username.isEmpty() &&
-            firstHop.password.isEmpty()
+            firstHop.password.isEmpty() &&
+            TunnelConfig.isLoopbackHost(firstHop.host)
         val isMultiOrAuth = effectiveHops.isNotEmpty() && !isSingleLoopbackHttp
         val servicePrefix = targetService?.let { "[${it.displayName}] " }.orEmpty()
         val bridgeChainMismatch = runningBridgePort == null || LocalProxyService.activeChainSpec() != chainSpec
 
         fun singleOrMultiQuad(defaultLabelPrefix: String): Quad {
             return when {
-                isSingleUnauthSocks5 && firstHop != null -> {
+                isSingleLoopbackSocks5 && firstHop != null -> {
                     Quad(
                         wvPort = preferredBridgePort,
                         needsBridge = bridgeChainMismatch,

@@ -640,7 +640,8 @@ object UniversalConfig {
         fun addHop(hop: TunnelConfig.ProxyHop?) {
             if (hop == null || hop.scheme == TunnelConfig.ProxyScheme.DIRECT) return
             if (hop.port !in 1..65535 || hop.host.isBlank()) return
-            if (hop.host.startsWith("0.") || TunnelConfig.isLoopbackHost(hop.host)) return
+            val normHost = hop.host.trim().removePrefix("[").removeSuffix("]").lowercase()
+            if (normHost.startsWith("0.") || normHost.startsWith("127.") || normHost == "::" || TunnelConfig.isLoopbackHost(normHost)) return
             out.putIfAbsent("${hop.scheme.name}:${hop.host}:${hop.port}", hop)
         }
 
