@@ -3401,8 +3401,8 @@ mod tests {
         fn next_cycle(&self) -> Option<Vec<CleanEndpoint>> {
             let n = self.cycle_calls.fetch_add(1, Ordering::SeqCst);
             match n {
-                0 => self.cycle_result.clone(), // ledger reseed
-                1 => self.manual_cycle_result.clone(), // manual reseed
+                0 => self.cycle_result.clone(),         // ledger reseed
+                1 => self.manual_cycle_result.clone(),  // manual reseed
                 _ => self.post_redeploy_result.clone(), // post-redeploy
             }
         }

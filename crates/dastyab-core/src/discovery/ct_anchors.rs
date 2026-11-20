@@ -416,10 +416,10 @@ mod tests {
     #[test]
     fn clean_host_filters_junk_wildcards_and_ips() {
         let v = clean_into(&[
-            "*.proxy.example.com",         // wildcard stripped
-            "1.2.3.4",                     // IP literal dropped
-            "mail.example.com",            // junk suffix dropped
-            "v2ray-node-01.edge.xyz",      // good
+            "*.proxy.example.com",        // wildcard stripped
+            "1.2.3.4",                    // IP literal dropped
+            "mail.example.com",           // junk suffix dropped
+            "v2ray-node-01.edge.xyz",     // good
             "  vless-cdn.khadijet.net  ", // trimmed + good
         ]);
         assert!(v.contains(&"v2ray-node-01.edge.xyz".to_string()));
