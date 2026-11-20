@@ -452,12 +452,25 @@ mod tests {
 
     #[test]
     fn find_tor_respects_env_override() {
+        static TOR_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        struct TorEnvGuard(Option<String>);
+        impl Drop for TorEnvGuard {
+            fn drop(&mut self) {
+                unsafe {
+                    match &self.0 {
+                        Some(v) => std::env::set_var("DYB_TOR_BIN", v),
+                        None => std::env::remove_var("DYB_TOR_BIN"),
+                    }
+                }
+            }
+        }
+        let _lock = TOR_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TorEnvGuard(std::env::var("DYB_TOR_BIN").ok());
         // When DYB_TOR_BIN points at /bin/true (a real file), we should
         // return it verbatim.
         unsafe { std::env::set_var("DYB_TOR_BIN", "/bin/true") };
         let found = find_tor().unwrap();
         assert_eq!(found.as_deref(), Some("/bin/true"));
-        unsafe { std::env::remove_var("DYB_TOR_BIN") };
     }
 
     #[test]

@@ -223,14 +223,46 @@ static FA: std::sync::LazyLock<HashMap<&'static str, &'static str>> =
 mod tests {
     use super::*;
 
+    static LANG_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct LangEnvGuard {
+        prev: Option<String>,
+    }
+
+    impl LangEnvGuard {
+        fn capture() -> Self {
+            Self {
+                prev: std::env::var("DASTYAB_LANG").ok(),
+            }
+        }
+    }
+
+    impl Drop for LangEnvGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.prev {
+                    Some(v) => std::env::set_var("DASTYAB_LANG", v),
+                    None => std::env::remove_var("DASTYAB_LANG"),
+                }
+            }
+        }
+    }
+
     #[test]
     fn default_is_english() {
+        let _lock = LANG_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = LangEnvGuard::capture();
+        unsafe {
+            std::env::remove_var("DASTYAB_LANG");
+        }
         assert_eq!(Lang::default(), Lang::En);
         assert_eq!(resolve_lang(None), Lang::En);
     }
 
     #[test]
     fn flag_wins_over_env() {
+        let _lock = LANG_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = LangEnvGuard::capture();
         // env set to fa, but flag says en -> en.
         unsafe {
             std::env::set_var("DASTYAB_LANG", "fa");

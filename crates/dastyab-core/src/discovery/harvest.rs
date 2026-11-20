@@ -1398,35 +1398,74 @@ mod tests {
         std::thread::spawn(move || {
             for stream in handle.incoming() {
                 let Ok(mut s) = stream else { break };
-                let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(5)));
-                let mut buf = [0u8; 2048];
-                let Ok(n) = s.read(&mut buf) else { continue };
-                let req = String::from_utf8_lossy(&buf[..n]).to_string();
-                // body selected by the `before` cursor.
-                let body = if req.contains("before=40") {
-                    r#"<div class="tgme_widget_message_wrap js-widget_message_wrap" data-post="archive/30"><time datetime="2024-05-01T00:00:00+00:00"></time>vless://bbbbbbbb-1111-0000-0000-000000000000@3.3.3.3:443?type=tcp#p2 <a href="https://t.me/secondarc/5">x</a></div>"#
-                } else if req.contains("before=30") {
-                    r#"<div class="tgme_widget_message_wrap js-widget_message_wrap" data-post="archive/20"><time datetime="2024-04-01T00:00:00+00:00"></time>vless://cccccccc-2222-0000-0000-000000000000@4.4.4.4:443?type=tcp#p3 <a href="https://t.me/thirdarc/7">x</a></div>"#
-                } else {
-                    // newest page
-                    r#"<div class="tgme_widget_message_wrap js-widget_message_wrap" data-post="archive/40"><time datetime="2024-06-01T00:00:00+00:00"></time>vless://aaaaaaaa-1111-0000-0000-000000000000@2.2.2.2:443?type=tcp#p1 <a href="https://t.me/firstarc/3">x</a></div>"#
-                };
-                let head = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                );
-                let _ = s.write_all(head.as_bytes());
-                let _ = s.write_all(body.as_bytes());
+                std::thread::spawn(move || {
+                    let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+                    let mut buf = [0u8; 2048];
+                    let Ok(n) = s.read(&mut buf) else { return };
+                    let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                    // body selected by the `before` cursor.
+                    let body = if req.contains("before=40") {
+                        r#"<div class="tgme_widget_message_wrap js-widget_message_wrap" data-post="archive/30"><time datetime="2024-05-01T00:00:00+00:00"></time>vless://bbbbbbbb-1111-0000-0000-000000000000@3.3.3.3:443?type=tcp#p2 <a href="https://t.me/secondarc/5">x</a></div>"#
+                    } else if req.contains("before=30") {
+                        r#"<div class="tgme_widget_message_wrap js-widget_message_wrap" data-post="archive/20"><time datetime="2024-04-01T00:00:00+00:00"></time>vless://cccccccc-2222-0000-0000-000000000000@4.4.4.4:443?type=tcp#p3 <a href="https://t.me/thirdarc/7">x</a></div>"#
+                    } else {
+                        // newest page
+                        r#"<div class="tgme_widget_message_wrap js-widget_message_wrap" data-post="archive/40"><time datetime="2024-06-01T00:00:00+00:00"></time>vless://aaaaaaaa-1111-0000-0000-000000000000@2.2.2.2:443?type=tcp#p1 <a href="https://t.me/firstarc/3">x</a></div>"#
+                    };
+                    let head = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = s.write_all(head.as_bytes());
+                    let _ = s.write_all(body.as_bytes());
+                });
             }
         });
         (format!("http://{addr}"), listener)
     }
 
+    fn tg_env_lock() -> &'static tokio::sync::Mutex<()> {
+        static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
+
+    struct TgEnvGuard {
+        prev_base: Option<String>,
+        prev_stealth: Option<String>,
+    }
+
+    impl TgEnvGuard {
+        fn set(base: &str) -> Self {
+            let prev_base = std::env::var("DASTYAB_TG_BASE").ok();
+            let prev_stealth = std::env::var("DASTYAB_STEALTH").ok();
+            std::env::set_var("DASTYAB_TG_BASE", base);
+            std::env::set_var("DASTYAB_STEALTH", "0");
+            Self {
+                prev_base,
+                prev_stealth,
+            }
+        }
+    }
+
+    impl Drop for TgEnvGuard {
+        fn drop(&mut self) {
+            match &self.prev_base {
+                Some(v) => std::env::set_var("DASTYAB_TG_BASE", v),
+                None => std::env::remove_var("DASTYAB_TG_BASE"),
+            }
+            match &self.prev_stealth {
+                Some(v) => std::env::set_var("DASTYAB_STEALTH", v),
+                None => std::env::remove_var("DASTYAB_STEALTH"),
+            }
+            crate::store::clear_mem_dir_override();
+        }
+    }
+
     #[tokio::test]
     async fn archive_aware_discovery_counts_links_across_pages() {
+        let _lock = tg_env_lock().lock().await;
         let (base, _g) = spawn_archive_server();
-        std::env::set_var("DASTYAB_TG_BASE", &base);
-        std::env::set_var("DASTYAB_STEALTH", "0");
+        let _env = TgEnvGuard::set(&base);
         // Re-point the module-level base URL.
         let cands = vec!["archive".to_string()];
 
@@ -1454,13 +1493,13 @@ mod tests {
     /// persists the yielding set — the self-expanding-net invariant.
     #[tokio::test]
     async fn multi_hop_discovery_runs_and_persists() {
+        let _lock = tg_env_lock().lock().await;
         let dir = tempfile::tempdir().unwrap();
         crate::store::set_mem_dir_override(dir.path().join("mem"));
         let profile = "default".to_string();
 
         let (base, _g) = spawn_archive_server();
-        std::env::set_var("DASTYAB_TG_BASE", &base);
-        std::env::set_var("DASTYAB_STEALTH", "0");
+        let _env = TgEnvGuard::set(&base);
 
         let report = run_multi_hop_discovery(&profile, false, 2, 40, 3, true)
             .await

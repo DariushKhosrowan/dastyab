@@ -477,14 +477,15 @@ mod tests {
 
     /// Isolated mem dir + fresh profile id. Callers must hold `TEST_LOCK`
     /// for the whole test (the mem-dir override is process-global).
-    fn fresh_profile() -> String {
-        let base = tempfile::tempdir().unwrap().path().join(".dastyab");
-        crate::store::set_mem_dir_override(base);
-        crate::store::profiles::create_profile(
+    fn fresh_profile() -> (tempfile::TempDir, String) {
+        let dir = tempfile::tempdir().unwrap();
+        crate::store::set_mem_dir_override(dir.path().join(".dastyab"));
+        let pid = crate::store::profiles::create_profile(
             &format!("vps-test-{}", crate::store::new_id()),
             "test",
         )
-        .unwrap()
+        .unwrap();
+        (dir, pid)
     }
 
     static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -526,7 +527,7 @@ mod tests {
     #[tokio::test]
     async fn deploy_unreachable_vps_errors_before_any_step() {
         let _guard = TEST_LOCK.lock().unwrap();
-        let profile = fresh_profile();
+        let (_dir, profile) = fresh_profile();
         let peer = FakePeer {
             reachable: false,
             ..Default::default()
@@ -539,7 +540,7 @@ mod tests {
     #[tokio::test]
     async fn deploy_runs_all_steps_in_order() {
         let _guard = TEST_LOCK.lock().unwrap();
-        let profile = fresh_profile();
+        let (_dir, profile) = fresh_profile();
         let peer = FakePeer {
             reachable: true,
             active: true,
@@ -558,7 +559,7 @@ mod tests {
     #[tokio::test]
     async fn deploy_reports_unverified_when_service_inactive() {
         let _guard = TEST_LOCK.lock().unwrap();
-        let profile = fresh_profile();
+        let (_dir, profile) = fresh_profile();
         let peer = FakePeer {
             reachable: true,
             active: false,
@@ -579,7 +580,7 @@ mod tests {
     #[test]
     fn write_load_tunnel_config_roundtrips() {
         let _guard = TEST_LOCK.lock().unwrap();
-        let profile = fresh_profile();
+        let (_dir, profile) = fresh_profile();
         let cfg = TunnelClientConfig {
             host: "203.0.113.10".into(),
             base_domain: "t.example.com".into(),

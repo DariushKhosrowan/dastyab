@@ -5852,15 +5852,12 @@ mod tests {
 
     /// A mock wrangler executable that prints a workers.dev URL exactly like the
     /// real CLI. Returns the path (injected via `DYB_WRANGLER_BIN`).
-    fn mock_wrangler_bin() -> std::path::PathBuf {
+    fn mock_wrangler_bin() -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = tempfile::tempdir().unwrap();
-        // Keep the TempDir alive for the duration of the caller's use — leak it
-        // into a global so the path stays valid (test-only).
-        std::mem::forget(dir);
-        let fake = std::env::temp_dir().join(format!("mock-wrangler-{}", std::process::id()));
+        let fake = dir.path().join("mock-wrangler");
         std::fs::write(
             &fake,
-            "#!/bin/sh\nprintf 'Deployed dyb-e2e-1 triggers (3.35 sec)\n  https://dyb-e2e-1.sub.workers.dev\n'\n",
+            "#!/bin/sh\nprintf 'Deployed dyb-e2e-1 triggers (3.35 sec)\\n  https://dyb-e2e-1.sub.workers.dev\\n'\n",
         )
         .unwrap();
         #[cfg(unix)]
@@ -5870,7 +5867,7 @@ mod tests {
             perms.set_mode(0o755);
             std::fs::set_permissions(&fake, perms).unwrap();
         }
-        fake
+        (dir, fake)
     }
 
     /// End-to-end deploy test: drive the real `deploy_worker_with_client` path
@@ -5881,21 +5878,30 @@ mod tests {
     /// guarantee, without needing a live Cloudflare account.
     #[tokio::test(flavor = "current_thread")]
     async fn deploy_worker_e2e_creates_configs_and_durable_link() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        struct WranglerEnvGuard(Option<String>);
+        impl Drop for WranglerEnvGuard {
+            fn drop(&mut self) {
+                match &self.0 {
+                    Some(v) => std::env::set_var("DYB_WRANGLER_BIN", v),
+                    None => std::env::remove_var("DYB_WRANGLER_BIN"),
+                }
+            }
+        }
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = WranglerEnvGuard(std::env::var("DYB_WRANGLER_BIN").ok());
         let tmp = tempfile::tempdir().unwrap();
         dastyab_core::store::set_mem_dir_override(tmp.path().join(".dastyab"));
         let pid = dastyab_core::store::profiles::create_profile("cfg-e2e", "test")
             .expect("create profile");
 
         let base = mock_cf_api_server();
-        let wrangler = mock_wrangler_bin();
+        let (_wrangler_dir, wrangler) = mock_wrangler_bin();
         std::env::set_var("DYB_WRANGLER_BIN", &wrangler);
 
         let client = dastyab_core::cf::Client::with_base("tok", &base);
         let (host, link) = deploy_worker_with_client(&client, &pid)
             .await
             .expect("deploy should succeed against mock CF + mock wrangler");
-        std::env::remove_var("DYB_WRANGLER_BIN");
 
         // The deployed harness is authoritative from the wrangler output.
         assert_eq!(host, "dyb-e2e-1.sub.workers.dev");

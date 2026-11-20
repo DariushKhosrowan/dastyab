@@ -425,7 +425,8 @@ mod tests {
             let snap = snapshot_workspace(Path::new("/"), SnapshotKind::Full, 1000).unwrap();
             // Valid even when nothing is seeded (schema + empty vector round-trip).
             assert_eq!(snap.schema_version, 1);
-            let p = tempfile::tempdir().unwrap().path().join("s.json");
+            let _dir = tempfile::tempdir().unwrap();
+            let p = _dir.path().join("s.json");
             write_snapshot_atomic(&snap, &p).unwrap();
             assert!(read_snapshot(&p).is_ok());
         });

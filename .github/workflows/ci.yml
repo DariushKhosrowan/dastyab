@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
 
 jobs:
   test:
@@ -46,7 +47,7 @@ jobs:
         run: cargo clippy --workspace -- -D warnings
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace -- --nocapture
 
       # The aistudio bridge is Python, and its regressions (picking a nekoray
       # wrapper as a core, clobbering the server pool, printing stale egress)

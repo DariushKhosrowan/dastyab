@@ -26,35 +26,25 @@ pub const CIRCUIT_MAX_COOLDOWN_SECS: u64 = 1800;
 pub const HYSTERESIS_PREEMPT_RATIO: f64 = 1.25;
 
 /// User intent shaping acceptance gates & scoring preferences.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum AutopilotIntent {
+    #[default]
     BalancedWeb,
     AiStudio,
     GoogleFlow,
     BlackoutSurvival,
 }
 
-impl Default for AutopilotIntent {
-    fn default() -> Self {
-        Self::BalancedWeb
-    }
-}
-
 /// Circuit breaker state for a single route/config arm.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum CircuitState {
+    #[default]
     Closed,
     Open {
         quarantine_until_unix: u64,
         trip_count: u32,
     },
     HalfOpen,
-}
-
-impl Default for CircuitState {
-    fn default() -> Self {
-        Self::Closed
-    }
 }
 
 /// Geo-clearance bitmask constants (`arm.geo_mask`).
@@ -87,7 +77,11 @@ pub struct ArmStats {
 }
 
 impl ArmStats {
-    pub fn new(arm_id: impl Into<String>, protocol_family: impl Into<String>, now_unix: u64) -> Self {
+    pub fn new(
+        arm_id: impl Into<String>,
+        protocol_family: impl Into<String>,
+        now_unix: u64,
+    ) -> Self {
         Self {
             arm_id: arm_id.into(),
             protocol_family: protocol_family.into(),
@@ -199,7 +193,10 @@ impl ContextualBanditStore {
             }
             AutopilotIntent::BlackoutSurvival => {
                 let pf = candidate.protocol_family.to_ascii_lowercase();
-                if matches!(pf.as_str(), "doh" | "quic" | "hy2" | "hysteria2" | "openvpn" | "wireguard") {
+                if matches!(
+                    pf.as_str(),
+                    "doh" | "quic" | "hy2" | "hysteria2" | "openvpn" | "wireguard"
+                ) {
                     0.22
                 } else {
                     0.05
@@ -207,14 +204,22 @@ impl ContextualBanditStore {
             }
         };
 
-        let half_open_penalty = if eff == CircuitState::HalfOpen { 0.18 } else { 0.0 };
+        let half_open_penalty = if eff == CircuitState::HalfOpen {
+            0.18
+        } else {
+            0.0
+        };
 
-        (survival - latency_penalty + explore.min(0.60) + intent_bonus + candidate.base_priority * 0.10
+        (survival - latency_penalty
+            + explore.min(0.60)
+            + intent_bonus
+            + candidate.base_priority * 0.10
             - half_open_penalty)
             .max(0.0)
     }
 
     /// Record an observed probe or connection outcome for `arm_id` on `network_ctx`.
+    #[allow(clippy::too_many_arguments)]
     pub fn record_outcome(
         &mut self,
         network_ctx: &str,
@@ -261,7 +266,9 @@ impl ContextualBanditStore {
                 _ => 0,
             };
             let eff = entry.effective_circuit(now_unix);
-            if eff == CircuitState::HalfOpen || entry.consecutive_failures >= CIRCUIT_TRIP_FAILURES {
+            if eff == CircuitState::HalfOpen
+                || entry.consecutive_failures >= CIRCUIT_TRIP_FAILURES
+            {
                 let trips = prev_trips.saturating_add(1).max(1);
                 let shift = (trips - 1).min(6);
                 let backoff = CIRCUIT_BASE_COOLDOWN_SECS
@@ -389,17 +396,52 @@ mod tests {
         let net_b = "wifi:home";
 
         for t in 1..=5 {
-            store.record_outcome(net_a, "vless-1", "xray", true, Some(110.0), GEO_CLEAR_WEB | GEO_CLEAR_AISTUDIO, t);
-            store.record_outcome(net_a, "vless-2", "xray", true, Some(850.0), GEO_CLEAR_WEB, t);
-            store.record_outcome(net_b, "vless-2", "xray", true, Some(95.0), GEO_CLEAR_WEB, t);
+            store.record_outcome(
+                net_a,
+                "vless-1",
+                "xray",
+                true,
+                Some(110.0),
+                GEO_CLEAR_WEB | GEO_CLEAR_AISTUDIO,
+                t,
+            );
+            store.record_outcome(
+                net_a,
+                "vless-2",
+                "xray",
+                true,
+                Some(850.0),
+                GEO_CLEAR_WEB,
+                t,
+            );
+            store.record_outcome(
+                net_b,
+                "vless-2",
+                "xray",
+                true,
+                Some(95.0),
+                GEO_CLEAR_WEB,
+                t,
+            );
         }
 
         let s1_a = store.score_arm(net_a, &cand("vless-1", "xray"), AutopilotIntent::AiStudio, 10);
         let s2_a = store.score_arm(net_a, &cand("vless-2", "xray"), AutopilotIntent::AiStudio, 10);
-        assert!(s1_a > s2_a, "fast AI Studio clear arm must win on net_a: {s1_a} vs {s2_a}");
+        assert!(
+            s1_a > s2_a,
+            "fast AI Studio clear arm must win on net_a: {s1_a} vs {s2_a}"
+        );
 
-        let s2_b = store.score_arm(net_b, &cand("vless-2", "xray"), AutopilotIntent::BalancedWeb, 10);
-        assert!(s2_b > s2_a, "network context isolation must preserve net_b win");
+        let s2_b = store.score_arm(
+            net_b,
+            &cand("vless-2", "xray"),
+            AutopilotIntent::BalancedWeb,
+            10,
+        );
+        assert!(
+            s2_b > s2_a,
+            "network context isolation must preserve net_b win"
+        );
     }
 
     #[test]
@@ -419,7 +461,15 @@ mod tests {
         assert!(store.score_arm(net, &c, AutopilotIntent::BalancedWeb, 132) >= 0.0);
 
         // If canary succeeds, circuit closes cleanly.
-        store.record_outcome(net, "bad-arm", "xray", true, Some(140.0), GEO_CLEAR_WEB, 133);
+        store.record_outcome(
+            net,
+            "bad-arm",
+            "xray",
+            true,
+            Some(140.0),
+            GEO_CLEAR_WEB,
+            133,
+        );
         let st = &store.contexts[net]["bad-arm"];
         assert_eq!(st.circuit, CircuitState::Closed);
         assert_eq!(st.consecutive_failures, 0);
@@ -443,9 +493,14 @@ mod tests {
             cand("w1", "wireguard"),
         ];
         let slate = store.select_diverse_slate(net, &pool, AutopilotIntent::BalancedWeb, 3, 10);
-        let families: HashSet<String> = slate.iter().map(|c| c.protocol_family.clone()).collect();
+        let families: HashSet<String> =
+            slate.iter().map(|c| c.protocol_family.clone()).collect();
         assert_eq!(slate[0].arm_id, "x1");
-        assert_eq!(families.len(), 3, "Happy Eyeballs slate must maximize protocol diversity: {slate:?}");
+        assert_eq!(
+            families.len(),
+            3,
+            "Happy Eyeballs slate must maximize protocol diversity: {slate:?}"
+        );
     }
 
     #[test]

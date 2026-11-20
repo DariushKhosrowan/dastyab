@@ -708,16 +708,20 @@ pub async fn start_tunnel_mode(
 mod tests {
     use super::*;
 
-    fn fresh_profile() -> String {
-        let base = tempfile::tempdir().unwrap().path().join(".dastyab");
-        crate::store::set_mem_dir_override(base);
-        crate::store::profiles::create_profile(&format!("ml-test-{}", crate::store::new_id()), "t")
-            .unwrap()
+    fn fresh_profile() -> (tempfile::TempDir, String) {
+        let dir = tempfile::tempdir().unwrap();
+        crate::store::set_mem_dir_override(dir.path().join(".dastyab"));
+        let pid = crate::store::profiles::create_profile(
+            &format!("ml-test-{}", crate::store::new_id()),
+            "t",
+        )
+        .unwrap();
+        (dir, pid)
     }
 
     #[test]
     fn final_server_roundtrip() {
-        let pid = fresh_profile();
+        let (_dir, pid) = fresh_profile();
         let cfg = FinalServerConfig {
             name: "my vps".into(),
             vless_link: "vless://uuid@1.2.3.4:443?security=tls&type=ws&path=%2F#x".into(),
@@ -771,6 +775,18 @@ mod tests {
     /// after every reboot.
     #[test]
     fn find_xray_binary_prefers_env_override() {
+        static XRAY_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        struct XrayEnvGuard(Option<String>);
+        impl Drop for XrayEnvGuard {
+            fn drop(&mut self) {
+                match &self.0 {
+                    Some(v) => std::env::set_var("DASTYAB_XRAY", v),
+                    None => std::env::remove_var("DASTYAB_XRAY"),
+                }
+            }
+        }
+        let _lock = XRAY_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = XrayEnvGuard(std::env::var("DASTYAB_XRAY").ok());
         let dir = tempfile::tempdir().unwrap();
         let fake = dir.path().join("my-xray");
         std::fs::write(&fake, b"#!/bin/sh\n").unwrap();
@@ -781,7 +797,6 @@ mod tests {
         }
         std::env::set_var("DASTYAB_XRAY", &fake);
         let got = find_xray_binary();
-        std::env::remove_var("DASTYAB_XRAY");
         assert_eq!(got.as_deref(), Some(fake.as_path()));
     }
 

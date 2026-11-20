@@ -609,7 +609,8 @@ mod tests {
     async fn probe_tunnel_dispatches_worker_mode() {
         use crate::egress::vps_deploy::{TunnelClientConfig, TunnelMode};
         // Isolate to a temp store so we never touch the real default profile.
-        let base = tempfile::tempdir().unwrap().path().join(".dastyab");
+        let _tmp = tempfile::tempdir().unwrap();
+        let base = _tmp.path().join(".dastyab");
         crate::store::set_mem_dir_override(base.clone());
         let id = crate::store::profiles::create_profile("kv_probe_worker", "test").unwrap();
         // A worker-mode config pointing at a dead URL (port 1 closed) → down,

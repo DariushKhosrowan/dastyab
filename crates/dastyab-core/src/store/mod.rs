@@ -69,6 +69,11 @@ pub fn set_mem_dir_override(path: PathBuf) {
     MEM_DIR_OVERRIDE.with(|cell| *cell.borrow_mut() = Some(path));
 }
 
+/// Clear the thread-local base-directory override (test teardown).
+pub fn clear_mem_dir_override() {
+    MEM_DIR_OVERRIDE.with(|cell| *cell.borrow_mut() = None);
+}
+
 /// The active base-directory override, if one is set (tests only). Returns
 /// `None` in normal (production) use.
 pub fn mem_override() -> Option<PathBuf> {

@@ -491,20 +491,36 @@ mod tests {
     /// better than a high-weight one that responds in 25s.
     #[test]
     fn execute_reselection_parallel_fastest_wins_over_lower_index() {
-        // Delay-based opener: index 1 succeeds after 10ms, index 0 after 100ms.
-        struct SlowOpener;
-        impl TunnelOpener for SlowOpener {
+        // Deterministic barrier: `"a"` blocks until `"b"` finishes (with a
+        // generous 2s fallback), so OS scheduler jitter cannot let `"a"` win.
+        struct OrderedOpener {
+            fast_done: std::sync::Arc<(Mutex<bool>, std::sync::Condvar)>,
+        }
+        impl TunnelOpener for OrderedOpener {
             fn open(&self, ep: &CarrierEndpoint) -> Result<OpenedTunnel, OpenError> {
-                let delay = if ep.host == "a" { 100 } else { 10 };
-                std::thread::sleep(std::time::Duration::from_millis(delay));
+                let (lock, cv) = &*self.fast_done;
+                if ep.host == "a" {
+                    let guard = lock.lock().unwrap();
+                    let _ = cv
+                        .wait_timeout_while(
+                            guard,
+                            std::time::Duration::from_secs(2),
+                            |done| !*done,
+                        )
+                        .unwrap();
+                } else {
+                    *lock.lock().unwrap() = true;
+                    cv.notify_all();
+                }
                 Ok(OpenedTunnel {
                     endpoint: ep.clone(),
                     opened_unix: 1,
                 })
             }
         }
+        let fast_done = std::sync::Arc::new((Mutex::new(false), std::sync::Condvar::new()));
         let eps = vec![ep("a"), ep("b")];
-        let t = execute_reselection_parallel(&eps, &SlowOpener, 2).unwrap();
+        let t = execute_reselection_parallel(&eps, &OrderedOpener { fast_done }, 2).unwrap();
         assert_eq!(
             t.endpoint.host, "b",
             "faster high-index endpoint must beat slower low-index one"
@@ -552,33 +568,50 @@ mod tests {
         let t = execute_reselection_staggered(
             &eps,
             &opener,
-            std::time::Duration::from_millis(80),
+            std::time::Duration::from_millis(500),
         )
         .unwrap();
         assert_eq!(t.endpoint.host, "primary");
-        assert_eq!(opener.calls(), 1, "fast primary should prevent launching hedged backups");
+        assert_eq!(
+            opener.calls(),
+            1,
+            "fast primary should prevent launching hedged backups"
+        );
     }
 
     #[test]
     fn staggered_reselection_hedges_to_backup_when_primary_stalls() {
-        struct StallingOpener;
+        struct StallingOpener {
+            backup_done: std::sync::Arc<(Mutex<bool>, std::sync::Condvar)>,
+        }
         impl TunnelOpener for StallingOpener {
             fn open(&self, ep: &CarrierEndpoint) -> Result<OpenedTunnel, OpenError> {
+                let (lock, cv) = &*self.backup_done;
                 if ep.host == "slow-or-stalled" {
-                    std::thread::sleep(std::time::Duration::from_millis(120));
+                    let guard = lock.lock().unwrap();
+                    let _ = cv
+                        .wait_timeout_while(
+                            guard,
+                            std::time::Duration::from_secs(2),
+                            |done| !*done,
+                        )
+                        .unwrap();
                     return Err(OpenError::Timeout);
                 }
+                *lock.lock().unwrap() = true;
+                cv.notify_all();
                 Ok(OpenedTunnel {
                     endpoint: ep.clone(),
                     opened_unix: 2,
                 })
             }
         }
+        let backup_done = std::sync::Arc::new((Mutex::new(false), std::sync::Condvar::new()));
         let eps = vec![ep("slow-or-stalled"), ep("fast-backup")];
         let t = execute_reselection_staggered(
             &eps,
-            &StallingOpener,
-            std::time::Duration::from_millis(15),
+            &StallingOpener { backup_done },
+            std::time::Duration::from_millis(20),
         )
         .unwrap();
         assert_eq!(t.endpoint.host, "fast-backup");

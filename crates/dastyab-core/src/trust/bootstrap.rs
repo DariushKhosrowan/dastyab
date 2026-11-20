@@ -713,9 +713,40 @@ mod tests {
         LOCK.get_or_init(|| std::sync::Mutex::new(()))
     }
 
+    struct BootstrapEnvGuard {
+        prev_token: Option<std::ffi::OsString>,
+        prev_home: Option<std::ffi::OsString>,
+    }
+
+    impl BootstrapEnvGuard {
+        fn capture() -> Self {
+            Self {
+                prev_token: std::env::var_os("DASTYAB_TOKEN"),
+                prev_home: std::env::var_os("HOME"),
+            }
+        }
+    }
+
+    impl Drop for BootstrapEnvGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.prev_token {
+                    Some(v) => std::env::set_var("DASTYAB_TOKEN", v),
+                    None => std::env::remove_var("DASTYAB_TOKEN"),
+                }
+                match &self.prev_home {
+                    Some(v) => std::env::set_var("HOME", v),
+                    None => std::env::remove_var("HOME"),
+                }
+            }
+            crate::store::clear_mem_dir_override();
+        }
+    }
+
     #[test]
     fn test_detect_token_none_when_nothing_present() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = BootstrapEnvGuard::capture();
         let tmp = temp_mem();
         // Nothing in env, no file, no profiles.
         unsafe {
@@ -728,7 +759,8 @@ mod tests {
 
     #[test]
     fn test_detect_token_prefers_env_var() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = BootstrapEnvGuard::capture();
         let tmp = temp_mem();
         unsafe {
             std::env::set_var("DASTYAB_TOKEN", "env-token-xyz");
@@ -747,7 +779,8 @@ mod tests {
 
     #[test]
     fn test_detect_token_falls_back_to_file() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = BootstrapEnvGuard::capture();
         let tmp = temp_mem();
         unsafe {
             std::env::remove_var("DASTYAB_TOKEN");
@@ -765,7 +798,8 @@ mod tests {
 
     #[test]
     fn test_detect_token_falls_back_to_existing_profile() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = BootstrapEnvGuard::capture();
         let tmp = temp_mem();
         unsafe {
             std::env::remove_var("DASTYAB_TOKEN");
@@ -783,7 +817,8 @@ mod tests {
         // HOME is process-global: while this test swaps it, the parallel
         // onboarding tests resolve their systemd-unit path against it. Take
         // the same lock so env-mutating tests never overlap.
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = BootstrapEnvGuard::capture();
         use std::sync::atomic::{AtomicU64, Ordering};
         static N: AtomicU64 = AtomicU64::new(0);
         let n = N.fetch_add(1, Ordering::SeqCst);
@@ -807,7 +842,8 @@ mod tests {
 
     #[test]
     fn test_onboarding_status_empty_profile_has_no_steps() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = BootstrapEnvGuard::capture();
         let tmp = temp_mem();
         // Isolate HOME so the systemd-unit check (step 4) is hermetic — the
         // real dev machine has ~/.config/systemd/user/dastyab-daemon.service.
@@ -826,7 +862,8 @@ mod tests {
 
     #[test]
     fn test_onboarding_status_token_step_appears_after_add() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = BootstrapEnvGuard::capture();
         let tmp = temp_mem();
         let home = tmp.join("home");
         unsafe {
@@ -842,7 +879,8 @@ mod tests {
 
     #[test]
     fn test_onboarding_status_bundle_step_after_bundle_write() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = BootstrapEnvGuard::capture();
         let tmp = temp_mem();
         let home = tmp.join("home");
         unsafe {

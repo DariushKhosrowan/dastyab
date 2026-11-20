@@ -228,8 +228,19 @@ mod tests {
         assert!(parse_deployed_url("nothing here").is_none());
     }
 
+    struct WranglerEnvGuard(Option<String>);
+    impl Drop for WranglerEnvGuard {
+        fn drop(&mut self) {
+            match &self.0 {
+                Some(v) => std::env::set_var("DYB_WRANGLER_BIN", v),
+                None => std::env::remove_var("DYB_WRANGLER_BIN"),
+            }
+        }
+    }
+
     #[test]
     fn find_wrangler_returns_installed() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // This machine has wrangler on PATH (verified in earlier sessions). If
         // not, we skip — don't fail CI on environments without it.
         if let Ok(Some(bin)) = find_wrangler() {
@@ -239,6 +250,9 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn deploy_worker_via_wrangler_rejects_missing_binary() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = WranglerEnvGuard(std::env::var("DYB_WRANGLER_BIN").ok());
+        std::env::remove_var("DYB_WRANGLER_BIN");
         // Force a nonexistent binary by shadowing PATH with an empty dir.
         let _empty = tempfile::tempdir().unwrap();
         let result = deploy_worker_via_wrangler(
@@ -266,7 +280,8 @@ mod tests {
         // Inject a fake wrangler via DYB_WRANGLER_BIN. It prints a workers.dev
         // URL exactly like the real CLI, so we can verify the full subprocess
         // path (toml write + env injection + URL parsing) without any network.
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = WranglerEnvGuard(std::env::var("DYB_WRANGLER_BIN").ok());
         let dir = tempfile::tempdir().unwrap();
         let fake = dir.path().join("wrangler");
         std::fs::write(
@@ -296,7 +311,6 @@ mod tests {
             },
         )
         .await;
-        std::env::remove_var("DYB_WRANGLER_BIN");
 
         match result {
             Ok(url) => assert_eq!(url, "https://dyb-mock-1.acctsub.workers.dev"),
@@ -306,7 +320,8 @@ mod tests {
 
     #[test]
     fn find_wrangler_honors_env_override() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = WranglerEnvGuard(std::env::var("DYB_WRANGLER_BIN").ok());
         let dir = tempfile::tempdir().unwrap();
         let fake = dir.path().join("wrangler-mock");
         std::fs::write(&fake, "#!/bin/sh\necho hi\n").unwrap();
@@ -319,7 +334,6 @@ mod tests {
         }
         std::env::set_var("DYB_WRANGLER_BIN", &fake);
         let got = find_wrangler().unwrap().unwrap();
-        std::env::remove_var("DYB_WRANGLER_BIN");
         assert_eq!(got, fake.to_string_lossy().as_ref());
     }
 }
