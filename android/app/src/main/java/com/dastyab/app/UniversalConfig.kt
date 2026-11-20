@@ -669,12 +669,13 @@ object UniversalConfig {
             val idx = pair.indexOf('=')
             if (idx <= 0) return null
             val key = pair.substring(0, idx).trim().lowercase()
-            val value = decodePercent(pair.substring(idx + 1).trim()).trim()
+            val decoded = decodeQueryComponent(pair.substring(idx + 1).trim()) ?: return null
             when (key) {
                 "server", "host" -> {
+                    val value = decoded.trim()
                     if (server != null ||
                         value.isEmpty() ||
-                        value.any { it.isWhitespace() } ||
+                        decoded.any { it.isWhitespace() } ||
                         value.contains('/') ||
                         value.contains('#') ||
                         value.contains('?')
@@ -684,14 +685,15 @@ object UniversalConfig {
                     server = value
                 }
                 "port" -> {
-                    if (port != null || value.isEmpty() || !value.all { it in '0'..'9' }) {
+                    if (port != null || decoded.isEmpty() || !decoded.all { it in '0'..'9' }) {
                         return null
                     }
-                    val p = value.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+                    val p = decoded.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
                     port = p
                 }
                 "secret" -> {
-                    if (secret != null || value.isEmpty() || value.any { it.isWhitespace() }) {
+                    val value = decoded.trim()
+                    if (secret != null || value.isEmpty() || decoded.any { it.isWhitespace() }) {
                         return null
                     }
                     secret = value
@@ -786,12 +788,15 @@ object UniversalConfig {
         return out.toByteArray()
     }
 
-    private fun decodePercent(value: String): String {
-        return try {
-            URLDecoder.decode(value, "UTF-8")
-        } catch (_: Exception) {
-            value
+    private fun decodeQueryComponent(value: String): String? =
+        try {
+            URLDecoder.decode(value.replace("+", "%2B"), "UTF-8")
+        } catch (_: IllegalArgumentException) {
+            null
         }
+
+    private fun decodePercent(value: String): String {
+        return decodeQueryComponent(value) ?: value
     }
 
     private fun urlEncode(value: String): String {

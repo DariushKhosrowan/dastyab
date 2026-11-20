@@ -340,11 +340,10 @@ fn validate_mtproto_server(raw: &str) -> Option<String> {
 
 fn validate_mtproto_port(raw: &str) -> Option<u16> {
     let decoded = crate::artifact::vless::decode_query(raw.trim());
-    let val = decoded.trim();
-    if val.is_empty() || !val.bytes().all(|b| b.is_ascii_digit()) {
+    if decoded.is_empty() || !decoded.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
-    val.parse::<u16>().ok().filter(|&p| p > 0)
+    decoded.parse::<u16>().ok().filter(|&p| p > 0)
 }
 
 fn validate_mtproto_secret(raw: &str) -> Option<String> {
@@ -791,6 +790,9 @@ mod tests {
             "tg://proxy?server=1.2.3.4&port=443&secret=abc&extra=1",
             "tg://proxy?server=1.2.3.4&port=443&secret=abc&dangling",
             "tg://proxy?server=1.2.3.4&port=+443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=%2B443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=%20443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=443%20&secret=abc",
             "tg://proxy?server=1.2.3.4%23bad&port=443&secret=abc",
             "tg://proxy?server=1.2.3.4&port=443&secret=ab%20cd",
             "https://t.me/some_channel",

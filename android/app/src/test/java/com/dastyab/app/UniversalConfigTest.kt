@@ -243,6 +243,10 @@ class UniversalConfigTest {
             "tg://proxy?server=1.2.3.4&port=443&secret=abc&extra=1",
             "tg://proxy?server=1.2.3.4&port=443&secret=abc&dangling",
             "tg://proxy?server=1.2.3.4&port=+443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=%2B443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=%20443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=443%20&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=%ZZ&secret=abc",
             "tg://proxy?server=1.2.3.4%23bad&port=443&secret=abc",
             "tg://proxy?server=1.2.3.4&port=443&secret=ab%20cd"
         )
