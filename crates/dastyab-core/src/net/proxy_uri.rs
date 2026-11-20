@@ -268,7 +268,7 @@ pub const MTPROTO_PREFIXES: &[&str] = &[
 ];
 
 /// Return the query slice after a recognized Telegram MTProto prefix (ASCII case-insensitive).
-fn mtproto_query(raw: &str) -> Option<&str> {
+pub fn mtproto_query(raw: &str) -> Option<&str> {
     let raw = raw.trim();
     for prefix in MTPROTO_PREFIXES {
         if let Some(head) = raw.get(..prefix.len()) {
@@ -283,6 +283,24 @@ fn mtproto_query(raw: &str) -> Option<&str> {
 /// Return whether `raw` begins with a recognized Telegram MTProto share-link prefix.
 pub fn is_mtproto_link(raw: &str) -> bool {
     mtproto_query(raw).is_some()
+}
+
+/// Extract all valid Telegram MTProto share-links from an HTML or plain-text payload.
+pub fn extract_mtproto_links(body: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let tokens = body.split(|c: char| {
+        c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | '(' | ')' | '[' | ']')
+    });
+    for token in tokens {
+        let decoded = token.trim_end_matches('#').replace("&amp;", "&");
+        if is_mtproto_link(&decoded)
+            && ProxyUri::parse(&decoded).is_some()
+            && !out.contains(&decoded)
+        {
+            out.push(decoded);
+        }
+    }
+    out
 }
 
 /// Telegram MTProto links (`tg://proxy?server=...&port=...&secret=...`,
@@ -657,23 +675,43 @@ mod tests {
     }
 
     #[test]
-    fn parses_all_mtproto_link_forms() {
+    fn mtproto_accepts_supported_forms_and_rejects_malformed_forms() {
         for link in [
-            "tg://proxy?server=1.2.3.4&port=443&secret=abc",
-            "https://t.me/proxy?server=1.2.3.4&port=443&secret=abc",
-            "http://t.me/proxy?server=1.2.3.4&port=443&secret=abc",
-            "https://telegram.me/proxy?server=1.2.3.4&port=443&secret=abc",
-            "http://telegram.me/proxy?server=1.2.3.4&port=443&secret=abc",
-            "HTTPS://T.ME/PROXY?server=1.2.3.4&port=443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "https://t.me/proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "http://t.me/proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "https://telegram.me/proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "http://telegram.me/proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "HTTPS://T.ME/PROXY?server=1.2.3.4&port=443&secret=dd00001111",
         ] {
             assert!(is_mtproto_link(link), "{link}");
             let proxy = ProxyUri::parse(link).expect(link);
             assert_eq!(proxy.scheme, "mtproto");
             assert_eq!(proxy.host, "1.2.3.4");
             assert_eq!(proxy.port, 443);
-            assert_eq!(proxy.id, "abc");
+            assert_eq!(proxy.id, "dd00001111");
         }
-        assert!(!is_mtproto_link("https://t.me/some_channel"));
-        assert!(!is_mtproto_link("vless://uuid@1.2.3.4:443#v"));
+        for bad in [
+            "https://evil.example/t.me/proxy?server=1.2.3.4&port=443&secret=abc",
+            "ftp://t.me/proxy?server=1.2.3.4&port=443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=0&secret=abc",
+            "tg://proxy?port=443&secret=abc",
+            "https://t.me/some_channel",
+            "vless://uuid@1.2.3.4:443#v",
+        ] {
+            assert!(ProxyUri::parse(bad).is_none(), "expected None for {bad}");
+        }
+        let html = concat!(
+            r#"<a href="HTTPS://T.ME/PROXY?server=1.2.3.4&amp;port=443&amp;secret=abc">p</a> "#,
+            r#"<span>tg://proxy?server=5.6.7.8&amp;port=8443&amp;secret=def</span>"#,
+        );
+        let extracted = extract_mtproto_links(html);
+        assert_eq!(
+            extracted,
+            vec![
+                "HTTPS://T.ME/PROXY?server=1.2.3.4&port=443&secret=abc",
+                "tg://proxy?server=5.6.7.8&port=8443&secret=def",
+            ]
+        );
     }
 }

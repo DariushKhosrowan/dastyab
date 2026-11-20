@@ -232,17 +232,8 @@ pub fn extract_proxy_links(body: &str) -> Vec<String> {
         }
     }
 
-    for prefix in crate::net::proxy_uri::MTPROTO_PREFIXES {
-        for (pos, _) in body.match_indices(prefix) {
-            let slice = &body[pos..];
-            let end = slice
-                .find(|c: char| c.is_whitespace() || c == '"' || c == '<' || c == '>')
-                .unwrap_or(slice.len());
-            let decoded = slice[..end].trim_end_matches('#').replace("&amp;", "&");
-            if crate::net::proxy_uri::ProxyUri::parse(&decoded).is_some() {
-                push_unique(decoded);
-            }
-        }
+    for mt_link in crate::net::proxy_uri::extract_mtproto_links(body) {
+        push_unique(mt_link);
     }
 
     for wg_link in extract_wireguard_ini_links(body) {
