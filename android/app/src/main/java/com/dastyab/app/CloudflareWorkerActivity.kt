@@ -404,13 +404,15 @@ class CloudflareWorkerActivity : DastyabActivity() {
             summary.accounts.forEach { acc ->
                 val chipLabel = if (acc.subdomain.isNotBlank()) "${acc.name.ifBlank { acc.subdomain }} (${acc.subdomain}.workers.dev)"
                 else "${acc.name.ifBlank { "Account" }} (${acc.id.take(8)}…)"
-                llAccountChips.addView(Button(this, null, 0, R.style.DastyabChip).apply {
+                val chipBtn = Button(this, null, 0, R.style.DastyabChip).apply {
                     text = chipLabel
                     setOnClickListener {
                         etDeployAccountId.setText(acc.id)
                         Toast.makeText(this@CloudflareWorkerActivity, getString(R.string.cf_toast_selected_account, acc.id.take(8)), Toast.LENGTH_SHORT).show()
                     }
-                })
+                }
+                DastyabMotion.attachPressSpring(chipBtn)
+                llAccountChips.addView(chipBtn)
             }
             if (etDeployAccountId.text.toString().isBlank()) {
                 val defaultAcc = summary.activeAccountId.ifBlank { summary.accounts.first().id }
@@ -429,14 +431,16 @@ class CloudflareWorkerActivity : DastyabActivity() {
             })
         } else {
             summary.cleanIps.forEach { ep ->
-                llCleanIpChips.addView(Button(this, null, 0, R.style.DastyabChip).apply {
+                val cleanChip = Button(this, null, 0, R.style.DastyabChip).apply {
                     text = ep
                     setOnClickListener { applyCleanIpToEditor(ep) }
                     setOnLongClickListener {
                         showCleanIpChipMenu(ep)
                         true
                     }
-                })
+                }
+                DastyabMotion.attachPressSpring(cleanChip)
+                llCleanIpChips.addView(cleanChip)
             }
         }
 
@@ -446,10 +450,12 @@ class CloudflareWorkerActivity : DastyabActivity() {
         if (summary.lastDeployedBaseLink.isNotBlank()) {
             WorkerConfigStudio.parseVless(summary.lastDeployedBaseLink)?.let { baseCfg ->
                 seenLinks.add(summary.lastDeployedBaseLink)
-                llHistoryConfigChips.addView(Button(this, null, 0, R.style.DastyabChip).apply {
+                val baseBtn = Button(this, null, 0, R.style.DastyabChip).apply {
                     text = "Base: ${baseCfg.address}"
                     setOnClickListener { populateEditor(baseCfg, isBaseWorker = true) }
-                })
+                }
+                DastyabMotion.attachPressSpring(baseBtn)
+                llHistoryConfigChips.addView(baseBtn)
             }
         }
         summary.history.take(20).forEach { rec ->
@@ -457,10 +463,12 @@ class CloudflareWorkerActivity : DastyabActivity() {
                 val parsed = WorkerConfigStudio.parseVless(rec.link)
                 if (parsed != null) {
                     val tag = if (rec.isCleanIp) "Clean: ${rec.address}:${rec.port}" else "Worker: ${rec.address}"
-                    llHistoryConfigChips.addView(Button(this, null, 0, R.style.DastyabChip).apply {
+                    val histBtn = Button(this, null, 0, R.style.DastyabChip).apply {
                         text = tag
                         setOnClickListener { populateEditor(parsed, isBaseWorker = !rec.isCleanIp) }
-                    })
+                    }
+                    DastyabMotion.attachPressSpring(histBtn)
+                    llHistoryConfigChips.addView(histBtn)
                 }
             }
         }
@@ -476,27 +484,39 @@ class CloudflareWorkerActivity : DastyabActivity() {
         }
     }
 
+    private fun styleStudioTab(tab: Button, active: Boolean) {
+        tab.alpha = 1.0f
+        tab.background = getDrawable(if (active) R.drawable.tab_active_bg else R.drawable.tab_inactive_bg)
+        tab.setTextColor(
+            if (active) ThemeManager.resolveColor(this, R.attr.dastyabButtonPrimaryText, R.color.colorButtonPrimaryText)
+            else ThemeManager.resolveColor(this, R.attr.dastyabTextSecondary, R.color.colorTextSecondary)
+        )
+    }
+
     private fun selectWorkerMode(deployNew: Boolean) {
-        panelDeployNew.visibility = if (deployNew) View.VISIBLE else View.GONE
-        panelExistingWorker.visibility = if (deployNew) View.GONE else View.VISIBLE
-        btnModeDeployNew.alpha = if (deployNew) 1.0f else 0.55f
-        btnModeExistingWorker.alpha = if (deployNew) 0.55f else 1.0f
+        if (deployNew) {
+            DastyabMotion.switchModeContainer(panelDeployNew, listOf(panelExistingWorker), -1)
+        } else {
+            DastyabMotion.switchModeContainer(panelExistingWorker, listOf(panelDeployNew), 1)
+        }
+        styleStudioTab(btnModeDeployNew, deployNew)
+        styleStudioTab(btnModeExistingWorker, !deployNew)
     }
 
     private fun selectPreset(preset: WorkerConfigStudio.WorkerPreset) {
         selectedPreset = preset
-        btnPresetStandard.alpha = if (preset == WorkerConfigStudio.WorkerPreset.STANDARD) 1.0f else 0.55f
-        btnPresetGaming.alpha = if (preset == WorkerConfigStudio.WorkerPreset.GAMING) 1.0f else 0.55f
-        btnPresetMaxCompat.alpha = if (preset == WorkerConfigStudio.WorkerPreset.MAX_COMPAT) 1.0f else 0.55f
+        styleStudioTab(btnPresetStandard, preset == WorkerConfigStudio.WorkerPreset.STANDARD)
+        styleStudioTab(btnPresetGaming, preset == WorkerConfigStudio.WorkerPreset.GAMING)
+        styleStudioTab(btnPresetMaxCompat, preset == WorkerConfigStudio.WorkerPreset.MAX_COMPAT)
         tvPresetDesc.text = "${preset.label}: ${preset.description}"
     }
 
     private fun selectExportFormat(format: WorkerConfigStudio.ExportFormat) {
         selectedExportFormat = format
-        btnFmtLink.alpha = if (format == WorkerConfigStudio.ExportFormat.SHARE_LINK) 1.0f else 0.55f
-        btnFmtV2rayN.alpha = if (format == WorkerConfigStudio.ExportFormat.V2RAYN) 1.0f else 0.55f
-        btnFmtSingBox.alpha = if (format == WorkerConfigStudio.ExportFormat.SINGBOX) 1.0f else 0.55f
-        btnFmtClash.alpha = if (format == WorkerConfigStudio.ExportFormat.CLASH) 1.0f else 0.55f
+        styleStudioTab(btnFmtLink, format == WorkerConfigStudio.ExportFormat.SHARE_LINK)
+        styleStudioTab(btnFmtV2rayN, format == WorkerConfigStudio.ExportFormat.V2RAYN)
+        styleStudioTab(btnFmtSingBox, format == WorkerConfigStudio.ExportFormat.SINGBOX)
+        styleStudioTab(btnFmtClash, format == WorkerConfigStudio.ExportFormat.CLASH)
         updateExportPreview()
     }
 

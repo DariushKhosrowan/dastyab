@@ -244,6 +244,7 @@ class InAppBrowserActivity : DastyabActivity() {
                 GeoBypassEngine.isAiStudioUnsupportedResponse(200, url, url, "")
         }
         if (blocked) {
+            setBrowserHalo(StatusHaloView.HaloState.ERROR, R.drawable.status_dot_red)
             tvRouteStatus.text = getString(R.string.browser_geo_blocked)
             tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusError, R.color.colorStatusError))
         }
@@ -279,6 +280,7 @@ class InAppBrowserActivity : DastyabActivity() {
                 }
             } ?: return@evaluateJavascript
 
+            setBrowserHalo(StatusHaloView.HaloState.ERROR, R.drawable.status_dot_red)
             tvRouteStatus.text = getString(R.string.browser_geo_blocked)
             tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusError, R.color.colorStatusError))
             currentBannerEgressIp?.takeIf { it.isNotBlank() }?.let { failedEgressIps.add(it) }
@@ -319,6 +321,7 @@ class InAppBrowserActivity : DastyabActivity() {
             getString(R.string.browser_auto_chain_running, target.displayName),
             Toast.LENGTH_LONG
         ).show()
+        setBrowserHalo(StatusHaloView.HaloState.CONNECTING, R.drawable.status_dot_orange)
         if (this::tvRouteStatus.isInitialized) {
             tvRouteStatus.text = getString(R.string.browser_auto_chain_running, target.displayName)
             tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusWarning, R.color.colorStatusWarning))
@@ -489,9 +492,14 @@ class InAppBrowserActivity : DastyabActivity() {
                 if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
                 val egress = report.egress
                 if (egress == null) {
+                    setBrowserHalo(StatusHaloView.HaloState.WARNING, R.drawable.status_dot_orange)
                     tvRouteStatus.text = getString(R.string.browser_geo_check_hint, route.routeLabel)
                     tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusWarning, R.color.colorStatusWarning))
                 } else {
+                    setBrowserHalo(
+                        if (ready) StatusHaloView.HaloState.CONNECTED else StatusHaloView.HaloState.ERROR,
+                        if (ready) R.drawable.status_dot_green else R.drawable.status_dot_red
+                    )
                     tvRouteStatus.text = if (ready) {
                         getString(R.string.browser_banner_ready, target.displayName, route.routeLabel, egress.countryCode, egress.ip)
                     } else {
@@ -536,22 +544,30 @@ class InAppBrowserActivity : DastyabActivity() {
         receiverRegistered = true
     }
 
+    private fun setBrowserHalo(haloState: StatusHaloView.HaloState, fallbackDrawableRes: Int) {
+        if (!this::vpnDot.isInitialized) return
+        val halo = vpnDot as? StatusHaloView
+        if (halo != null) {
+            halo.setHaloState(haloState)
+        } else {
+            vpnDot.background = getDrawable(fallbackDrawableRes)
+        }
+    }
+
     private fun refreshRouteAndIndicator(precomputed: GeoBypassEngine.RouteResolution? = null) {
         if (!UiSafety.isActivityAlive(this) || !this::vpnDot.isInitialized) return
         try {
             val dastyabStatus = DastyabVpnService.getStatus()
             val externalVpn = NetworkUtils.hasActiveExternalVpn(this)
             val bridgeRunning = LocalProxyService.isRunning()
-            vpnDot.background = getDrawable(
-                when {
-                    dastyabStatus.state == DastyabVpnService.State.CONNECTED || externalVpn || bridgeRunning ->
-                        R.drawable.status_dot_green
-                    dastyabStatus.state == DastyabVpnService.State.CONNECTING ->
-                        R.drawable.status_dot_orange
-                    else ->
-                        R.drawable.status_dot_gray
-                }
-            )
+            when {
+                dastyabStatus.state == DastyabVpnService.State.CONNECTED || externalVpn || bridgeRunning ->
+                    setBrowserHalo(StatusHaloView.HaloState.CONNECTED, R.drawable.status_dot_green)
+                dastyabStatus.state == DastyabVpnService.State.CONNECTING ->
+                    setBrowserHalo(StatusHaloView.HaloState.CONNECTING, R.drawable.status_dot_orange)
+                else ->
+                    setBrowserHalo(StatusHaloView.HaloState.IDLE, R.drawable.status_dot_gray)
+            }
             if (precomputed != null && this::tvRouteStatus.isInitialized) {
                 tvRouteStatus.text = getString(R.string.browser_checking_country, precomputed.routeLabel)
             }

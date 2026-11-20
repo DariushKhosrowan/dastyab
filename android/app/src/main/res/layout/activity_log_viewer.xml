@@ -6,24 +6,41 @@
     android:background="?attr/dastyabBackground"
     android:padding="16dp">
 
-    <Button
-        android:id="@+id/btnRefresh"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/btn_refresh_logs"
-        style="@style/DastyabButtonPrimary" />
+        android:orientation="vertical"
+        android:background="@drawable/header_card_background"
+        android:padding="16dp"
+        android:layout_marginBottom="12dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_view_logs"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="?attr/dastyabAccent"
+            android:paddingBottom="10dp" />
+
+        <Button
+            android:id="@+id/btnRefresh"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_refresh_logs"
+            style="@style/DastyabButtonPrimary" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/tvLogFiles"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/log_files"
-        android:textSize="13sp"
+        android:textSize="12sp"
         android:textStyle="bold"
         android:textAllCaps="true"
         android:letterSpacing="0.06"
         android:textColor="?attr/dastyabTextSecondary"
-        android:paddingTop="16dp"
         android:paddingBottom="8dp" />
 
     <ListView

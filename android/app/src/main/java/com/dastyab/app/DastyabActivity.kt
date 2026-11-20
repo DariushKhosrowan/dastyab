@@ -10,7 +10,7 @@ import android.os.Bundle
  * Enforces the safe two-phase theme & locale lifecycle across initial launch and Activity.recreate():
  *  1. [attachBaseContext] wraps the context with the active [LocaleHelper] language and RTL/LTR direction.
  *  2. [onCreate] applies the theme style resource BEFORE subclasses call [setContentView].
- *  3. [onPostCreate] defers window/system-bar chrome customization to the installed DecorView.
+ *  3. [onPostCreate] defers window/system-bar chrome customization and motion binding to the installed DecorView.
  */
 abstract class DastyabActivity : Activity() {
 
@@ -29,5 +29,6 @@ abstract class DastyabActivity : Activity() {
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         ThemeManager.scheduleSystemBars(this)
+        DastyabMotion.enhanceActivityAfterLayout(this)
     }
 }

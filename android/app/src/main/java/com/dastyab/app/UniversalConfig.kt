@@ -613,8 +613,9 @@ object UniversalConfig {
         RegexOption.IGNORE_CASE
     )
     private val BARE_IPV4_PORT_REGEX = Regex(
-        """(?<![A-Za-z0-9_./:-])(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})(?![.\d/])"""
+        """(?<![A-Za-z0-9_./:@-])(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})(?![.\d/])"""
     )
+    private val ANY_SCHEME_URI_REGEX = Regex("""[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>`\\]+""")
 
     /**
      * Extracts chainable SOCKS5 / HTTP proxy hops from raw proxy-list feeds, HTML pages,
@@ -644,14 +645,26 @@ object UniversalConfig {
         }
 
         for (text in texts) {
+            val bareScanBuf = StringBuilder(text)
+            fun blankRange(range: IntRange) {
+                for (idx in range) {
+                    if (idx in bareScanBuf.indices) bareScanBuf.setCharAt(idx, ' ')
+                }
+            }
+
             TG_SOCKS_URI_REGEX.findAll(text).forEach { m ->
                 addHop(TunnelConfig.parseProxyHop(cleanUri(m.value)))
+                blankRange(m.range)
             }
             PROXY_SCHEME_LINE_REGEX.findAll(text).forEach { m ->
                 addHop(TunnelConfig.parseProxyHop(cleanUri(m.value)))
+                blankRange(m.range)
+            }
+            ANY_SCHEME_URI_REGEX.findAll(text).forEach { m ->
+                blankRange(m.range)
             }
             if (defaultScheme != TunnelConfig.ProxyScheme.DIRECT) {
-                BARE_IPV4_PORT_REGEX.findAll(text).forEach { m ->
+                BARE_IPV4_PORT_REGEX.findAll(bareScanBuf).forEach { m ->
                     val ip = m.groupValues[1]
                     val port = m.groupValues[2].toIntOrNull()
                     if (port != null && port in 1..65535 && TunnelConfig.isValidIpv4(ip)) {

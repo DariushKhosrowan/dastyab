@@ -1272,24 +1272,24 @@ class MainActivity : DastyabActivity() {
 
         when {
             statusObj.state == DastyabVpnService.State.CONNECTED -> {
-                vpnDot.background = getDrawable(R.drawable.status_dot_green)
-                simpleStatusDot.background = getDrawable(R.drawable.status_dot_green)
+                setViewHalo(vpnDot, StatusHaloView.HaloState.CONNECTED, R.drawable.status_dot_green)
+                setViewHalo(simpleStatusDot, StatusHaloView.HaloState.CONNECTED, R.drawable.status_dot_green)
                 tvVpnState.text = "${getString(R.string.vpn_status_connected)} · ${activeMode.localizedLabel(this)}"
                 tvSimpleHeroTitle.text = getString(R.string.simple_hero_connected)
                 btnVpnToggle.text = getString(R.string.vpn_btn_disconnect)
                 btnSimpleQuickToggle.text = getString(R.string.vpn_btn_disconnect)
             }
             statusObj.state == DastyabVpnService.State.CONNECTING -> {
-                vpnDot.background = getDrawable(R.drawable.status_dot_orange)
-                simpleStatusDot.background = getDrawable(R.drawable.status_dot_orange)
+                setViewHalo(vpnDot, StatusHaloView.HaloState.CONNECTING, R.drawable.status_dot_orange)
+                setViewHalo(simpleStatusDot, StatusHaloView.HaloState.CONNECTING, R.drawable.status_dot_orange)
                 tvVpnState.text = getString(R.string.vpn_status_connecting)
                 tvSimpleHeroTitle.text = getString(R.string.vpn_status_connecting)
                 btnVpnToggle.text = getString(R.string.vpn_btn_disconnect)
                 btnSimpleQuickToggle.text = getString(R.string.vpn_btn_disconnect)
             }
             externalVpn || bridgePort != null -> {
-                vpnDot.background = getDrawable(R.drawable.status_dot_green)
-                simpleStatusDot.background = getDrawable(R.drawable.status_dot_green)
+                setViewHalo(vpnDot, StatusHaloView.HaloState.CONNECTED, R.drawable.status_dot_green)
+                setViewHalo(simpleStatusDot, StatusHaloView.HaloState.CONNECTED, R.drawable.status_dot_green)
                 val extLabel = when {
                     externalVpn && bridgePort != null -> getString(R.string.main_external_vpn_plus_proxy, bridgePort)
                     externalVpn -> getString(R.string.main_external_vpn_active)
@@ -1301,8 +1301,8 @@ class MainActivity : DastyabActivity() {
                 btnSimpleQuickToggle.text = getString(R.string.vpn_btn_connect)
             }
             else -> {
-                vpnDot.background = getDrawable(R.drawable.status_dot_gray)
-                simpleStatusDot.background = getDrawable(R.drawable.status_dot_gray)
+                setViewHalo(vpnDot, StatusHaloView.HaloState.IDLE, R.drawable.status_dot_gray)
+                setViewHalo(simpleStatusDot, StatusHaloView.HaloState.IDLE, R.drawable.status_dot_gray)
                 tvVpnState.text = "${getString(R.string.vpn_status_disconnected)} · ${activeMode.localizedLabel(this)}"
                 tvSimpleHeroTitle.text = getString(R.string.simple_hero_disconnected)
                 btnVpnToggle.text = getString(R.string.vpn_btn_connect)
@@ -1334,12 +1334,21 @@ class MainActivity : DastyabActivity() {
         }
         tvVpnDetails.text = "$endpoint · DNS ${settings.dnsPrimary}$splitSuffix$iranBypassTag$watchdogTag$proxyTag"
 
-        // Highlight active quick-mode chip
+        // Highlight active quick-mode chip cleanly
         val isSplit = activeMode == TunnelConfig.Mode.SPLIT_INCLUDE || activeMode == TunnelConfig.Mode.SPLIT_EXCLUDE
-        btnModeSmart.alpha = if (activeMode == TunnelConfig.Mode.SMART) 1.0f else 0.55f
-        btnModeGlobal.alpha = if (activeMode == TunnelConfig.Mode.GLOBAL) 1.0f else 0.55f
-        btnModeSplit.alpha = if (isSplit) 1.0f else 0.55f
-        btnModeDns.alpha = if (activeMode == TunnelConfig.Mode.DNS_BLACKOUT) 1.0f else 0.55f
+        styleQuickModeChip(btnModeSmart, activeMode == TunnelConfig.Mode.SMART)
+        styleQuickModeChip(btnModeGlobal, activeMode == TunnelConfig.Mode.GLOBAL)
+        styleQuickModeChip(btnModeSplit, isSplit)
+        styleQuickModeChip(btnModeDns, activeMode == TunnelConfig.Mode.DNS_BLACKOUT)
+    }
+
+    private fun styleQuickModeChip(chip: Button, active: Boolean) {
+        chip.alpha = 1.0f
+        chip.background = getDrawable(if (active) R.drawable.tab_active_bg else R.drawable.tab_inactive_bg)
+        chip.setTextColor(
+            if (active) ThemeManager.resolveColor(this, R.attr.dastyabButtonPrimaryText, R.color.colorButtonPrimaryText)
+            else ThemeManager.resolveColor(this, R.attr.dastyabTextSecondary, R.color.colorTextSecondary)
+        )
     }
 
     private fun openActivity(type: Class<out Activity>) {
@@ -1347,18 +1356,45 @@ class MainActivity : DastyabActivity() {
         catch (_: android.content.ActivityNotFoundException) { postStatus("Screen unavailable") }
     }
 
-    /** Switches between Simple Mode, Advanced Mode, and Terminal Mode (CPython 3.11). */
+    /** Switches between Simple Mode, Advanced Mode, and Terminal Mode (CPython 3.11) with smooth choreography. */
     private fun applyUiMode(mode: UiModePrefs.Mode, persist: Boolean = true) {
+        val previous = when {
+            simpleModeContainer.visibility == View.VISIBLE -> UiModePrefs.Mode.SIMPLE
+            advancedModeContainer.visibility == View.VISIBLE -> UiModePrefs.Mode.ADVANCED
+            else -> UiModePrefs.Mode.TERMINAL
+        }
         if (persist) UiModePrefs.setMode(this, mode)
-        simpleModeContainer.visibility = if (mode == UiModePrefs.Mode.SIMPLE) View.VISIBLE else View.GONE
-        advancedModeContainer.visibility = if (mode == UiModePrefs.Mode.ADVANCED) View.VISIBLE else View.GONE
-        terminalModeContainer.visibility = if (mode == UiModePrefs.Mode.TERMINAL) View.VISIBLE else View.GONE
-        btnTabSimple.alpha = if (mode == UiModePrefs.Mode.SIMPLE) 1.0f else 0.55f
-        btnTabAdvanced.alpha = if (mode == UiModePrefs.Mode.ADVANCED) 1.0f else 0.55f
-        btnTabTerminal.alpha = if (mode == UiModePrefs.Mode.TERMINAL) 1.0f else 0.55f
+        val slideDir = mode.ordinal - previous.ordinal
+        val target = when (mode) {
+            UiModePrefs.Mode.SIMPLE -> simpleModeContainer
+            UiModePrefs.Mode.ADVANCED -> advancedModeContainer
+            UiModePrefs.Mode.TERMINAL -> terminalModeContainer
+        }
+        val others = listOf(simpleModeContainer, advancedModeContainer, terminalModeContainer)
+        if (persist) {
+            DastyabMotion.switchModeContainer(target, others, slideDir)
+        } else {
+            simpleModeContainer.visibility = if (mode == UiModePrefs.Mode.SIMPLE) View.VISIBLE else View.GONE
+            advancedModeContainer.visibility = if (mode == UiModePrefs.Mode.ADVANCED) View.VISIBLE else View.GONE
+            terminalModeContainer.visibility = if (mode == UiModePrefs.Mode.TERMINAL) View.VISIBLE else View.GONE
+        }
+
+        styleSegmentedTab(btnTabSimple, mode == UiModePrefs.Mode.SIMPLE)
+        styleSegmentedTab(btnTabAdvanced, mode == UiModePrefs.Mode.ADVANCED)
+        styleSegmentedTab(btnTabTerminal, mode == UiModePrefs.Mode.TERMINAL)
+
         if (mode == UiModePrefs.Mode.TERMINAL) {
             initTerminalSessionIfNeeded()
         }
+    }
+
+    private fun styleSegmentedTab(tab: Button, active: Boolean) {
+        tab.alpha = 1.0f
+        tab.background = getDrawable(if (active) R.drawable.tab_active_bg else R.drawable.tab_inactive_bg)
+        tab.setTextColor(
+            if (active) ThemeManager.resolveColor(this, R.attr.dastyabButtonPrimaryText, R.color.colorButtonPrimaryText)
+            else ThemeManager.resolveColor(this, R.attr.dastyabTextSecondary, R.color.colorTextSecondary)
+        )
     }
 
     private fun setupTerminalModeUi() {
@@ -1486,7 +1522,7 @@ class MainActivity : DastyabActivity() {
     private fun buildTerminalPresetChips(containerId: Int, presets: List<TerminalCommandRouter.QuickPreset>) {
         val container = findViewById<LinearLayout>(containerId)
         presets.forEach { preset ->
-            container.addView(Button(this, null, 0, R.style.DastyabChip).apply {
+            val chip = Button(this, null, 0, R.style.DastyabChip).apply {
                 text = preset.label
                 setOnClickListener {
                     if (!terminalRunning.get()) {
@@ -1496,7 +1532,9 @@ class MainActivity : DastyabActivity() {
                         }
                     }
                 }
-            })
+            }
+            DastyabMotion.attachPressSpring(chip)
+            container.addView(chip)
         }
     }
 
@@ -1744,16 +1782,16 @@ class MainActivity : DastyabActivity() {
         }
     }
 
-    /** Show the advanced (raw command) section. */
+    /** Show the advanced (raw command) section smoothly. */
     private fun showAdvanced() {
-        advancedSection.visibility = View.VISIBLE
+        DastyabMotion.revealPanel(advancedSection)
         btnShowAdvanced.visibility = View.GONE
     }
 
     /** Hide the advanced (raw command) section. */
     private fun hideAdvanced() {
         advancedSection.visibility = View.GONE
-        btnShowAdvanced.visibility = View.VISIBLE
+        DastyabMotion.revealPanel(btnShowAdvanced)
     }
 
     /** Run a predefined simple action command (no typing). */
@@ -1861,7 +1899,7 @@ class MainActivity : DastyabActivity() {
     private fun buildQuickButtons(containerId: Int, commands: List<String>) {
         val container = findViewById<LinearLayout>(containerId)
         commands.forEach { command ->
-            container.addView(Button(this, null, 0, R.style.DastyabChip).apply {
+            val chip = Button(this, null, 0, R.style.DastyabChip).apply {
                 text = command
                 setOnClickListener {
                     if (operation.get() == null) {
@@ -1869,7 +1907,9 @@ class MainActivity : DastyabActivity() {
                         runTyped()
                     }
                 }
-            })
+            }
+            DastyabMotion.attachPressSpring(chip)
+            container.addView(chip)
         }
     }
 
@@ -2026,7 +2066,9 @@ class MainActivity : DastyabActivity() {
 
     private fun applyFormattedOutput(message: String) {
         outputEmptyState.visibility = View.GONE
-        output.visibility = View.VISIBLE
+        if (output.visibility != View.VISIBLE) {
+            DastyabMotion.revealPanel(output)
+        }
         output.append(formatOutput(message))
         if (output.length() > MAX_OUTPUT_CHARS) {
             output.text = output.text.subSequence(output.length() - MAX_OUTPUT_CHARS, output.length())
@@ -2075,12 +2117,21 @@ class MainActivity : DastyabActivity() {
     }
 
     private enum class DotState { GREEN, ORANGE, RED }
+
+    private fun setViewHalo(view: View, haloState: StatusHaloView.HaloState, fallbackDrawableRes: Int) {
+        if (view is StatusHaloView) {
+            view.setHaloState(haloState)
+        } else {
+            view.background = getDrawable(fallbackDrawableRes)
+        }
+    }
+
     private fun setStatusDot(state: DotState) {
-        statusDot.background = getDrawable(when (state) {
-            DotState.GREEN -> R.drawable.status_dot_green
-            DotState.ORANGE -> R.drawable.status_dot_orange
-            DotState.RED -> R.drawable.status_dot_red
-        })
+        when (state) {
+            DotState.GREEN -> setViewHalo(statusDot, StatusHaloView.HaloState.CONNECTED, R.drawable.status_dot_green)
+            DotState.ORANGE -> setViewHalo(statusDot, StatusHaloView.HaloState.CONNECTING, R.drawable.status_dot_orange)
+            DotState.RED -> setViewHalo(statusDot, StatusHaloView.HaloState.ERROR, R.drawable.status_dot_red)
+        }
     }
 
     private fun setBusy(busy: Boolean) {

@@ -2,10 +2,24 @@
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="?android:attr/colorControlHighlight">
     <item>
-        <shape android:shape="rectangle">
-            <solid android:color="?attr/dastyabButtonSecondary" />
-            <corners android:radius="12dp" />
-            <stroke android:width="1dp" android:color="?attr/dastyabCardBorder" />
-        </shape>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <gradient
+                        android:angle="135"
+                        android:startColor="?attr/dastyabSurfaceElevated"
+                        android:endColor="?attr/dastyabButtonSecondary" />
+                    <corners android:radius="14dp" />
+                    <stroke android:width="1dp" android:color="?attr/dastyabCardBorder" />
+                </shape>
+            </item>
+            <item android:top="1dp" android:left="1dp" android:right="1dp" android:bottom="1dp">
+                <shape android:shape="rectangle">
+                    <solid android:color="@android:color/transparent" />
+                    <corners android:radius="13dp" />
+                    <stroke android:width="1dp" android:color="?attr/dastyabSpecularHighlight" />
+                </shape>
+            </item>
+        </layer-list>
     </item>
 </ripple>

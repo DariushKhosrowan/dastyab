@@ -1,85 +1,113 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Smooth Slide + Fade Activity Transitions -->
+    <style name="DastyabWindowAnimations" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/dastyab_enter</item>
+        <item name="android:activityOpenExitAnimation">@anim/dastyab_exit</item>
+        <item name="android:activityCloseEnterAnimation">@anim/dastyab_pop_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/dastyab_pop_exit</item>
+    </style>
+
     <!-- Dark 1: Royal Gold on Obsidian (Default) -->
     <style name="DastyabTheme" parent="@android:style/Theme.Material">
         <item name="android:colorPrimary">#16120D</item>
-        <item name="android:colorPrimaryDark">#0A0806</item>
-        <item name="android:colorAccent">#D4AF37</item>
+        <item name="android:colorPrimaryDark">#090705</item>
+        <item name="android:colorAccent">#E3BE4E</item>
         <item name="android:windowBackground">@color/colorBackground</item>
-        <item name="android:statusBarColor">#0A0806</item>
-        <item name="android:navigationBarColor">#0A0806</item>
-        <item name="android:textColorPrimary">#F3ECDA</item>
-        <item name="android:textColorSecondary">#A69B7C</item>
-        <item name="android:colorControlActivated">#D4AF37</item>
-        <item name="android:colorControlHighlight">#33D4AF37</item>
+        <item name="android:statusBarColor">#090705</item>
+        <item name="android:navigationBarColor">#090705</item>
+        <item name="android:textColorPrimary">#F7F1E3</item>
+        <item name="android:textColorSecondary">#B3A685</item>
+        <item name="android:colorControlActivated">#E3BE4E</item>
+        <item name="android:colorControlHighlight">#3CE3BE4E</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowAnimationStyle">@style/DastyabWindowAnimations</item>
 
         <item name="dastyabPrimary">#16120D</item>
-        <item name="dastyabPrimaryDark">#0A0806</item>
-        <item name="dastyabAccent">#D4AF37</item>
-        <item name="dastyabBackground">#0A0806</item>
+        <item name="dastyabPrimaryDark">#090705</item>
+        <item name="dastyabAccent">#E3BE4E</item>
+        <item name="dastyabAccentSoft">#26E3BE4E</item>
+        <item name="dastyabBackground">#090705</item>
         <item name="dastyabSurface">#15110C</item>
-        <item name="dastyabSurfaceElevated">#1C1710</item>
-        <item name="dastyabCardBorder">#2D2519</item>
-        <item name="dastyabCardBorderAccent">#4F3F1D</item>
-        <item name="dastyabCardPressed">#221C12</item>
-        <item name="dastyabHeaderStart">#211B11</item>
-        <item name="dastyabHeaderEnd">#14100B</item>
-        <item name="dastyabBadgeBg">#241D11</item>
-        <item name="dastyabBadgeBorder">#3E3119</item>
-        <item name="dastyabTextPrimary">#F3ECDA</item>
-        <item name="dastyabTextSecondary">#A69B7C</item>
-        <item name="dastyabChipBg">#201A10</item>
-        <item name="dastyabChipText">#E8C85E</item>
-        <item name="dastyabOutputBg">#0E0B08</item>
-        <item name="dastyabDivider">#292217</item>
-        <item name="dastyabButtonPrimary">#D4AF37</item>
-        <item name="dastyabButtonPrimaryText">#141008</item>
-        <item name="dastyabButtonSecondary">#1C1710</item>
-        <item name="dastyabButtonSecondaryText">#F3ECDA</item>
+        <item name="dastyabSurfaceStart">#19140E</item>
+        <item name="dastyabSurfaceEnd">#110D09</item>
+        <item name="dastyabSurfaceElevated">#201910</item>
+        <item name="dastyabCardBorder">#302619</item>
+        <item name="dastyabCardBorderAccent">#614C20</item>
+        <item name="dastyabCardBorderFocus">#E3BE4E</item>
+        <item name="dastyabCardPressed">#261E12</item>
+        <item name="dastyabHeaderStart">#271F12</item>
+        <item name="dastyabHeaderMid">#1A140C</item>
+        <item name="dastyabHeaderEnd">#110D08</item>
+        <item name="dastyabTabContainerBg">#100D09</item>
+        <item name="dastyabSpecularHighlight">#24FFFFFF</item>
+        <item name="dastyabBadgeBg">#281F11</item>
+        <item name="dastyabBadgeBorder">#4E3C1A</item>
+        <item name="dastyabTextPrimary">#F7F1E3</item>
+        <item name="dastyabTextSecondary">#B3A685</item>
+        <item name="dastyabChipBg">#221B10</item>
+        <item name="dastyabChipText">#F0D16B</item>
+        <item name="dastyabOutputBg">#0D0A07</item>
+        <item name="dastyabDivider">#2B2216</item>
+        <item name="dastyabButtonPrimary">#DFB83F</item>
+        <item name="dastyabButtonPrimaryStart">#ECCB63</item>
+        <item name="dastyabButtonPrimaryEnd">#C99E24</item>
+        <item name="dastyabButtonPrimaryText">#140F06</item>
+        <item name="dastyabButtonSecondary">#1E1810</item>
+        <item name="dastyabButtonSecondaryText">#F7F1E3</item>
         <item name="dastyabStatusReady">#4ADE80</item>
         <item name="dastyabStatusError">#F87171</item>
         <item name="dastyabStatusWarning">#FBBF24</item>
-        <item name="dastyabDangerBg">#2A1414</item>
-        <item name="dastyabDangerBorder">#6B2525</item>
+        <item name="dastyabDangerBg">#2C1314</item>
+        <item name="dastyabDangerBorder">#752828</item>
     </style>
 
     <!-- Dark 2: Midnight Indigo & Sky Cyan -->
     <style name="DastyabTheme_MidnightIndigo" parent="@android:style/Theme.Material">
         <item name="android:colorPrimary">#0F172A</item>
-        <item name="android:colorPrimaryDark">#090D16</item>
+        <item name="android:colorPrimaryDark">#070B14</item>
         <item name="android:colorAccent">#38BDF8</item>
-        <item name="android:windowBackground">#090D16</item>
-        <item name="android:statusBarColor">#090D16</item>
-        <item name="android:navigationBarColor">#090D16</item>
+        <item name="android:windowBackground">#070B14</item>
+        <item name="android:statusBarColor">#070B14</item>
+        <item name="android:navigationBarColor">#070B14</item>
         <item name="android:textColorPrimary">#F1F5F9</item>
         <item name="android:textColorSecondary">#94A3B8</item>
         <item name="android:colorControlActivated">#38BDF8</item>
-        <item name="android:colorControlHighlight">#3338BDF8</item>
+        <item name="android:colorControlHighlight">#3C38BDF8</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowAnimationStyle">@style/DastyabWindowAnimations</item>
 
         <item name="dastyabPrimary">#0F172A</item>
-        <item name="dastyabPrimaryDark">#090D16</item>
+        <item name="dastyabPrimaryDark">#070B14</item>
         <item name="dastyabAccent">#38BDF8</item>
-        <item name="dastyabBackground">#090D16</item>
+        <item name="dastyabAccentSoft">#2638BDF8</item>
+        <item name="dastyabBackground">#070B14</item>
         <item name="dastyabSurface">#111827</item>
+        <item name="dastyabSurfaceStart">#152036</item>
+        <item name="dastyabSurfaceEnd">#0E1525</item>
         <item name="dastyabSurfaceElevated">#1E293B</item>
-        <item name="dastyabCardBorder">#263349</item>
-        <item name="dastyabCardBorderAccent">#1D4ED8</item>
-        <item name="dastyabCardPressed">#1E293B</item>
-        <item name="dastyabHeaderStart">#172554</item>
-        <item name="dastyabHeaderEnd">#0F172A</item>
+        <item name="dastyabCardBorder">#26354E</item>
+        <item name="dastyabCardBorderAccent">#2563EB</item>
+        <item name="dastyabCardBorderFocus">#38BDF8</item>
+        <item name="dastyabCardPressed">#1E2D45</item>
+        <item name="dastyabHeaderStart">#1B2E5C</item>
+        <item name="dastyabHeaderMid">#121E3D</item>
+        <item name="dastyabHeaderEnd">#0C1324</item>
+        <item name="dastyabTabContainerBg">#0C1220</item>
+        <item name="dastyabSpecularHighlight">#24FFFFFF</item>
         <item name="dastyabBadgeBg">#172554</item>
-        <item name="dastyabBadgeBorder">#1E40AF</item>
+        <item name="dastyabBadgeBorder">#1D4ED8</item>
         <item name="dastyabTextPrimary">#F1F5F9</item>
         <item name="dastyabTextSecondary">#94A3B8</item>
         <item name="dastyabChipBg">#172554</item>
         <item name="dastyabChipText">#7DD3FC</item>
-        <item name="dastyabOutputBg">#0B1120</item>
+        <item name="dastyabOutputBg">#0A101E</item>
         <item name="dastyabDivider">#1E293B</item>
         <item name="dastyabButtonPrimary">#38BDF8</item>
-        <item name="dastyabButtonPrimaryText">#082F49</item>
-        <item name="dastyabButtonSecondary">#1E293B</item>
+        <item name="dastyabButtonPrimaryStart">#67D4FC</item>
+        <item name="dastyabButtonPrimaryEnd">#0EA5E9</item>
+        <item name="dastyabButtonPrimaryText">#06263B</item>
+        <item name="dastyabButtonSecondary">#1B2538</item>
         <item name="dastyabButtonSecondaryText">#F1F5F9</item>
         <item name="dastyabStatusReady">#4ADE80</item>
         <item name="dastyabStatusError">#FB7185</item>
@@ -91,39 +119,49 @@
     <!-- Light 1: Daylight Ivory (Warm Gold & Ivory) -->
     <style name="DastyabTheme_DaylightIvory" parent="@android:style/Theme.Material.Light">
         <item name="android:colorPrimary">#FAF8F4</item>
-        <item name="android:colorPrimaryDark">#EDE8DC</item>
+        <item name="android:colorPrimaryDark">#EDE7D9</item>
         <item name="android:colorAccent">#A87B0A</item>
         <item name="android:windowBackground">#FAF8F4</item>
-        <item name="android:statusBarColor">#EDE8DC</item>
+        <item name="android:statusBarColor">#EDE7D9</item>
         <item name="android:navigationBarColor">#FAF8F4</item>
         <item name="android:textColorPrimary">#1C1917</item>
         <item name="android:textColorSecondary">#57534E</item>
         <item name="android:colorControlActivated">#A87B0A</item>
-        <item name="android:colorControlHighlight">#26A87B0A</item>
+        <item name="android:colorControlHighlight">#2CA87B0A</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowAnimationStyle">@style/DastyabWindowAnimations</item>
 
         <item name="dastyabPrimary">#FAF8F4</item>
-        <item name="dastyabPrimaryDark">#EDE8DC</item>
+        <item name="dastyabPrimaryDark">#EDE7D9</item>
         <item name="dastyabAccent">#A87B0A</item>
-        <item name="dastyabBackground">#FAF8F4</item>
+        <item name="dastyabAccentSoft">#20A87B0A</item>
+        <item name="dastyabBackground">#F7F4ED</item>
         <item name="dastyabSurface">#FFFFFF</item>
-        <item name="dastyabSurfaceElevated">#F5EFE2</item>
-        <item name="dastyabCardBorder">#E2D9C5</item>
+        <item name="dastyabSurfaceStart">#FFFFFF</item>
+        <item name="dastyabSurfaceEnd">#FBF8F1</item>
+        <item name="dastyabSurfaceElevated">#F3ECDD</item>
+        <item name="dastyabCardBorder">#E2D8C3</item>
         <item name="dastyabCardBorderAccent">#C89B2B</item>
+        <item name="dastyabCardBorderFocus">#A87B0A</item>
         <item name="dastyabCardPressed">#F4ECD8</item>
         <item name="dastyabHeaderStart">#FFFDF7</item>
-        <item name="dastyabHeaderEnd">#F5EFE0</item>
+        <item name="dastyabHeaderMid">#FAF4E5</item>
+        <item name="dastyabHeaderEnd">#F2E8D0</item>
+        <item name="dastyabTabContainerBg">#EDE6D7</item>
+        <item name="dastyabSpecularHighlight">#E6FFFFFF</item>
         <item name="dastyabBadgeBg">#F7EED6</item>
         <item name="dastyabBadgeBorder">#DFC98E</item>
         <item name="dastyabTextPrimary">#1C1917</item>
         <item name="dastyabTextSecondary">#57534E</item>
         <item name="dastyabChipBg">#F7EED6</item>
         <item name="dastyabChipText">#855E04</item>
-        <item name="dastyabOutputBg">#F3EEE2</item>
+        <item name="dastyabOutputBg">#F2ECE0</item>
         <item name="dastyabDivider">#E5DEC9</item>
         <item name="dastyabButtonPrimary">#B3830C</item>
+        <item name="dastyabButtonPrimaryStart">#C69214</item>
+        <item name="dastyabButtonPrimaryEnd">#9C6E07</item>
         <item name="dastyabButtonPrimaryText">#FFFFFF</item>
-        <item name="dastyabButtonSecondary">#F4EFE4</item>
+        <item name="dastyabButtonSecondary">#FFFFFF</item>
         <item name="dastyabButtonSecondaryText">#1C1917</item>
         <item name="dastyabStatusReady">#15803D</item>
         <item name="dastyabStatusError">#B91C1C</item>
@@ -134,40 +172,50 @@
 
     <!-- Light 2: Crisp Porcelain (Cool Sky & Cobalt) -->
     <style name="DastyabTheme_CrispPorcelain" parent="@android:style/Theme.Material.Light">
-        <item name="android:colorPrimary">#F3F7FC</item>
-        <item name="android:colorPrimaryDark">#E2EAF4</item>
+        <item name="android:colorPrimary">#F2F6FC</item>
+        <item name="android:colorPrimaryDark">#E0E9F5</item>
         <item name="android:colorAccent">#1D4ED8</item>
-        <item name="android:windowBackground">#F3F7FC</item>
-        <item name="android:statusBarColor">#E2EAF4</item>
-        <item name="android:navigationBarColor">#F3F7FC</item>
+        <item name="android:windowBackground">#F2F6FC</item>
+        <item name="android:statusBarColor">#E0E9F5</item>
+        <item name="android:navigationBarColor">#F2F6FC</item>
         <item name="android:textColorPrimary">#0F172A</item>
         <item name="android:textColorSecondary">#475569</item>
         <item name="android:colorControlActivated">#1D4ED8</item>
-        <item name="android:colorControlHighlight">#261D4ED8</item>
+        <item name="android:colorControlHighlight">#2C1D4ED8</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowAnimationStyle">@style/DastyabWindowAnimations</item>
 
-        <item name="dastyabPrimary">#F3F7FC</item>
-        <item name="dastyabPrimaryDark">#E2EAF4</item>
+        <item name="dastyabPrimary">#F2F6FC</item>
+        <item name="dastyabPrimaryDark">#E0E9F5</item>
         <item name="dastyabAccent">#1D4ED8</item>
-        <item name="dastyabBackground">#F3F7FC</item>
+        <item name="dastyabAccentSoft">#1F1D4ED8</item>
+        <item name="dastyabBackground">#EFF4FB</item>
         <item name="dastyabSurface">#FFFFFF</item>
-        <item name="dastyabSurfaceElevated">#EBF1FA</item>
-        <item name="dastyabCardBorder">#D3DFEE</item>
+        <item name="dastyabSurfaceStart">#FFFFFF</item>
+        <item name="dastyabSurfaceEnd">#F7FAFF</item>
+        <item name="dastyabSurfaceElevated">#E8F0FB</item>
+        <item name="dastyabCardBorder">#D0DCEE</item>
         <item name="dastyabCardBorderAccent">#93C5FD</item>
+        <item name="dastyabCardBorderFocus">#1D4ED8</item>
         <item name="dastyabCardPressed">#E6EFFB</item>
         <item name="dastyabHeaderStart">#FFFFFF</item>
-        <item name="dastyabHeaderEnd">#EBF3FE</item>
+        <item name="dastyabHeaderMid">#F2F7FF</item>
+        <item name="dastyabHeaderEnd">#E4EEFD</item>
+        <item name="dastyabTabContainerBg">#E3ECF8</item>
+        <item name="dastyabSpecularHighlight">#E6FFFFFF</item>
         <item name="dastyabBadgeBg">#DBEAFE</item>
         <item name="dastyabBadgeBorder">#93C5FD</item>
         <item name="dastyabTextPrimary">#0F172A</item>
         <item name="dastyabTextSecondary">#475569</item>
         <item name="dastyabChipBg">#E0ECFE</item>
         <item name="dastyabChipText">#1E40AF</item>
-        <item name="dastyabOutputBg">#EDF2F9</item>
+        <item name="dastyabOutputBg">#EAF0F8</item>
         <item name="dastyabDivider">#D8E2F0</item>
         <item name="dastyabButtonPrimary">#1D4ED8</item>
+        <item name="dastyabButtonPrimaryStart">#2563EB</item>
+        <item name="dastyabButtonPrimaryEnd">#1E40AF</item>
         <item name="dastyabButtonPrimaryText">#FFFFFF</item>
-        <item name="dastyabButtonSecondary">#EBF1FA</item>
+        <item name="dastyabButtonSecondary">#FFFFFF</item>
         <item name="dastyabButtonSecondaryText">#0F172A</item>
         <item name="dastyabStatusReady">#15803D</item>
         <item name="dastyabStatusError">#B91C1C</item>
@@ -178,40 +226,50 @@
 
     <!-- Light 3: Sage Meadow (Botanical Emerald Light) -->
     <style name="DastyabTheme_SageMeadow" parent="@android:style/Theme.Material.Light">
-        <item name="android:colorPrimary">#F2F7F4</item>
-        <item name="android:colorPrimaryDark">#E0ECE5</item>
+        <item name="android:colorPrimary">#F1F7F3</item>
+        <item name="android:colorPrimaryDark">#DFECE4</item>
         <item name="android:colorAccent">#047857</item>
-        <item name="android:windowBackground">#F2F7F4</item>
-        <item name="android:statusBarColor">#E0ECE5</item>
-        <item name="android:navigationBarColor">#F2F7F4</item>
+        <item name="android:windowBackground">#F1F7F3</item>
+        <item name="android:statusBarColor">#DFECE4</item>
+        <item name="android:navigationBarColor">#F1F7F3</item>
         <item name="android:textColorPrimary">#0F291E</item>
         <item name="android:textColorSecondary">#466558</item>
         <item name="android:colorControlActivated">#047857</item>
-        <item name="android:colorControlHighlight">#26047857</item>
+        <item name="android:colorControlHighlight">#2C047857</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowAnimationStyle">@style/DastyabWindowAnimations</item>
 
-        <item name="dastyabPrimary">#F2F7F4</item>
-        <item name="dastyabPrimaryDark">#E0ECE5</item>
+        <item name="dastyabPrimary">#F1F7F3</item>
+        <item name="dastyabPrimaryDark">#DFECE4</item>
         <item name="dastyabAccent">#047857</item>
-        <item name="dastyabBackground">#F2F7F4</item>
+        <item name="dastyabAccentSoft">#1F047857</item>
+        <item name="dastyabBackground">#EFF6F1</item>
         <item name="dastyabSurface">#FFFFFF</item>
-        <item name="dastyabSurfaceElevated">#E8F3EC</item>
-        <item name="dastyabCardBorder">#CCE0D4</item>
+        <item name="dastyabSurfaceStart">#FFFFFF</item>
+        <item name="dastyabSurfaceEnd">#F6FBF8</item>
+        <item name="dastyabSurfaceElevated">#E6F2EB</item>
+        <item name="dastyabCardBorder">#CBE0D3</item>
         <item name="dastyabCardBorderAccent">#6EE7B7</item>
+        <item name="dastyabCardBorderFocus">#047857</item>
         <item name="dastyabCardPressed">#E1F2E8</item>
         <item name="dastyabHeaderStart">#FFFFFF</item>
-        <item name="dastyabHeaderEnd">#E8F5EE</item>
+        <item name="dastyabHeaderMid">#F2FAF5</item>
+        <item name="dastyabHeaderEnd">#E3F3EA</item>
+        <item name="dastyabTabContainerBg">#E1EEE6</item>
+        <item name="dastyabSpecularHighlight">#E6FFFFFF</item>
         <item name="dastyabBadgeBg">#D1FAE5</item>
         <item name="dastyabBadgeBorder">#6EE7B7</item>
         <item name="dastyabTextPrimary">#0F291E</item>
         <item name="dastyabTextSecondary">#466558</item>
         <item name="dastyabChipBg">#DCFCE7</item>
         <item name="dastyabChipText">#065F46</item>
-        <item name="dastyabOutputBg">#EAF2ED</item>
+        <item name="dastyabOutputBg">#E9F2EC</item>
         <item name="dastyabDivider">#D2E4D9</item>
         <item name="dastyabButtonPrimary">#047857</item>
+        <item name="dastyabButtonPrimaryStart">#059669</item>
+        <item name="dastyabButtonPrimaryEnd">#065F46</item>
         <item name="dastyabButtonPrimaryText">#FFFFFF</item>
-        <item name="dastyabButtonSecondary">#E8F3EC</item>
+        <item name="dastyabButtonSecondary">#FFFFFF</item>
         <item name="dastyabButtonSecondaryText">#0F291E</item>
         <item name="dastyabStatusReady">#15803D</item>
         <item name="dastyabStatusError">#B91C1C</item>
@@ -223,39 +281,49 @@
     <!-- Light 4: Warm Sand & Terracotta -->
     <style name="DastyabTheme_WarmSand" parent="@android:style/Theme.Material.Light">
         <item name="android:colorPrimary">#FCF5EF</item>
-        <item name="android:colorPrimaryDark">#F2E2D5</item>
+        <item name="android:colorPrimaryDark">#F2E1D3</item>
         <item name="android:colorAccent">#C2410C</item>
         <item name="android:windowBackground">#FCF5EF</item>
-        <item name="android:statusBarColor">#F2E2D5</item>
+        <item name="android:statusBarColor">#F2E1D3</item>
         <item name="android:navigationBarColor">#FCF5EF</item>
         <item name="android:textColorPrimary">#2A1A12</item>
         <item name="android:textColorSecondary">#6B4E3D</item>
         <item name="android:colorControlActivated">#C2410C</item>
-        <item name="android:colorControlHighlight">#26C2410C</item>
+        <item name="android:colorControlHighlight">#2CC2410C</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowAnimationStyle">@style/DastyabWindowAnimations</item>
 
         <item name="dastyabPrimary">#FCF5EF</item>
-        <item name="dastyabPrimaryDark">#F2E2D5</item>
+        <item name="dastyabPrimaryDark">#F2E1D3</item>
         <item name="dastyabAccent">#C2410C</item>
-        <item name="dastyabBackground">#FCF5EF</item>
+        <item name="dastyabAccentSoft">#1FC2410C</item>
+        <item name="dastyabBackground">#FAF2EB</item>
         <item name="dastyabSurface">#FFFFFF</item>
-        <item name="dastyabSurfaceElevated">#F8EAE0</item>
-        <item name="dastyabCardBorder">#EAD2C0</item>
+        <item name="dastyabSurfaceStart">#FFFFFF</item>
+        <item name="dastyabSurfaceEnd">#FDF8F4</item>
+        <item name="dastyabSurfaceElevated">#F7E8DC</item>
+        <item name="dastyabCardBorder">#EAD1BE</item>
         <item name="dastyabCardBorderAccent">#FDBA74</item>
+        <item name="dastyabCardBorderFocus">#C2410C</item>
         <item name="dastyabCardPressed">#F9E5D7</item>
         <item name="dastyabHeaderStart">#FFFCFA</item>
-        <item name="dastyabHeaderEnd">#FAEBDF</item>
+        <item name="dastyabHeaderMid">#FDF2EA</item>
+        <item name="dastyabHeaderEnd">#F8E5D7</item>
+        <item name="dastyabTabContainerBg">#F2E1D4</item>
+        <item name="dastyabSpecularHighlight">#E6FFFFFF</item>
         <item name="dastyabBadgeBg">#FFEDD5</item>
         <item name="dastyabBadgeBorder">#FDBA74</item>
         <item name="dastyabTextPrimary">#2A1A12</item>
         <item name="dastyabTextSecondary">#6B4E3D</item>
         <item name="dastyabChipBg">#FFEDD5</item>
         <item name="dastyabChipText">#9A3412</item>
-        <item name="dastyabOutputBg">#F6ECE3</item>
+        <item name="dastyabOutputBg">#F5EBE2</item>
         <item name="dastyabDivider">#ECD7C8</item>
         <item name="dastyabButtonPrimary">#C2410C</item>
+        <item name="dastyabButtonPrimaryStart">#EA580C</item>
+        <item name="dastyabButtonPrimaryEnd">#9A3412</item>
         <item name="dastyabButtonPrimaryText">#FFFFFF</item>
-        <item name="dastyabButtonSecondary">#F8EAE0</item>
+        <item name="dastyabButtonSecondary">#FFFFFF</item>
         <item name="dastyabButtonSecondaryText">#2A1A12</item>
         <item name="dastyabStatusReady">#15803D</item>
         <item name="dastyabStatusError">#B91C1C</item>
@@ -274,8 +342,9 @@
         <item name="android:textAllCaps">false</item>
         <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.01</item>
         <item name="android:stateListAnimator">@null</item>
-        <item name="android:minHeight">46dp</item>
+        <item name="android:minHeight">48dp</item>
     </style>
 
     <style name="DastyabButtonPrimary" parent="@android:style/Widget.Material.Button">
@@ -288,8 +357,37 @@
         <item name="android:textAllCaps">false</item>
         <item name="android:textSize">15sp</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.015</item>
         <item name="android:stateListAnimator">@null</item>
-        <item name="android:minHeight">48dp</item>
+        <item name="android:minHeight">50dp</item>
+    </style>
+
+    <style name="DastyabTabActive" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:background">@drawable/tab_active_bg</item>
+        <item name="android:textColor">?attr/dastyabButtonPrimaryText</item>
+        <item name="android:paddingStart">10dp</item>
+        <item name="android:paddingEnd">10dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:minHeight">40dp</item>
+    </style>
+
+    <style name="DastyabTabInactive" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:background">@drawable/tab_inactive_bg</item>
+        <item name="android:textColor">?attr/dastyabTextSecondary</item>
+        <item name="android:paddingStart">10dp</item>
+        <item name="android:paddingEnd">10dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:minHeight">40dp</item>
     </style>
 
     <style name="DastyabChip" parent="@android:style/Widget.Material.Button.Borderless">
@@ -303,6 +401,8 @@
         <item name="android:layout_marginEnd">4dp</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:stateListAnimator">@null</item>
         <item name="android:minHeight">0dp</item>
         <item name="android:minWidth">0dp</item>
     </style>
@@ -310,7 +410,7 @@
     <style name="DastyabAboutText" parent="@android:style/TextAppearance.Material.Body1">
         <item name="android:textColor">?attr/dastyabTextPrimary</item>
         <item name="android:textSize">14sp</item>
-        <item name="android:lineSpacingExtra">3dp</item>
+        <item name="android:lineSpacingExtra">4dp</item>
         <item name="android:paddingTop">6dp</item>
         <item name="android:paddingBottom">6dp</item>
     </style>

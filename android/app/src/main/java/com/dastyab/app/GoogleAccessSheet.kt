@@ -177,19 +177,23 @@ object GoogleAccessSheet {
                 append(" · $targetTitle")
             }
         }
+        val accentColor = ThemeManager.resolveColor(activity, R.attr.dastyabAccent, R.color.colorAccent)
+        val secondaryColor = ThemeManager.resolveColor(activity, R.attr.dastyabTextSecondary, R.color.colorTextSecondary)
         val titleView = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            val pad = (18 * activity.resources.displayMetrics.density).toInt()
-            setPadding(pad, pad, pad, pad / 2)
+            val pad = (20 * activity.resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, (10 * activity.resources.displayMetrics.density).toInt())
             addView(TextView(activity).apply {
                 text = activity.getString(R.string.access_sheet_title)
                 textSize = 18f
+                setTextColor(accentColor)
                 setTypeface(null, android.graphics.Typeface.BOLD)
             })
             addView(TextView(activity).apply {
                 text = headerText
                 textSize = 12f
-                setPadding(0, (4 * activity.resources.displayMetrics.density).toInt(), 0, 0)
+                setTextColor(secondaryColor)
+                setPadding(0, (6 * activity.resources.displayMetrics.density).toInt(), 0, 0)
             })
         }
 

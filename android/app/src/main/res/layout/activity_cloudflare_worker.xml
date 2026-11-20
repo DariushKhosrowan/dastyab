@@ -22,21 +22,49 @@
             android:background="@drawable/header_card_background"
             android:padding="18dp">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/cf_studio_title"
-                android:textSize="21sp"
-                android:textStyle="bold"
-                android:textColor="?attr/dastyabAccent" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/cf_studio_subtitle"
-                android:textSize="12sp"
-                android:textColor="?attr/dastyabTextSecondary"
-                android:paddingTop="4dp" />
+                <FrameLayout
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="@drawable/icon_badge_bg"
+                    android:padding="9dp"
+                    android:layout_marginEnd="12dp">
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:src="@drawable/ic_action_deploy"
+                        android:contentDescription="@null" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/cf_studio_title"
+                        android:textSize="21sp"
+                        android:textStyle="bold"
+                        android:textColor="?attr/dastyabAccent" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/cf_studio_subtitle"
+                        android:textSize="12sp"
+                        android:textColor="?attr/dastyabTextSecondary"
+                        android:paddingTop="3dp" />
+                </LinearLayout>
+            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -79,6 +107,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:indeterminate="true"
+                android:indeterminateTint="?attr/dastyabAccent"
+                android:progressBackgroundTint="?attr/dastyabDivider"
                 android:visibility="gone"
                 android:paddingTop="10dp" />
         </LinearLayout>
@@ -250,23 +280,29 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:paddingBottom="10dp">
+                android:background="@drawable/tab_container_bg"
+                android:padding="4dp"
+                android:layout_marginBottom="10dp">
 
                 <Button
                     android:id="@+id/btnModeDeployNew"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
                     android:text="@string/cf_btn_mode_deploy"
-                    style="@style/DastyabChip" />
+                    style="@style/DastyabTabActive" />
 
                 <Button
                     android:id="@+id/btnModeExistingWorker"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
                     android:text="@string/cf_btn_mode_existing"
-                    style="@style/DastyabChip" />
+                    style="@style/DastyabTabInactive" />
             </LinearLayout>
 
             <!-- Deploy New Worker Panel -->
@@ -319,31 +355,39 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:paddingTop="10dp">
+                    android:background="@drawable/tab_container_bg"
+                    android:padding="4dp"
+                    android:layout_marginTop="10dp">
 
                     <Button
                         android:id="@+id/btnPresetStandard"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
                         android:text="standard"
-                        style="@style/DastyabChip" />
+                        style="@style/DastyabTabActive" />
 
                     <Button
                         android:id="@+id/btnPresetGaming"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
                         android:text="gaming"
-                        style="@style/DastyabChip" />
+                        style="@style/DastyabTabInactive" />
 
                     <Button
                         android:id="@+id/btnPresetMaxCompat"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
                         android:text="max-compat"
-                        style="@style/DastyabChip" />
+                        style="@style/DastyabTabInactive" />
                 </LinearLayout>
 
                 <TextView
@@ -888,40 +932,50 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:paddingTop="12dp"
-                android:paddingBottom="8dp">
+                android:background="@drawable/tab_container_bg"
+                android:padding="4dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="8dp">
 
                 <Button
                     android:id="@+id/btnFmtLink"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
                     android:text="vless://"
-                    style="@style/DastyabChip" />
+                    style="@style/DastyabTabActive" />
 
                 <Button
                     android:id="@+id/btnFmtV2rayN"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
                     android:text="v2rayN"
-                    style="@style/DastyabChip" />
+                    style="@style/DastyabTabInactive" />
 
                 <Button
                     android:id="@+id/btnFmtSingBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
                     android:text="sing-box"
-                    style="@style/DastyabChip" />
+                    style="@style/DastyabTabInactive" />
 
                 <Button
                     android:id="@+id/btnFmtClash"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
                     android:text="Clash"
-                    style="@style/DastyabChip" />
+                    style="@style/DastyabTabInactive" />
             </LinearLayout>
 
             <TextView
@@ -1103,7 +1157,7 @@
             android:id="@+id/btnStudioBack"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@android:string/cancel"
+            android:text="@string/browser_btn_back"
             style="@style/DastyabButton" />
     </LinearLayout>
 </ScrollView>

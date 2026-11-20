@@ -4,11 +4,19 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsetsController
+import android.widget.BaseAdapter
+import android.widget.LinearLayout
+import android.widget.TextView
 
 /**
  * ThemeManager — Multi-theme engine for DastYab Android.
@@ -35,6 +43,20 @@ object ThemeManager {
         LIGHT_CRISP_PORCELAIN("light_crisp_porcelain", R.style.DastyabTheme_CrispPorcelain, true, R.string.theme_light_crisp_porcelain),
         LIGHT_SAGE_MEADOW("light_sage_meadow", R.style.DastyabTheme_SageMeadow, true, R.string.theme_light_sage_meadow),
         LIGHT_WARM_SAND("light_warm_sand", R.style.DastyabTheme_WarmSand, true, R.string.theme_light_warm_sand)
+    }
+
+    private data class ThemePreviewPalette(val bgHex: Int, val surfaceHex: Int, val accentHex: Int)
+
+    private fun previewPalette(theme: AppTheme, systemDark: Boolean): ThemePreviewPalette {
+        val resolved = resolveEffectiveTheme(theme, systemDark)
+        return when (resolved) {
+            AppTheme.DARK_MIDNIGHT_INDIGO -> ThemePreviewPalette(0xFF070B14.toInt(), 0xFF172554.toInt(), 0xFF38BDF8.toInt())
+            AppTheme.LIGHT_DAYLIGHT_IVORY -> ThemePreviewPalette(0xFFF7F4ED.toInt(), 0xFFFFFFFF.toInt(), 0xFFB3830C.toInt())
+            AppTheme.LIGHT_CRISP_PORCELAIN -> ThemePreviewPalette(0xFFEFF4FB.toInt(), 0xFFFFFFFF.toInt(), 0xFF1D4ED8.toInt())
+            AppTheme.LIGHT_SAGE_MEADOW -> ThemePreviewPalette(0xFFEFF6F1.toInt(), 0xFFFFFFFF.toInt(), 0xFF047857.toInt())
+            AppTheme.LIGHT_WARM_SAND -> ThemePreviewPalette(0xFFFAF2EB.toInt(), 0xFFFFFFFF.toInt(), 0xFFC2410C.toInt())
+            else -> ThemePreviewPalette(0xFF090705.toInt(), 0xFF201910.toInt(), 0xFFE3BE4E.toInt())
+        }
     }
 
     fun normalizeThemeId(id: String?): String {
@@ -188,21 +210,118 @@ object ThemeManager {
         if (!UiSafety.isActivityAlive(activity)) return
         val selected = getSelectedTheme(activity)
         val themes = AppTheme.values()
-        val labels = themes.map { theme ->
-            val mark = if (theme == selected) "● " else ""
-            val tag = when {
-                theme == AppTheme.FOLLOW_SYSTEM -> ""
-                theme.isLight -> " [${activity.getString(R.string.theme_tag_light)}]"
-                else -> " [${activity.getString(R.string.theme_tag_dark)}]"
+        val systemDark = isSystemDarkMode(activity)
+        val density = activity.resources.displayMetrics.density
+        val textPrimary = resolveColor(activity, R.attr.dastyabTextPrimary, R.color.colorTextPrimary)
+        val textSecondary = resolveColor(activity, R.attr.dastyabTextSecondary, R.color.colorTextSecondary)
+        val accent = resolveColor(activity, R.attr.dastyabAccent, R.color.colorAccent)
+        val cardBorder = resolveColor(activity, R.attr.dastyabCardBorder, R.color.colorCardBorder)
+        val cardBg = resolveColor(activity, R.attr.dastyabSurfaceElevated, R.color.colorSurfaceElevated)
+        val accentSoft = resolveColor(activity, R.attr.dastyabAccentSoft, R.color.colorChipBg)
+
+        val adapter = object : BaseAdapter() {
+            override fun getCount(): Int = themes.size
+            override fun getItem(position: Int): Any = themes[position]
+            override fun getItemId(position: Int): Long = position.toLong()
+
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+                val theme = themes[position]
+                val isSelected = theme == selected
+                val palette = previewPalette(theme, systemDark)
+
+                val row = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    val padH = (16 * density).toInt()
+                    val padV = (10 * density).toInt()
+                    setPadding(padH, padV, padH, padV)
+
+                    val pill = LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        val innerH = (14 * density).toInt()
+                        val innerV = (12 * density).toInt()
+                        setPadding(innerH, innerV, innerH, innerV)
+                        background = GradientDrawable().apply {
+                            shape = GradientDrawable.RECTANGLE
+                            cornerRadius = 14f * density
+                            setColor(if (isSelected) accentSoft else cardBg)
+                            setStroke(
+                                ((if (isSelected) 1.6f else 1f) * density).toInt().coerceAtLeast(1),
+                                if (isSelected) accent else cardBorder
+                            )
+                        }
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        )
+
+                        // Dual-tone color swatch preview (BG circle with inner Accent orb)
+                        val swatchSize = (34 * density).toInt()
+                        val swatchContainer = LinearLayout(activity).apply {
+                            gravity = Gravity.CENTER
+                            background = GradientDrawable().apply {
+                                shape = GradientDrawable.OVAL
+                                setColor(palette.bgHex)
+                                setStroke((1.5f * density).toInt().coerceAtLeast(1), palette.accentHex)
+                            }
+                            layoutParams = LinearLayout.LayoutParams(swatchSize, swatchSize).apply {
+                                marginEnd = (12 * density).toInt()
+                            }
+                            val innerSize = (15 * density).toInt()
+                            addView(View(activity).apply {
+                                background = GradientDrawable().apply {
+                                    shape = GradientDrawable.OVAL
+                                    setColor(palette.accentHex)
+                                }
+                                layoutParams = LinearLayout.LayoutParams(innerSize, innerSize)
+                            })
+                        }
+                        addView(swatchContainer)
+
+                        val textCol = LinearLayout(activity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                            addView(TextView(activity).apply {
+                                text = localizedName(activity, theme)
+                                textSize = 14.5f
+                                setTypeface(null, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
+                                setTextColor(if (isSelected) accent else textPrimary)
+                            })
+                            val subTag = when {
+                                theme == AppTheme.FOLLOW_SYSTEM -> activity.getString(R.string.theme_badge_auto)
+                                theme.isLight -> activity.getString(R.string.theme_tag_light)
+                                else -> activity.getString(R.string.theme_tag_dark)
+                            }
+                            addView(TextView(activity).apply {
+                                text = subTag
+                                textSize = 11.5f
+                                setTextColor(textSecondary)
+                            })
+                        }
+                        addView(textCol)
+
+                        if (isSelected) {
+                            addView(TextView(activity).apply {
+                                text = "✓"
+                                textSize = 16f
+                                setTypeface(null, Typeface.BOLD)
+                                setTextColor(accent)
+                                setPadding((8 * density).toInt(), 0, 0, 0)
+                            })
+                        }
+                    }
+                    addView(pill)
+                }
+                return row
             }
-            "$mark${localizedName(activity, theme)}$tag"
-        }.toTypedArray()
+        }
 
         UiSafety.safeShowDialog(
             activity,
             AlertDialog.Builder(activity)
                 .setTitle(activity.getString(R.string.theme_picker_title))
-                .setItems(labels) { _, which ->
+                .setAdapter(adapter) { _, which ->
                     val chosen = themes[which]
                     setSelectedTheme(activity, chosen)
                     onSelected(chosen)

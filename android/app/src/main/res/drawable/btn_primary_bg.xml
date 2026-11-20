@@ -2,9 +2,33 @@
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="?android:attr/colorControlHighlight">
     <item>
-        <shape android:shape="rectangle">
-            <solid android:color="?attr/dastyabButtonPrimary" />
-            <corners android:radius="12dp" />
-        </shape>
+        <selector>
+            <item android:state_enabled="false">
+                <shape android:shape="rectangle">
+                    <solid android:color="?attr/dastyabDivider" />
+                    <corners android:radius="14dp" />
+                </shape>
+            </item>
+            <item>
+                <layer-list>
+                    <item>
+                        <shape android:shape="rectangle">
+                            <gradient
+                                android:angle="135"
+                                android:startColor="?attr/dastyabButtonPrimaryStart"
+                                android:endColor="?attr/dastyabButtonPrimaryEnd" />
+                            <corners android:radius="14dp" />
+                        </shape>
+                    </item>
+                    <item android:top="1dp" android:left="1dp" android:right="1dp" android:bottom="1dp">
+                        <shape android:shape="rectangle">
+                            <solid android:color="@android:color/transparent" />
+                            <corners android:radius="13dp" />
+                            <stroke android:width="1dp" android:color="#38FFFFFF" />
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </selector>
     </item>
 </ripple>

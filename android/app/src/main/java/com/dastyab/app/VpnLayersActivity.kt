@@ -98,6 +98,7 @@ class VpnLayersActivity : DastyabActivity() {
             ).apply {
                 bottomMargin = (8 * density).toInt()
             }
+            DastyabMotion.attachPressSpring(btn)
             layersListContainer.addView(btn, params)
         }
     }
@@ -325,6 +326,7 @@ class VpnLayersActivity : DastyabActivity() {
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { bottomMargin = (6 * density).toInt() }
+                DastyabMotion.attachPressSpring(btn)
                 githubUrlsContainer.addView(btn, lp)
             }
         }
@@ -354,6 +356,7 @@ class VpnLayersActivity : DastyabActivity() {
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { bottomMargin = (6 * density).toInt() }
+                DastyabMotion.attachPressSpring(btn)
                 telegramChannelsContainer.addView(btn, lp)
             }
         }

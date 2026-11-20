@@ -3,14 +3,21 @@
     <attr name="dastyabPrimary" format="color" />
     <attr name="dastyabPrimaryDark" format="color" />
     <attr name="dastyabAccent" format="color" />
+    <attr name="dastyabAccentSoft" format="color" />
     <attr name="dastyabBackground" format="color" />
     <attr name="dastyabSurface" format="color" />
+    <attr name="dastyabSurfaceStart" format="color" />
+    <attr name="dastyabSurfaceEnd" format="color" />
     <attr name="dastyabSurfaceElevated" format="color" />
     <attr name="dastyabCardBorder" format="color" />
     <attr name="dastyabCardBorderAccent" format="color" />
+    <attr name="dastyabCardBorderFocus" format="color" />
     <attr name="dastyabCardPressed" format="color" />
     <attr name="dastyabHeaderStart" format="color" />
+    <attr name="dastyabHeaderMid" format="color" />
     <attr name="dastyabHeaderEnd" format="color" />
+    <attr name="dastyabTabContainerBg" format="color" />
+    <attr name="dastyabSpecularHighlight" format="color" />
     <attr name="dastyabBadgeBg" format="color" />
     <attr name="dastyabBadgeBorder" format="color" />
     <attr name="dastyabTextPrimary" format="color" />
@@ -20,6 +27,8 @@
     <attr name="dastyabOutputBg" format="color" />
     <attr name="dastyabDivider" format="color" />
     <attr name="dastyabButtonPrimary" format="color" />
+    <attr name="dastyabButtonPrimaryStart" format="color" />
+    <attr name="dastyabButtonPrimaryEnd" format="color" />
     <attr name="dastyabButtonPrimaryText" format="color" />
     <attr name="dastyabButtonSecondary" format="color" />
     <attr name="dastyabButtonSecondaryText" format="color" />
