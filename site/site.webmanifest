@@ -1,8 +1,9 @@
 {
-  "name": "DastYab",
+  "name": "DastYab · دستیاب",
   "short_name": "DastYab",
-  "description": "DastYab (دستیاب) — a Rust-powered Cloudflare Workers VLESS VPN console. Deploy workers, scan clean IPs, and export v2rayN / sing-box / Clash configs.",
+  "description": "Cloudflare Workers VLESS VPN console in Rust & Android — deploy workers, scan clean IPs, and export v2rayN, sing-box & Clash configs.",
   "lang": "en",
+  "dir": "auto",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0806",

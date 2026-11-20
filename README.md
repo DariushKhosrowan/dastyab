@@ -1,351 +1,194 @@
-# DastYab (دستیاب) — Rust Edition
+# DastYab · دستیاب
 
-**A Cloudflare Workers VLESS VPN console: deploy, scan, and manage your entire
-proxy stack from the command line, a terminal UI, or a desktop GUI — written
-in Rust for speed, safety, and a single static binary.**
+**A self-hosted Cloudflare Workers VLESS VPN console written in Rust — deploy stealth Workers, discover verified clean IPs, export client configs, and chain resilient tunnels from Linux, macOS, Windows, or Android.**
 
-> **دستیاب (DastYab)** — *Persian for “within reach”: the thing you can lay
-> your hand on. A name for a console whose whole job is to find the reachable
-> path and keep it reachable.*
+[English](#english) · [فارسی (Persian)](#persian) · [Website (dastyab.dev)](https://dastyab.dev/) · [Releases](https://github.com/DastYab/dastyab/releases/latest) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md)
 
-| | |
+> **دستیاب (DastYab)** — *Persian for “within reach”*: finding the reachable path through network interference and keeping it reachable.
+
+| Specification | Details |
 |---|---|
-| **Language** | Rust (edition 2021) |
-| **Workspace** | `dastyab-core` · `dastyab-cli` · `dastyab-tui` · `dastyab-gui` |
-| **License** | MIT |
-| **Latest release** | `v0.1.8` |
-| **Rust version** | 1.99+ (stable) |
-| **Zero runtime deps (CLI)** | single static binary, no Python, no Node |
+| **Core Engine** | Rust (edition 2021) — `dastyab-core` |
+| **Frontends** | CLI (`dastyab`) · Terminal UI (`dastyab-tui`) · Desktop GUI (`dastyab-gui`) · Android APK (`com.dastyab.app`) |
+| **Client Exports** | `v2rayN` / `v2rayNG` · `sing-box` · `Clash` / `Clash.Meta` |
+| **Storage & Integrity** | Atomic `tempfile + fsync + rename`, `0600` token isolation, SHA-256 profile manifests |
+| **License** | MIT © [Dariush Khosrowan](https://khosrowan.ir) |
 
 ---
 
-## What is DastYab?
+<a id="english"></a>
 
-DastYab turns a single **Cloudflare API token** into a complete, self-hosted
-***VLESS VPN control plane**. From the terminal you can:
+## English Overview
 
-- **Deploy** an edgetunnel VLESS worker to Cloudflare Workers (with anti-bot
-  stealth pacing and per-deploy byte-fingerprint humanization).
-- **Scan** for clean, fast Cloudflare IPs (via SenPaiScanner) that actually
-  work with your configuration.
-- **Autopilot / Protection** — one toggle: the app deploys, finds the best
-  clean IP (SlipNet-style two-phase streaming scan + E2E tunnel gate), exports
-  vless configs, and **periodically monitors** them, auto-replacing dead
-  fronts. A **step-0 worker-health gate** checks your worker is alive before
-  any scan runs — so `dastyab autopilot health` is the check to run first
-  if a scan ever finds zero clean IPs (a suspended CF account, error 9109,
-  or a dead route cannot be fixed by scanning).
-- **Generate** client configs for **v2rayN / v2rayNG**, **sing-box**, and
-  **Clash / Clash.Meta** in one command.
-- **Manage** your Cloudflare account: DNS records, zones, worker routes,
-  per-worker usage analytics, and per-account tokens.
-- **Protect** your setup: auditable token storage (`0600`), atomic profile
-  writes, and a built-in security audit.
-- **Back up / restore** entire profiles as portable JSON bundles.
-- **Configs manager** — a whole-workspace inventory of every generated
-  artifact across all profiles, with per-artifact integrity status.
-- **Nothing gets lost** — per-profile manifests (sha256) prove nothing was
-  corrupted or dropped; `dastyab manifest-verify`; a whole-workspace
-  snapshot/restore bundles every profile into one portable, hash-verified file.
+### What DastYab Does
 
-Everything is built on a clean, pure-Rust core that is fully documented,
-tested, and ready to extend.
+DastYab turns a single **Cloudflare API token** into an end-to-end **VLESS edge-tunnel control plane** without Python or Node runtime dependencies on desktop/server:
 
----
+1. **Stealth Worker Deployment** — Deploys an edgetunnel VLESS Cloudflare Worker with anti-bot pacing and per-deploy byte-fingerprint humanization so no two deployments share identical signatures.
+2. **Clean-IP Discovery & Autopilot** — Runs a step-0 Worker health gate (`dastyab autopilot health`) before scanning, discovers clean Cloudflare edge IPs via two-phase streaming probes (`find` / `slipscan`), verifies end-to-end tunnels with `sing-box`, and rotates degraded endpoints automatically.
+3. **Instant Client Exports** — Generates ready-to-import configs for **v2rayN / v2rayNG**, **sing-box**, and **Clash / Clash.Meta** in one command, tracked across profiles in a SHA-256-verified artifact inventory.
+4. **Multi-Layer Tunnel & Region-Locked Google Access** — Built-in isolated bridges for **Google AI Studio / Gemini** (`dastyab aistudio`, SOCKS port `10850`) and **Google Flow** (`dastyab flow`, SOCKS port `10860`), supporting 2-hop proxy chains (`--hops 2`), 151-country gate verification, and dedicated Chrome profile isolation.
+5. **Cloudflare Operations & Hardening** — Manage DNS records, zones, worker routes, per-worker usage analytics, portable JSON backups, workspace snapshots (`dastyab workspace snapshot`), and run local security audits (`dastyab security`).
+6. **Native Android Companion** — Packages the Rust CLI natively as `libdastyab.so` across `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`, paired with a pure-Kotlin local HTTP/SOCKS5 multi-hop proxy bridge (`LocalProxyServer`).
 
-## Why Rust?
+### 60-Second Quick Start
 
-| Concern | What Rust delivers |
-|---|---|
-| **Single binary** | `dastyab` is a static executable — no Python env, no pip, no Node. |
-| **Safety** | No null pointers, no data races, no buffer overflows. Memory-safe by construction. |
-| **Speed** | Clean-IP scanning and analytics are fast enough to feel instant. |
-| **Correctness** | Strong types + serde models for every Cloudflare object. |
-| **Distribution** | Easy cross-compile to Linux / macOS / Windows / ARM / Android. |
-
----
-
-## Quick start
-
-### Install (one command)
-
-The CLI ships as a single static Rust binary — no Python, no Node, no runtime
-deps. Install the latest release with one line:
+Install the single static binary (Linux / macOS):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DastYab/dastyab/main/scripts/install.sh | sh
-```
-
-This detects your OS/CPU, downloads the matching binary from the latest GitHub
-release, verifies its SHA-256 checksum, installs it to `~/.local/bin`, and
-adds that directory to your `PATH`. Then open a new terminal and confirm:
-
-```bash
 dastyab --version
 ```
 
-> **Windows?** Grab the portable `.zip` from the [releases page](https://github.com/DastYab/dastyab/releases).
-> **Prefer a package?** A `.deb` installer is published with every release too.
-> **Build from source?** `cargo build --release` and run
-> `target/release/dastyab` (or `cargo install dastyab-cli`).
+> **Windows:** Download `dastyab-windows-amd64-portable.zip` (CLI + TUI + GUI) from [Releases](https://github.com/DastYab/dastyab/releases/latest).  
+> **Debian / Ubuntu:** Install `dastyab-linux-amd64.deb` with `sudo apt install ./dastyab-linux-amd64.deb`.  
+> **Android:** Install `DastYab-*-android.apk` from [Releases](https://github.com/DastYab/dastyab/releases/latest).  
+> **From Source:** `cargo build --release --workspace` (requires Rust 1.99+ stable).
 
-After installing:
+Configure and deploy in five commands:
 
 ```bash
-# 1. Add a Cloudflare token (stored 0600 in ~/.dastyab/)
+# 1. Store your Cloudflare API token (mode 0600 in ~/.dastyab/)
 dastyab token add cf-main <YOUR_CF_API_TOKEN>
 
-# 2. Verify the token and list your accounts
-dastyab verify
-dastyab accounts
+# 2. Verify token permissions and list accounts
+dastyab verify && dastyab accounts
 
-# 3. Create a profile (optional, defaults to "default")
-dastyab profile-create work --description "my setup"
-
-# 4. Deploy a worker & get a vless share link
+# 3. Deploy a VLESS Worker with curated presets
 dastyab deploy --preset standard
 
-# 5. Find a clean IP (stops on the first working one)
-#    Simple — for everyone:
-dastyab find 1        # one working IP
-dastyab find 5 ip     # five working IPs
-dastyab find           # same as `find 1`
-#    Advanced — when you need to tune:
-#    dastyab find 10 --sample 5000 --workers 128 --timeout 12 \
-#        --strategy generic-first --out ~/my-configs
+# 4. Find verified clean Cloudflare IPs (stops once target count passes E2E check)
+dastyab find 5
 
-# 6. Export client configs
-dastyab export clash    --output clash.yaml
-dastyab export singbox  --output config.json
+# 5. Export configs for your preferred client
+dastyab export clash   --output clash.yaml
+dastyab export singbox --output config.json
 dastyab export v2rayn  --output xray.json
 ```
 
-> **Tip:** run `dastyab --help` for the full command reference.
+### Four Frontends, One Core
 
----
+| Frontend | Binary / Package | Best For |
+|---|---|---|
+| **CLI** | `dastyab` | Scriptable automation, headless servers, cron autopilot, `aistudio` / `flow` bridges |
+| **TUI** | `dastyab-tui` | Keyboard-driven terminal dashboard (`ratatui`) over SSH or local shells |
+| **Desktop GUI** | `dastyab-gui` | Royal-gold-on-obsidian `eframe/egui` app with Deploy, Profiles, Clean IPs, Configs, and Multi-Layer tabs |
+| **Android App** | `com.dastyab.app` | Mobile management, blackout rescue, local HTTP/SOCKS5 proxy chaining, QR sharing |
 
-## The three frontends
+### Storage & Security Model
 
-The same `dastyab-core` powers three interfaces, so you can pick the one
-that fits how you work.
+All persistent state lives under `~/.dastyab/` with atomic writes (`tempfile` + `fsync` + `rename`):
 
-### 1. CLI — `dastyab`
-
-The full-featured command line. Everything is scriptable and composable.
-
-```bash
-dastyab zones                              # list zones
-dastyab dns list <zone_id>                 # list DNS records
-dastyab dns create <zone_id> <name> A 1.2.3.4
-dastyab routes list                        # list worker routes
-dastyab analytics                          # per-worker request usage
-dastyab security                           # run a local security audit
-dastyab backup export <profile_id>         # back up a profile
-dastyab inventory                          # configs inventory (the "configs manager")
-dastyab manifest-verify                    # prove nothing was lost/corrupted
-dastyab workspace snapshot                 # whole-workspace snapshot
-dastyab workspace restore <file>           # restore from a snapshot
-dastyab update-check                       # check for a newer release
-```
-
-### 2. TUI — `dastyab-tui`
-
-A keyboard-driven terminal dashboard (ratatui). Shows profiles, token counts,
-saved configs, and recent share links at a glance. Press `1`/`2`/`3` or
-`Tab` to switch panels, `q` to quit.
-
-```bash
-dastyab-tui
-```
-
-### 3. GUI — `dastyab-gui`
-
-A modern desktop app (eframe/egui) with a royal-gold-on-black theme. Three
-tabs: **Deploy & Scan**, **Profiles & Tokens**, and **Tools** (security audit,
-backup, config export).
-
-```bash
-dastyab-gui
-```
-
----
-
-## Region-locked Google services
-
-Some Google products gate on the **egress IP**, not on your account: from an
-unsupported region they redirect you elsewhere and refuse to load. DastYab
-ships two independent helpers that put a *verified* foreign egress in front of
-the browser — each on its own SOCKS port, own pool, and own browser profile,
-so they can run at the same time.
-
-| Feature | Reaches | Gate it solves | Port |
-|---|---|---|---|
-| `dastyab aistudio` | AI Studio + Gemini API | "your region may not be supported" | 10850 |
-| `dastyab flow` | **flow.google.com** | `/unsupported-country` — "Flow is not available in your country yet." | 10860 |
-
-### `dastyab flow` — multi-layer Google Flow access
-
-```bash
-dastyab flow best       # scan all node sources, verify, rank, save the pool
-dastyab flow start      # bring up the verified egress + open Flow in Chrome
-dastyab flow status     # egress IP, country, and a live gate verdict
-dastyab flow prove      # PROVE it in a real browser (decisive check)
-dastyab flow next       # rotate to the next ranked route
-dastyab flow watch      # self-healing watchdog (re-probes, auto-rotates)
-dastyab flow stop
-
-dastyab flow start --hops 2 --country DE   # two-hop chain, German egress
-dastyab flow countries                     # Google's official Flow country list
-```
-
-It layers several independent improvements instead of trusting one node:
-
-- **Supply** — merges every node source (its own ranked pool, the
-  aistudio-verified pool, nekoray profiles, and the harvested `nodes.json`),
-  deduped by `addr:port`.
-- **Chain** — `--hops 2` routes *you → entry → exit → Google* via xray
-  `dialerProxy`, so your local network only ever sees the entry connection
-  while Google only sees the exit egress.
-- **Country gate** — the egress must be in Google's official Flow rollout list
-  (151 countries, embedded and unit-tested against the source document).
-- **Live proof** — flow.google.com *and* accounts.google.com must answer
-  through that exact egress, with the real Flow app shell. A bare HTTP 200 is
-  not accepted: the region decision happens in signed-in backend RPCs, so the
-  helper verifies the country and reachability rather than trusting a status
-  code.
-- **IP quality** — ranking prefers egress that ip-api does not flag as a
-  proxy/datacenter host, because Flow rejects many flagged IPs even inside
-  supported countries.
-- **Browser isolation** — a dedicated Chrome profile pinned to the tunnel, so
-  only Flow traffic leaves through it and your normal browser keeps your real
-  IP and logins.
-
-> **What it cannot fix:** the tunnel changes the IP, not the account. Flow
-> still needs a signed-in Google account (18+) with an AI Pro/Ultra plan, and
-> some features (e.g. Avatars in the EEA/UK/CH) are disabled by region
-> regardless. Reaching a region-restricted service this way may conflict with
-> Google's Terms of Service — that risk is yours to weigh.
-
----
-
-## Architecture at a glance
-
-```
-dastyab/
-├── crates/
-│   ├── dastyab-core/        # pure logic, no UI (the brain)
-│   │   └── src/
-│   │       ├── cf/            # Cloudflare v4 API client (rustls)
-│   │       ├── store/         # atomic per-profile JSON persistence
-│   │       ├── vless.rs       # VLESS profile + share-link generation
-│   │       ├── scanner.rs     # legacy clean-IP scanning wrapper (SenPaiScanner)
-│   │       ├── slipscan.rs    # SlipNet-style two-phase streaming scanner + E2E pipeline
-│   │       ├── autopilot.rs   # clean-IP discovery engine, worker-health gate, monitor loop
-│   │       ├── health.rs      # TCP/TLS latency & real-client WS-upgrade gate (alt-port)
-│   │       ├── probe_jitter.rs # anti-DPI probe pacing + randomized WS request
-│   │       ├── e2e.rs        # sing-box end-to-end tunnel verification
-│   │       ├── diagnose.rs    # plain-language "why zero?" cause mapping
-│   │       ├── export.rs      # v2rayN / sing-box / Clash exporters
-│   │       ├── analytics.rs   # usage aggregation
-│   │       ├── diagnostics.rs # endpoint diagnostics
-│   │       ├── security.rs    # local security audit
-│   │       ├── backup.rs      # profile backup / restore
-│   │       ├── manifest.rs    # per-profile integrity manifests + verify
-│   │       ├── inventory.rs   # whole-workspace configs inventory
-│   │       ├── workspace_snapshot.rs # hash-verified whole-workspace snap/restore
-│   │       ├── selfupdate.rs  # GitHub release updater
-│   │       ├── presets.rs     # curated deploy presets
-│   │       ├── stealth.rs     # anti-bot pacing + worker humanization
-│   │       ├── geoip.rs       # country tagging
-│   │       ├── qr.rs          # QR matrix rendering
-│   │       ├── ops/aistudio.rs # embedded AI Studio bridge (region gate)
-│   │       ├── ops/flow.rs    # embedded Google Flow bridge (region gate)
-│   │       ├── tunnel/multilayer.rs # rescue-chain composition + egress probe
-│   │       └── error.rs       # structured CFError taxonomy
-│   ├── dastyab-cli/         # clap-based CLI (binary: dastyab)
-│   ├── dastyab-tui/         # ratatui dashboard (binary: dastyab-tui)
-│   └── dastyab-gui/         # eframe/egui desktop app (binary: dastyab-gui)
-├── docs/                      # full documentation (see below)
-├── .github/workflows/         # CI
-└── Cargo.toml                 # workspace manifest
-```
-
-See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for maps and diagrams,
-and **[docs/MODULES.md](docs/MODULES.md)** for a module-by-module guide.
-
----
-
-## Storage layout
-
-All state lives under `~/.dastyab/`:
-
-```
+```text
 ~/.dastyab/
 ├── profiles/
 │   └── default/
-│       ├── profile.json    # metadata
-│       ├── token.json      # API tokens (mode 0600)
-│       ├── accounts.json   # remembered Cloudflare accounts
-│       ├── history.json    # generated vless configs
-│       ├── cleanips.json   # scanned clean IPs
-│       ├── flow_pool.json  # ranked, gate-verified Flow egress routes
+│       ├── profile.json    # profile metadata
+│       ├── token.json      # Cloudflare API tokens (mode 0600)
+│       ├── accounts.json   # cached Cloudflare account IDs
+│       ├── history.json    # generated VLESS links
+│       ├── cleanips.json   # verified clean Cloudflare IPs
+│       ├── flow_pool.json  # ranked egress routes for Flow / AI Studio
 │       └── config.json     # per-profile settings
-├── backups/                # exported profile bundles
-└── legacy/                 # pre-0.1 flat files (one-time migration)
+└── backups/                # portable hash-verified profile bundles
 ```
 
-Writes are **atomic** (tempfile + fsync + rename), so a crash or kill can
-never corrupt your tokens or configs.
+Run `dastyab security` to audit file permissions and check for accidental token exposure, and `dastyab manifest-verify` to verify SHA-256 integrity across generated artifacts.
 
 ---
 
-## Security
+<a id="persian"></a>
 
-- Tokens are stored in `0600` files under `~/.dastyab/`.
-- The **security audit** (`dastyab security`) checks permissions, flags
-  leaked tokens in unexpected JSON files, and reports a health verdict.
-- Deploys use **stealth pacing** (randomized human-like delays) and vary the
-  worker's byte fingerprint per deploy so no two deployments are identical.
-- The SSH-style error taxonomy (`CFError`) gives a human-readable **title →
-  detail → fix** for every API failure.
+<div dir="rtl">
 
-See **[docs/SECURITY.md](docs/SECURITY.md)**.
+## معرفی فارسی (دستیاب — DastYab)
+
+**دستیاب (DastYab)** یک کنسول کامل و متن‌باز برای راه‌اندازی، مدیریت و نگهداری **تانل VLESS روی Cloudflare Workers** است که با زبان **Rust** نوشته شده و بدون نیاز به Python یا Node.js به‌صورت یک فایل اجرایی استاتیک روی **لینوکس، مک، ویندوز** و همچنین به شکل **اپلیکیشن اندروید** عرضه می‌شود.
+
+### چرا دستیاب؟
+
+بسیاری از ابزارهای فیلترشکن یا اسکنرهای آی‌پی تمیز، پراکنده هستند و بعد از مدتی به دلیل محدودیت‌های شبکه یا بلاک شدن دامنه‌ها از کار می‌افتند. دستیاب کل چرخه را در یک هسته یکپارچه جمع کرده است:
+
+- **دیپلوی هوشمند ورکر کلودفلر:** راه‌اندازی ورکر VLESS با الگوی ضدشناسایی (Stealth Pacing) و تغییر اثرانگشت بایتی در هر دیپلوی تا دو نسخه مشابه هم نباشند.
+- **اسکن واقعی آی‌پی تمیز + پایش خودکار (Autopilot):** پیش از اسکن، سلامت ورکر بررسی می‌شود تا در صورت مسدودی اکانت کلودفلر وقت شما هدر نرود؛ سپس آی‌پی‌های تمیز با تست واقعی `sing-box` تأیید شده و در صورت افت کیفیت به‌صورت خودکار جایگزین می‌شوند.
+- **خروجی آماده برای همه کلاینت‌ها:** تولید مستقیم کانفیگ برای **v2rayN / v2rayNG**، **sing-box** و **Clash / Clash.Meta** همراه با بررسی سلامت فایل‌ها (SHA-256).
+- **دسترسی به سرویس‌های تحریم‌شده گوگل:** پل‌های ایزوله داخلی برای **Google AI Studio / Gemini** (پورت `10850`) و **Google Flow** (پورت `10860`) با پشتیبانی از زنجیره دو-پرشی (`--hops 2`) و بررسی کشور خروجی مجاز.
+- **امنیت و پشتیبان‌گیری اتمیک:** ذخیره توکن‌ها با سطح دسترسی `0600`، نوشتن اتمیک فایل‌ها بدون خطر خرابی هنگام قطع برق/برنامه، و ممیزی امنیتی داخلی با دستور `dastyab security`.
+
+### شروع سریع در چند دستور
+
+نصب تک‌خطی در لینوکس و macOS:
+
+</div>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DastYab/dastyab/main/scripts/install.sh | sh
+dastyab --version
+```
+
+<div dir="rtl">
+
+برای **ویندوز** فایل `dastyab-windows-amd64-portable.zip` (شامل CLI، TUI و محیط گرافیکی GUI) و برای **اندروید** فایل `DastYab-*-android.apk` را از [صفحه Releases](https://github.com/DastYab/dastyab/releases/latest) دریافت کنید.
+
+پس از نصب، با پنج دستور زیر اولین تانل خود را بسازید:
+
+</div>
+
+```bash
+# ۱. افزودن توکن API کلودفلر (ذخیره با دسترسی امن 0600)
+dastyab token add cf-main <YOUR_CF_API_TOKEN>
+
+# ۲. بررسی اعتبار توکن و لیست اکانت‌ها
+dastyab verify && dastyab accounts
+
+# ۳. دیپلوی ورکر VLESS روی کلودفلر
+dastyab deploy --preset standard
+
+# ۴. یافتن ۵ آی‌پی تمیزِ تأییدشده با تست واقعی تانل
+dastyab find 5
+
+# ۵. دریافت خروجی برای کلاینت دلخواه
+dastyab export clash   --output clash.yaml
+dastyab export singbox --output config.json
+dastyab export v2rayn  --output xray.json
+```
+
+<div dir="rtl">
+
+### رابط‌های کاربری دستیاب
+
+- **خط فرمان (`dastyab`):** مناسب برای اسکریپت‌نویسی، سرورها و اجرای خودکار Autopilot و پل‌های `aistudio` / `flow`.
+- **رابط ترمینال (`dastyab-tui`):** داشبورد صفحه‌کلیدی سریع در ترمینال (مناسب اتصال SSH).
+- **اپلیکیشن دسکتاپ (`dastyab-gui`):** رابط گرافیکی سبک با تم طلایی روی مشکی برای مدیریت پروفایل‌ها، توکن‌ها، اسکن آی‌پی و تانل چندلایه.
+- **اپلیکیشن اندروید (`com.dastyab.app`):** همراه با باینری نیتیو `libdastyab.so` برای تمام معماری‌ها (`arm64-v8a`، `armeabi-v7a`، `x86_64`، `x86`) و پل پروکسی محلی HTTP/SOCKS5.
+
+</div>
 
 ---
 
 ## Documentation
 
-The `docs/` folder is the single source of truth for the project:
-
-| Document | What it covers |
+| Document | Coverage |
 |---|---|
-| [README.md](README.md) | This file — overview, quick start, links |
 | [docs/PRINCIPLES.md](docs/PRINCIPLES.md) | Mission, threat model, resilience ladder, engineering standards |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System maps, data flow, component diagrams |
-| [docs/MODULES.md](docs/MODULES.md) | Module-by-module guide |
-| [docs/API.md](docs/API.md) | Cloudflare API coverage & client reference |
-| [docs/DESIGN.md](docs/DESIGN.md) | Design principles, trade-offs, conventions |
-| [docs/SECURITY.md](docs/SECURITY.md) | Threat model, hardening, audit |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Building, releasing, cross-compiling |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Planned work |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Version history |
-| [docs/GLOSSARY.md](docs/GLOSSARY.md) | Terms & concepts |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to help |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Workspace structure, module boundaries, data flow |
+| [docs/MODULES.md](docs/MODULES.md) | Module-by-module guide (`cf`, `probe`, `tunnel`, `artifact`, `mesh`) |
+| [docs/API.md](docs/API.md) | Cloudflare v4 API client coverage |
+| [docs/SECURITY.md](docs/SECURITY.md) | Threat model, token isolation, audit checks |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Building, cross-compiling, Android APK & release CI |
+| [docs/USER-GUIDE-DNS-TUNNEL.md](docs/USER-GUIDE-DNS-TUNNEL.md) | Blackout DNS tunnel setup guide |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Formatting, clippy, and workspace test requirements |
 
 ---
 
-## Contributing
+## Contributing & License
 
-Contributions are warmly welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
-In short:
+Before opening a pull request:
 
-1. `cargo fmt --all` before every commit.
-2. `cargo clippy --workspace` must be warning-free.
-3. `cargo test --workspace` must pass.
-4. Keep docs in sync with code.
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace -- -D warnings
+cargo test --workspace
+```
 
----
-
-## License
-
-MIT © Dariush Khosrowan.
+Released under the **MIT License** © [Dariush Khosrowan](https://khosrowan.ir) · [dastyab.dev](https://dastyab.dev/)
