@@ -131,6 +131,17 @@ class MainActivity : DastyabActivity() {
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (UiSafety.isActivityAlive(this@MainActivity)) {
+                if (intent?.action == BypassStateStore.ACTION_BYPASS_SUCCESSFUL) {
+                    val service = intent.getStringExtra(BypassStateStore.EXTRA_SERVICE) ?: "AI Studio"
+                    val route = intent.getStringExtra(BypassStateStore.EXTRA_ROUTE) ?: "Brutal Chain"
+                    val msg = "Protected & Bypassed ✓ ($service via $route)"
+                    runCatching {
+                        tvSimpleReachability.text = msg
+                        tvReachabilityBadge.text = msg
+                        setStatusDot(DotState.GREEN)
+                        postStatus(msg)
+                    }
+                }
                 refreshVpnCard()
             }
         }
@@ -549,6 +560,7 @@ class MainActivity : DastyabActivity() {
         val filter = IntentFilter().apply {
             addAction(DastyabVpnService.ACTION_STATE_CHANGED)
             addAction(LocalProxyService.ACTION_STATE_CHANGED)
+            addAction(BypassStateStore.ACTION_BYPASS_SUCCESSFUL)
         }
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(vpnStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)

@@ -525,6 +525,7 @@ class InAppBrowserActivity : DastyabActivity() {
                         if (ready) R.drawable.status_dot_green else R.drawable.status_dot_red
                     )
                     tvRouteStatus.text = if (ready) {
+                        BypassStateStore.markBypassed(this@InAppBrowserActivity, target.displayName, route.routeLabel)
                         getString(R.string.browser_banner_ready, target.displayName, route.routeLabel, egress.countryCode, egress.ip)
                     } else {
                         getString(R.string.browser_banner_blocked, target.displayName, route.routeLabel, egress.countryCode)
