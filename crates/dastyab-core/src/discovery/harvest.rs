@@ -232,12 +232,7 @@ pub fn extract_proxy_links(body: &str) -> Vec<String> {
         }
     }
 
-    for prefix in [
-        "tg://proxy?",
-        "https://t.me/proxy?",
-        "http://t.me/proxy?",
-        "https://telegram.me/proxy?",
-    ] {
+    for prefix in crate::net::proxy_uri::MTPROTO_PREFIXES {
         for (pos, _) in body.match_indices(prefix) {
             let slice = &body[pos..];
             let end = slice

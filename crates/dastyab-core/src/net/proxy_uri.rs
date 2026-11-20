@@ -257,40 +257,51 @@ fn first_non_empty_str<'a>(v: &'a serde_json::Value, keys: &[&str]) -> Option<&'
     })
 }
 
-/// Telegram MTProto links (`tg://proxy?server=...&port=...&secret=...`
-/// or `https://t.me/proxy?...`).
-fn parse_mtproto(raw: &str) -> Option<ProxyUri> {
-    let lower = raw.to_ascii_lowercase();
-    let query = if lower.starts_with("tg://proxy?") {
-        &raw["tg://proxy?".len()..]
-    } else if let Some(idx) = lower.find("t.me/proxy?") {
-        if !(lower.starts_with("https://") || lower.starts_with("http://")) {
-            return None;
-        }
-        &raw[idx + "t.me/proxy?".len()..]
-    } else if let Some(idx) = lower.find("telegram.me/proxy?") {
-        if !(lower.starts_with("https://") || lower.starts_with("http://")) {
-            return None;
-        }
-        &raw[idx + "telegram.me/proxy?".len()..]
-    } else {
-        return None;
-    };
+/// Recognized Telegram MTProto share-link prefixes (matched ASCII case-insensitively).
+#[rustfmt::skip]
+pub const MTPROTO_PREFIXES: &[&str] = &[
+    "tg://proxy?",
+    "https://t.me/proxy?",
+    "http://t.me/proxy?",
+    "https://telegram.me/proxy?",
+    "http://telegram.me/proxy?",
+];
 
+/// Return the query slice after a recognized Telegram MTProto prefix (ASCII case-insensitive).
+fn mtproto_query(raw: &str) -> Option<&str> {
+    let raw = raw.trim();
+    for prefix in MTPROTO_PREFIXES {
+        if let Some(head) = raw.get(..prefix.len()) {
+            if head.eq_ignore_ascii_case(prefix) {
+                return raw.get(prefix.len()..);
+            }
+        }
+    }
+    None
+}
+
+/// Return whether `raw` begins with a recognized Telegram MTProto share-link prefix.
+pub fn is_mtproto_link(raw: &str) -> bool {
+    mtproto_query(raw).is_some()
+}
+
+/// Telegram MTProto links (`tg://proxy?server=...&port=...&secret=...`,
+/// `https://t.me/proxy?...`, or `https://telegram.me/proxy?...`).
+fn parse_mtproto(raw: &str) -> Option<ProxyUri> {
+    let query = mtproto_query(raw)?;
     let query_clean = query.split('#').next().unwrap_or(query);
     let mut server = String::new();
-    let mut port: u16 = 0;
+    let mut port = 0u16;
     let mut secret = String::new();
     for pair in query_clean.split('&') {
-        let Some((k, v)) = pair.split_once('=') else {
+        let Some((key, value)) = pair.split_once('=') else {
             continue;
         };
-        let key = k.trim().to_ascii_lowercase();
-        let val = crate::artifact::vless::decode_query(v.trim());
-        match key.as_str() {
-            "server" | "host" => server = val,
-            "port" => port = val.parse::<u16>().unwrap_or(0),
-            "secret" => secret = val,
+        let value = crate::artifact::vless::decode_query(value.trim());
+        match key.trim().to_ascii_lowercase().as_str() {
+            "server" | "host" => server = value,
+            "port" => port = value.parse().unwrap_or(0),
+            "secret" => secret = value,
             _ => {}
         }
     }
@@ -643,5 +654,26 @@ mod tests {
         assert_eq!(npv.port, 8443);
         assert_eq!(npv.id, "abc-123");
         assert_eq!(npv.alias, "NPV-Fallback");
+    }
+
+    #[test]
+    fn parses_all_mtproto_link_forms() {
+        for link in [
+            "tg://proxy?server=1.2.3.4&port=443&secret=abc",
+            "https://t.me/proxy?server=1.2.3.4&port=443&secret=abc",
+            "http://t.me/proxy?server=1.2.3.4&port=443&secret=abc",
+            "https://telegram.me/proxy?server=1.2.3.4&port=443&secret=abc",
+            "http://telegram.me/proxy?server=1.2.3.4&port=443&secret=abc",
+            "HTTPS://T.ME/PROXY?server=1.2.3.4&port=443&secret=abc",
+        ] {
+            assert!(is_mtproto_link(link), "{link}");
+            let proxy = ProxyUri::parse(link).expect(link);
+            assert_eq!(proxy.scheme, "mtproto");
+            assert_eq!(proxy.host, "1.2.3.4");
+            assert_eq!(proxy.port, 443);
+            assert_eq!(proxy.id, "abc");
+        }
+        assert!(!is_mtproto_link("https://t.me/some_channel"));
+        assert!(!is_mtproto_link("vless://uuid@1.2.3.4:443#v"));
     }
 }
