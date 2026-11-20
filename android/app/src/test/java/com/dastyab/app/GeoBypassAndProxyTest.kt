@@ -599,4 +599,38 @@ class GeoBypassAndProxyTest {
             assertEquals(c.size, c.distinctBy { "${it.host}:${it.port}" }.size)
         }
     }
+
+    @Test
+    fun buildProgressiveLayerStages_escalates0To4AndTestsBothHopOrders() {
+        val listening = listOf(
+            GeoBypassEngine.ListeningProxy(GeoBypassEngine.KNOWN_LOCAL_PROXY_PRESETS[0], 4)
+        )
+        val a = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "198.51.100.10", 1080)
+        val b = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.HTTP, "198.51.100.20", 8080)
+        val c = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "198.51.100.30", 1080)
+        val d = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.HTTP, "198.51.100.40", 3128)
+
+        val stages = GeoBypassEngine.buildProgressiveLayerStages(
+            existingHops = emptyList(),
+            listening = listening,
+            harvestedHops = listOf(a, b, c, d),
+            preferredEntries = listOf(a),
+            preferredExits = listOf(c),
+            maxTotalCandidates = 90
+        )
+
+        assertEquals(5, stages.size)
+        assertTrue(stages[0].all { it.isEmpty() })
+        assertTrue(stages[1].isNotEmpty() && stages[1].all { it.size == 1 })
+        assertTrue(stages[2].isNotEmpty() && stages[2].all { it.size == 2 })
+        assertTrue(stages[3].isNotEmpty() && stages[3].all { it.size == 3 })
+        assertTrue(stages[4].isNotEmpty() && stages[4].all { it.size == 4 })
+
+        // Verify both [A, C] and [C, A] orders are generated in Stage 2
+        val stage2Keys = stages[2].map { chain -> chain.joinToString("->") { "${it.host}:${it.port}" } }
+        assertTrue(stage2Keys.contains("198.51.100.10:1080->198.51.100.30:1080"))
+        assertTrue(stage2Keys.contains("198.51.100.30:1080->198.51.100.10:1080"))
+        // Preferred exit C is prioritized up front among harvested Stage-1 candidates
+        assertEquals("198.51.100.30", stages[1][1].first().host)
+    }
 }

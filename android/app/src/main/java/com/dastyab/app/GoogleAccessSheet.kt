@@ -460,7 +460,7 @@ object GoogleAccessSheet {
                 context = activity,
                 targetService = targetService,
                 allowHarvest = true,
-                maxCandidates = 18
+                maxCandidates = if (targetService == GeoBypassEngine.TargetService.GOOGLE_FLOW) 44 else 36
             ) { line ->
                 steps.add(line)
                 activity.runOnUiThread {

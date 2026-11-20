@@ -919,7 +919,7 @@ class MainActivity : DastyabActivity() {
                 context = this,
                 targetService = targetService,
                 allowHarvest = true,
-                maxCandidates = 18
+                maxCandidates = if (targetService == GeoBypassEngine.TargetService.GOOGLE_FLOW) 44 else 36
             ) { step ->
                 postOutput("$step\n")
             }
@@ -1463,6 +1463,48 @@ class MainActivity : DastyabActivity() {
                 val url = obj.optString("url", CommandCompat.FLOW_URL)
                 val title = obj.optString("title", "DastYab Browser")
                 openBrowserUrl(title, url)
+            }
+            "SYNC_SERVICE_CHAIN" -> {
+                val targetService = obj.optString("target_service", "").trim().lowercase()
+                val rawChain = obj.optJSONArray("chain")
+                val hops = ArrayList<TunnelConfig.ProxyHop>()
+                if (rawChain != null) {
+                    for (i in 0 until rawChain.length()) {
+                        val item = rawChain.optJSONObject(i) ?: continue
+                        val scheme = when (item.optString("scheme", "").trim().lowercase()) {
+                            "http" -> TunnelConfig.ProxyScheme.HTTP
+                            "socks5" -> TunnelConfig.ProxyScheme.SOCKS5
+                            else -> null
+                        } ?: continue
+                        val host = item.optString("host", "").trim()
+                        val port = item.optInt("port", 0)
+                        if (host.isNotEmpty() && port in 1..65535) {
+                            hops.add(
+                                TunnelConfig.ProxyHop(
+                                    scheme = scheme,
+                                    host = host,
+                                    port = port,
+                                    username = item.optString("username", ""),
+                                    password = item.optString("password", "")
+                                )
+                            )
+                        }
+                    }
+                }
+                if (targetService == "aistudio" || targetService == "flow") {
+                    TunnelConfig.saveServiceProxyChain(
+                        context = this,
+                        targetServiceKey = targetService,
+                        hops = hops,
+                        preserveExternalVpn = true
+                    )
+                    if (hops.isNotEmpty()) {
+                        LocalProxyService.startSafely(this, targetService)
+                    }
+                    val label = obj.optString("label", "${hops.size}-hop route")
+                    appendTerminalOutput("[android] Synced $targetService chain ($label) to DastYab Browser.\n")
+                    refreshVpnCard()
+                }
             }
             "SYNC_BEST_VLESS" -> {
                 val uri = obj.optString("uri", "")

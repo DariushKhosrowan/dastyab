@@ -654,10 +654,168 @@ def _chain_to_route_tuple(hops, label_prefix="Chain"):
     return ("chain", list(hops), 0, label)
 
 
-def discover_best_android_route(probe_gates_fn, want_country=None, target_service=None, max_candidates=18):
+def _benchmark_proxy_hops(hops, timeout=0.75, max_workers=8):
+    """Benchmark candidate proxy hops on TCP in parallel and sort fastest-first."""
+    if not hops:
+        return []
+    import concurrent.futures
+
+    def _probe_one(hop):
+        t0 = time.monotonic()
+        if tcp_probe(hop[1], hop[2], timeout):
+            return (max(1, int((time.monotonic() - t0) * 1000)), hop)
+        return None
+
+    live = []
+    workers = min(max(1, len(hops)), max_workers)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        for res in ex.map(_probe_one, hops):
+            if res is not None:
+                live.append(res)
+    live.sort(key=lambda item: item[0])
+    return [hop for _, hop in live]
+
+
+def build_progressive_android_stages(
+    doc,
+    listening_proxies,
+    alive_harvested,
+    preferred_entries=(),
+    preferred_exits=(),
+    sys_label="External System VPN (Lantern / Android VPN)",
+    target_service=None,
+    max_total_candidates=72,
+):
     """
-    Probe Layer 0 (External Lantern VPN), configured service-specific chains, local proxies,
-    and 2-/3-hop cascades via `probe_gates_fn`, keeping AI Studio and Flow routes independent.
+    Build progressive multi-layer route stages strictly ordered:
+      Stage 0: Layer 0 (Direct / Active External Lantern VPN) & saved service chain
+      Stage 1: 1-hop local listening proxies + fast alive harvested hops
+      Stage 2: 2-hop cascades in BOTH [A, B] & [B, A] orders + cross-app local chains
+      Stage 3: 3-hop cascades with diverse entry/middle/exit rotations
+      Stage 4: 4-hop deep fallback cascades for stubborn multi-layer geo-blocks
+    """
+    seen_keys = set()
+    total_added = 0
+    stages = [[], [], [], [], []]
+
+    def _hop_id(h):
+        return (h[0], h[1], int(h[2]))
+
+    def _chain_route(hops, label_prefix):
+        if len(hops) == 1 and not hops[0][3] and not hops[0][4]:
+            h = hops[0]
+            return (h[0], h[1], h[2], f"{label_prefix} ({_format_hop_label(h)})")
+        return _chain_to_route_tuple(hops, label_prefix)
+
+    def _add(stage_idx, route_tuple, stage_limit):
+        nonlocal total_added
+        if total_added >= max_total_candidates or len(stages[stage_idx]) >= stage_limit:
+            return
+        scheme, target, port, _ = route_tuple
+        if scheme == "chain":
+            # Prevent same host:port appearing twice in one chain
+            endpoints = [(h[1], int(h[2])) for h in target]
+            if len(set(endpoints)) != len(endpoints):
+                return
+            key = "chain:" + "->".join(f"{h[0]}:{h[1]}:{int(h[2])}" for h in target)
+        elif scheme == "direct":
+            key = "direct"
+        else:
+            key = f"{scheme}:{target}:{int(port)}"
+        if key not in seen_keys:
+            seen_keys.add(key)
+            stages[stage_idx].append(route_tuple)
+            total_added += 1
+
+    # Stage 0: Saved per-service / global chain + Layer 0 (Active External Lantern VPN / Direct)
+    svc_key = "flow_chain" if target_service == "flow" else ("aistudio_chain" if target_service == "aistudio" else None)
+    if svc_key:
+        svc_hops = [h for h in (_normalize_hop(x) for x in doc.get(svc_key, [])) if h]
+        if svc_hops:
+            _add(0, _chain_route(svc_hops, f"{target_service.upper()} Saved"), 4)
+    global_hops = [h for h in (_normalize_hop(x) for x in doc.get("upstream_chain", [])) if h]
+    if global_hops:
+        _add(0, _chain_route(global_hops, "Saved Chain"), 4)
+    _add(0, ("direct", "", 0, f"Layer 0 · {sys_label}"), 4)
+
+    listen_hops = [(p["scheme"], p["host"], int(p["port"]), "", "") for p in listening_proxies]
+
+    # Deduped pools ordered with Stage-1 intelligence
+    def _unique_pool(seq):
+        out = []
+        seen_ep = set()
+        for h in seq:
+            k = _hop_id(h)
+            if k not in seen_ep:
+                seen_ep.add(k)
+                out.append(h)
+        return out
+
+    pool = _unique_pool(list(preferred_exits) + list(alive_harvested) + list(preferred_entries))
+    entries_pool = _unique_pool(list(preferred_entries) + pool)
+    exits_pool = _unique_pool(list(preferred_exits) + pool)
+
+    # Stage 1: Single-hop routes (listening local proxies + top alive harvested hops)
+    for p, h in zip(listening_proxies, listen_hops):
+        _add(1, (h[0], h[1], h[2], f"Layer 1 · {p['label']}"), 14)
+    for h in pool:
+        _add(1, _chain_route([h], "Layer 1 · Harvested"), 12)
+
+    # Stage 2: Two-hop cascades in BOTH orders (local -> harvested, localA <-> localB, A <-> B)
+    for b in exits_pool[:8]:
+        for a in listen_hops:
+            _add(2, _chain_to_route_tuple([a, b], "Layer 2 · Cascade"), 18)
+    for i in range(len(listen_hops)):
+        for j in range(i + 1, len(listen_hops)):
+            _add(2, _chain_to_route_tuple([listen_hops[i], listen_hops[j]], "Layer 2 · Cross-App"), 18)
+            _add(2, _chain_to_route_tuple([listen_hops[j], listen_hops[i]], "Layer 2 · Cross-App"), 18)
+    for a in entries_pool[:6]:
+        for b in exits_pool[:6]:
+            if (a[1], int(a[2])) != (b[1], int(b[2])):
+                _add(2, _chain_to_route_tuple([a, b], "Layer 2 · Cascade"), 18)
+                _add(2, _chain_to_route_tuple([b, a], "Layer 2 · Reverse"), 18)
+
+    # Stage 3: Three-hop cascades with diverse rotations
+    e3 = entries_pool[:5]
+    x3 = exits_pool[:5]
+    for a in listen_hops[:2]:
+        for e in e3:
+            for x in x3:
+                _add(3, _chain_to_route_tuple([a, e, x], "Layer 3 · Deep"), 14)
+                _add(3, _chain_to_route_tuple([a, x, e], "Layer 3 · Deep"), 14)
+    if len(listen_hops) >= 2:
+        for x in x3[:3]:
+            _add(3, _chain_to_route_tuple([listen_hops[0], listen_hops[1], x], "Layer 3 · Deep"), 14)
+            _add(3, _chain_to_route_tuple([listen_hops[1], listen_hops[0], x], "Layer 3 · Deep"), 14)
+    for e1 in e3:
+        for e2 in e3:
+            for x in x3:
+                _add(3, _chain_to_route_tuple([e1, e2, x], "Layer 3 · Mesh"), 14)
+                _add(3, _chain_to_route_tuple([e2, e1, x], "Layer 3 · Mesh"), 14)
+
+    # Stage 4: Four-hop ultimate fallback cascades
+    if len(pool) >= 3:
+        for a in listen_hops[:2]:
+            for h1 in pool[:4]:
+                for h2 in pool[:4]:
+                    for h3 in pool[:4]:
+                        _add(4, _chain_to_route_tuple([a, h1, h2, h3], "Layer 4 · Ultra"), 10)
+    if len(pool) >= 4:
+        for shift in range(min(len(pool), 5)):
+            a = pool[shift]
+            b = pool[(shift + 1) % len(pool)]
+            c = pool[(shift + 2) % len(pool)]
+            d = pool[(shift + 3) % len(pool)]
+            _add(4, _chain_to_route_tuple([a, b, c, d], "Layer 4 · Ultra"), 10)
+            _add(4, _chain_to_route_tuple([d, c, b, a], "Layer 4 · Ultra"), 10)
+
+    return stages
+
+
+def discover_best_android_route(probe_gates_fn, want_country=None, target_service=None, max_candidates=40):
+    """
+    Progressively probe Layer 0 (External Lantern VPN) -> Layer 1 -> Layer 2 -> Layer 3 -> Layer 4
+    cascades in diverse hop orders until `target_service` passes without geo-restriction.
     """
     doc = _read_route_doc()
     ext_vpn = bool(doc.get("external_vpn_active"))
@@ -668,75 +826,121 @@ def discover_best_android_route(probe_gates_fn, want_country=None, target_servic
         else ("DastYab VpnService" if dastyab_vpn else "Device Network / System VPN")
     )
 
-    candidates = []
-    seen_keys = set()
-
-    def add_candidate(route_tuple):
-        if len(candidates) >= max_candidates:
-            return
-        scheme, target, port, _ = route_tuple
-        if scheme == "chain":
-            key = "chain:" + "->".join(f"{h[0]}:{h[1]}:{h[2]}" for h in target)
-        elif scheme == "direct":
-            key = "direct"
-        else:
-            key = f"{scheme}:{target}:{port}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            candidates.append(route_tuple)
-
-    # 1. Service-specific configured chain (strictly separated for aistudio vs flow)
-    svc_key = "flow_chain" if target_service == "flow" else ("aistudio_chain" if target_service == "aistudio" else None)
-    if svc_key:
-        svc_hops = [h for h in (_normalize_hop(x) for x in doc.get(svc_key, [])) if h]
-        if svc_hops:
-            add_candidate(_chain_to_route_tuple(svc_hops, f"{target_service.upper()} Saved"))
-    global_hops = [h for h in (_normalize_hop(x) for x in doc.get("upstream_chain", [])) if h]
-    if global_hops:
-        add_candidate(_chain_to_route_tuple(global_hops, "Saved Chain"))
-
-    # 2. Layer 0: Direct / External Lantern VPN
-    add_candidate(("direct", "", 0, sys_label))
-
-    # 3. Single-hop local listening proxies
-    local_hops = []
-    for p in detect_android_proxies(target_service=target_service):
-        add_candidate((p["scheme"], p["host"], p["port"], p["label"]))
-        local_hops.append((p["scheme"], p["host"], p["port"], "", ""))
-
-    # 4. Alive harvested external SOCKS5/HTTP hops (synced from Android ConfigHarvester)
+    listening_proxies = detect_android_proxies(target_service=target_service)
     raw_harvested = [h for h in (_normalize_hop(x) for x in doc.get("proxy_hops", [])) if h]
-    alive_harvested = [h for h in raw_harvested[:16] if tcp_probe(h[1], h[2], 0.6)]
-    for h in alive_harvested[:6]:
-        add_candidate(_chain_to_route_tuple([h], "Harvested"))
+    alive_harvested = _benchmark_proxy_hops(raw_harvested[:48], timeout=0.8)[:16]
 
-    # 5. Two-hop cascades (local_proxy -> local_proxy, local_proxy -> harvested, harvested -> harvested)
-    for a in local_hops[:3]:
-        for b in local_hops[:3]:
-            if (a[1], a[2]) != (b[1], b[2]):
-                add_candidate(_chain_to_route_tuple([a, b], "2-Hop"))
-        for b in alive_harvested[:4]:
-            add_candidate(_chain_to_route_tuple([a, b], "2-Hop"))
-    for a in alive_harvested[:3]:
-        for b in alive_harvested[:3]:
-            if (a[1], a[2]) != (b[1], b[2]):
-                add_candidate(_chain_to_route_tuple([a, b], "2-Hop"))
-
-    # 6. Three-hop cascades for stubborn geo-blocks (e.g. Google Flow on top of Lantern)
-    for a in local_hops[:2]:
-        for b in alive_harvested[:3]:
-            for c in alive_harvested[:3]:
-                if len({(a[1], a[2]), (b[1], b[2]), (c[1], c[2])}) == 3:
-                    add_candidate(_chain_to_route_tuple([a, b, c], "3-Hop"))
+    stages_initial = build_progressive_android_stages(
+        doc=doc,
+        listening_proxies=listening_proxies,
+        alive_harvested=alive_harvested,
+        sys_label=sys_label,
+        target_service=target_service,
+        max_total_candidates=max(72, max_candidates * 2),
+    )
 
     results = []
-    for route in candidates:
-        set_active_proxy_override(route)
-        try:
-            g = probe_gates_fn(want_country=want_country)
-        finally:
-            set_active_proxy_override(None)
-        results.append((route, g))
+    probed_keys = set()
+    failed_entry_keys = set()
+    reachable_bridge_hops = []
+    supported_exit_hops = []
+    best_clean_found = False
+
+    def _hop_key(h):
+        return (h[0], h[1], int(h[2]))
+
+    def _route_key(route):
+        scheme, target, port, _ = route
+        if scheme == "chain":
+            return "chain:" + "->".join(f"{h[0]}:{h[1]}:{int(h[2])}" for h in target)
+        if scheme == "direct":
+            return "direct"
+        return f"{scheme}:{target}:{int(port)}"
+
+    def _first_hop_of(route):
+        scheme, target, port, _ = route
+        if scheme == "chain" and isinstance(target, list) and target:
+            return target[0]
+        if scheme in ("http", "socks5") and target and port:
+            return (scheme, target, int(port), "", "")
+        return None
+
+    def _probe_stage(stage_routes, is_stage1=False, skip_dead_entries=False):
+        nonlocal best_clean_found
+        fallback_left = -1
+        stage_passed = False
+        for route in stage_routes:
+            if len(results) >= max_candidates:
+                break
+            first_hop = _first_hop_of(route)
+            if skip_dead_entries and first_hop is not None and _hop_key(first_hop) in failed_entry_keys:
+                continue
+            rk = _route_key(route)
+            if rk in probed_keys:
+                continue
+            probed_keys.add(rk)
+
+            set_active_proxy_override(route)
+            try:
+                g = probe_gates_fn(want_country=want_country)
+            finally:
+                set_active_proxy_override(None)
+            results.append((route, g))
+
+            if is_stage1 and first_hop is not None:
+                if not g.get("egress"):
+                    failed_entry_keys.add(_hop_key(first_hop))
+                else:
+                    reachable_bridge_hops.append(first_hop)
+                    reason_low = str(g.get("reason") or "").lower()
+                    if g.get("country") and "unsupported" not in reason_low and "not on google" not in reason_low and "region-gate" not in reason_low:
+                        supported_exit_hops.append(first_hop)
+
+            if g.get("verdict"):
+                stage_passed = True
+                if not g.get("proxy") and not g.get("hosting"):
+                    best_clean_found = True
+                    return True
+                fallback_left = 2 if fallback_left < 0 else (fallback_left - 1)
+                if fallback_left <= 0:
+                    best_clean_found = True
+                    return True
+            elif fallback_left > 0:
+                fallback_left -= 1
+                if fallback_left == 0:
+                    best_clean_found = True
+                    return True
+        return stage_passed
+
+    # Step 1: Run Stage 0 and Stage 1 first, gathering country/reachability intelligence per hop
+    for idx in (0, 1):
+        if best_clean_found or len(results) >= max_candidates:
+            break
+        if _probe_stage(stages_initial[idx], is_stage1=(idx == 1)):
+            best_clean_found = True
+            break
+
+    # Step 2: Progressively escalate Stage 2 -> Stage 3 -> Stage 4 ONLY if Stages 0-1 did not pass
+    if not best_clean_found and len(results) < max_candidates:
+        smart_stages = build_progressive_android_stages(
+            doc=doc,
+            listening_proxies=listening_proxies,
+            alive_harvested=alive_harvested,
+            preferred_entries=reachable_bridge_hops,
+            preferred_exits=supported_exit_hops,
+            sys_label=sys_label,
+            target_service=target_service,
+            max_total_candidates=max(72, max_candidates * 2),
+        )
+        for s_idx in (2, 3, 4):
+            if best_clean_found or len(results) >= max_candidates:
+                break
+            if not smart_stages[s_idx]:
+                continue
+            if _probe_stage(smart_stages[s_idx], is_stage1=False, skip_dead_entries=True):
+                best_clean_found = True
+                break
+
     return results
 
 

@@ -356,13 +356,21 @@ def build_outbound(srv, tag):
 
 
 def build_config(nodes, port):
+    if not nodes:
+        return None
     if len(nodes) == 1:
-        outbounds = [build_outbound(nodes[0], "exit")]
+        ob = build_outbound(nodes[0], "exit")
+        outbounds = [ob] if ob else []
     else:
-        exit_ob = build_outbound(nodes[0], "exit")
-        exit_ob["sockopt"] = {"dialerProxy": "entry"}
-        outbounds = [exit_ob, build_outbound(nodes[1], "entry")]
-    outbounds = [ob for ob in outbounds if ob]
+        tags = ["exit"] + [f"hop{i}" for i in range(1, len(nodes) - 1)] + ["entry"]
+        outbounds = []
+        for idx, (node, tag) in enumerate(zip(nodes, tags)):
+            ob = build_outbound(node, tag)
+            if not ob:
+                return None
+            if idx + 1 < len(tags):
+                ob["sockopt"] = {"dialerProxy": tags[idx + 1]}
+            outbounds.append(ob)
     if not outbounds:
         return None
     return {
@@ -705,28 +713,40 @@ def _try_nodes(nodes, want_country=None):
         stop(quiet=True)
 
 
+def _node_endpoint(node):
+    return (node.get("addr"), int(node.get("port", 0)))
+
+
+def _record_pass(nodes, g):
+    return {
+        "nodes": nodes,
+        "egress": g["egress"],
+        "country": g["country"],
+        "country_name": g["country_name"],
+        "proxy": g["proxy"],
+        "hosting": g["hosting"],
+        "latency_ms": g["latency_ms"],
+        "checked_epoch": time.time(),
+    }
+
+
 def scan(candidates, want_country=None, try_n=10, allow_chain=True):
     passing = []
     tested = 0
+    dead_entries = set()
+    alive_nodes = []
     for cand in candidates[:try_n]:
         tested += 1
         nodes = [cand]
         print(f"[flow] [{tested}] trying {_label(nodes)} ...", flush=True)
         g = _try_nodes(nodes, want_country)
+        if g and g.get("egress"):
+            alive_nodes.append(cand)
+        else:
+            dead_entries.add(_node_endpoint(cand))
         if g and g["verdict"]:
             print(f"[flow]     PASS {g['reason']} ({g['latency_ms']}ms)")
-            passing.append(
-                {
-                    "nodes": nodes,
-                    "egress": g["egress"],
-                    "country": g["country"],
-                    "country_name": g["country_name"],
-                    "proxy": g["proxy"],
-                    "hosting": g["hosting"],
-                    "latency_ms": g["latency_ms"],
-                    "checked_epoch": time.time(),
-                }
-            )
+            passing.append(_record_pass(nodes, g))
             if len(passing) >= 3:
                 break
         else:
@@ -735,37 +755,67 @@ def scan(candidates, want_country=None, try_n=10, allow_chain=True):
     if passing or not allow_chain:
         return passing
 
-    print("[flow] No single hop passed — engaging the two-hop chain layer ...")
-    entries = candidates[:3]
-    for cand in candidates[:try_n]:
-        tested += 1
+    print("[flow] No single hop passed — engaging the two-hop chain layer (both directions)...")
+    pool = candidates[:try_n]
+    entries = (alive_nodes + [c for c in pool if _node_endpoint(c) not in dead_entries])[:4]
+    if not entries:
+        entries = pool[:3]
+    tested_chains = set()
+
+    def _chain_id(nodes):
+        return tuple(_node_endpoint(n) for n in nodes)
+
+    for cand in pool:
         for entry in entries:
-            if entry is cand:
+            if _node_endpoint(entry) == _node_endpoint(cand):
                 continue
-            nodes = [cand, entry]
-            print(f"[flow] [{tested}] chain {_label(nodes)} ...", flush=True)
-            g = _try_nodes(nodes, want_country)
-            if g and g["verdict"]:
-                print(f"[flow]     PASS {g['reason']} ({g['latency_ms']}ms)")
-                passing.append(
-                    {
-                        "nodes": nodes,
-                        "egress": g["egress"],
-                        "country": g["country"],
-                        "country_name": g["country_name"],
-                        "proxy": g["proxy"],
-                        "hosting": g["hosting"],
-                        "latency_ms": g["latency_ms"],
-                        "checked_epoch": time.time(),
-                    }
-                )
-                break
-            reason = (g or {}).get("reason", "transport dead")
-            print(f"[flow]     fail: {reason}", flush=True)
-            if g and g.get("country") and g["country"] not in SUPPORTED_COUNTRIES:
+            for nodes in ([cand, entry], [entry, cand]):
+                if _node_endpoint(nodes[-1]) in dead_entries:
+                    continue
+                cid = _chain_id(nodes)
+                if cid in tested_chains:
+                    continue
+                tested_chains.add(cid)
+                tested += 1
+                print(f"[flow] [{tested}] 2-hop chain {_label(nodes)} ...", flush=True)
+                g = _try_nodes(nodes, want_country)
+                if g and g["verdict"]:
+                    print(f"[flow]     PASS {g['reason']} ({g['latency_ms']}ms)")
+                    passing.append(_record_pass(nodes, g))
+                    break
+                reason = (g or {}).get("reason", "transport dead")
+                print(f"[flow]     fail: {reason}", flush=True)
+            if len(passing) >= 2:
                 break
         if len(passing) >= 2:
             break
+
+    if passing:
+        return passing
+
+    print("[flow] Two-hop layer insufficient — escalating to three-hop cascade...")
+    hop_pool = pool[:min(6, len(pool))]
+    for exit_n in hop_pool:
+        for mid_n in hop_pool:
+            if _node_endpoint(mid_n) == _node_endpoint(exit_n):
+                continue
+            for entry_n in entries[:3]:
+                if _node_endpoint(entry_n) in (_node_endpoint(exit_n), _node_endpoint(mid_n)):
+                    continue
+                nodes = [exit_n, mid_n, entry_n]
+                cid = _chain_id(nodes)
+                if cid in tested_chains:
+                    continue
+                tested_chains.add(cid)
+                tested += 1
+                print(f"[flow] [{tested}] 3-hop chain {_label(nodes)} ...", flush=True)
+                g = _try_nodes(nodes, want_country)
+                if g and g["verdict"]:
+                    print(f"[flow]     PASS {g['reason']} ({g['latency_ms']}ms)")
+                    passing.append(_record_pass(nodes, g))
+                    return passing
+                reason = (g or {}).get("reason", "transport dead")
+                print(f"[flow]     fail: {reason}", flush=True)
     return passing
 
 
@@ -864,11 +914,31 @@ def launch_browser(proxy_port=None):
     print("[flow] Opened Flow in the dedicated tunnel-pinned browser.")
 
 
+def _route_to_chain_hops(route):
+    scheme, host, port, _ = route
+    if scheme == "chain" and isinstance(host, list):
+        return [
+            {
+                "scheme": h[0],
+                "host": h[1],
+                "port": int(h[2]),
+                "username": h[3] if len(h) > 3 else "",
+                "password": h[4] if len(h) > 4 else "",
+            }
+            for h in host
+        ]
+    if scheme in ("http", "socks5") and host and int(port or 0) > 0:
+        return [{"scheme": scheme, "host": host, "port": int(port), "username": "", "password": ""}]
+    return []
+
+
 def _android_start_bridge(want_country=None):
-    """Android multi-layer bridge: probes active VPN (Lantern) + 1/2/3-hop proxy cascades against Flow gates."""
+    """Android multi-layer bridge: probes active VPN (Lantern) + progressive 1/2/3/4-hop proxy cascades against Flow gates."""
     p = _paths()
-    print("[flow] Android CPython Core: probing Layer 0 (Lantern) + multi-hop chains against Flow L3+L4+L5 gates...")
-    results = _shim.discover_best_android_route(probe_gates, want_country=want_country, target_service="flow")
+    print("[flow] Android CPython Core: probing Layer 0 (Lantern) + progressive multi-hop chains against Flow L3+L4+L5 gates...")
+    results = _shim.discover_best_android_route(
+        probe_gates, want_country=want_country, target_service="flow", max_candidates=44
+    )
     best = None
     for route, g in results:
         scheme, host, port, label = route
@@ -890,12 +960,8 @@ def _android_start_bridge(want_country=None):
 
     route, g = best
     scheme, host, port, label = route
-    chain_hops = (
-        [{"scheme": h[0], "host": h[1], "port": h[2]} for h in host]
-        if scheme == "chain" and isinstance(host, list)
-        else []
-    )
-    hops_count = len(chain_hops) if scheme == "chain" else (0 if scheme == "direct" else 1)
+    chain_hops = _route_to_chain_hops(route)
+    hops_count = len(chain_hops)
     write_json_atomic(
         p["BRIDGEFILE"],
         {
@@ -919,6 +985,16 @@ def _android_start_bridge(want_country=None):
             "country_name": g["country_name"],
             "verified_epoch": time.time(),
             "route_label": label,
+        },
+    )
+    _shim.emit_event(
+        "SYNC_SERVICE_CHAIN",
+        {
+            "target_service": "flow",
+            "chain": chain_hops,
+            "label": label,
+            "egress": g["egress"],
+            "country": g["country"],
         },
     )
     print(f"[flow] Verified route ({hops_count}-hop): {label}")
@@ -1011,7 +1087,9 @@ def cmd_status():
     print(f"[flow] xray core: {xray or 'Not installed (Android Multi-Layer Bridge active)'}")
     print(f"[flow] SOCKS port: 127.0.0.1:{SOCK} | profile: {p['PROFILE_DIR']}")
     if _shim.is_android() and not xray:
-        results = _shim.discover_best_android_route(probe_gates, target_service="flow")
+        results = _shim.discover_best_android_route(
+            probe_gates, target_service="flow", max_candidates=44
+        )
         any_ok = False
         for route, g in results:
             verdict = "PASS" if g["verdict"] else "FAIL"
@@ -1063,11 +1141,28 @@ def cmd_best(try_n=10, want_country=None):
     cands = load_candidates()
 
     if xray is None and _shim.is_android():
-        print("[flow] Step 1/2: Probing Layer 0 (Lantern) + multi-hop chains against Flow gates...")
-        results = _shim.discover_best_android_route(probe_gates, want_country=want_country, target_service="flow")
+        print("[flow] Step 1/2: Probing Layer 0 (Lantern) + progressive multi-hop chains against Flow gates...")
+        results = _shim.discover_best_android_route(
+            probe_gates, want_country=want_country, target_service="flow", max_candidates=44
+        )
+        best_android = None
         for route, g in results:
             mark = f"PASS {g['country']} {g['egress']} ({g['latency_ms']}ms)" if g["verdict"] else f"FAIL ({g['reason']})"
             print(f"   • {route[3]} -> {mark}", flush=True)
+            if g["verdict"] and (best_android is None or gate_score(g) < gate_score(best_android[1])):
+                best_android = (route, g)
+        if best_android is not None:
+            b_route, b_g = best_android
+            _shim.emit_event(
+                "SYNC_SERVICE_CHAIN",
+                {
+                    "target_service": "flow",
+                    "chain": _route_to_chain_hops(b_route),
+                    "label": b_route[3],
+                    "egress": b_g["egress"],
+                    "country": b_g["country"],
+                },
+            )
 
         print(f"[flow] Step 2/2: Benchmarking {min(len(cands), try_n)} harvested VLESS nodes (TCP+TLS latency)...")
         reachable = []

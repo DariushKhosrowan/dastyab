@@ -255,7 +255,7 @@ object NewbieAutopilot {
                         context = context,
                         targetService = GeoBypassEngine.TargetService.AI_STUDIO,
                         allowHarvest = true,
-                        maxCandidates = 18
+                        maxCandidates = 36
                     ) { emit("    $it") }
                     aiProbe = aiChain.report
                     emit("  • AI Studio result: ${aiChain.summary}")
@@ -266,7 +266,7 @@ object NewbieAutopilot {
                         context = context,
                         targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
                         allowHarvest = true,
-                        maxCandidates = 20
+                        maxCandidates = 44
                     ) { emit("    $it") }
                     flowProbe = flowChain.report
                     emit("  • Google Flow result: ${flowChain.summary}")
@@ -350,13 +350,13 @@ object NewbieAutopilot {
         if (externalVpnActive && (!check.aiStudio.isOk || !check.flow.isOk)) {
             if (!check.aiStudio.isOk) {
                 val retryAi = GeoBypassEngine.discoverAndChainBestRoute(
-                    context, GeoBypassEngine.TargetService.AI_STUDIO, allowHarvest = false, maxCandidates = 18
+                    context, GeoBypassEngine.TargetService.AI_STUDIO, allowHarvest = false, maxCandidates = 36
                 ) { emit("  [re-chain AI Studio] $it") }
                 aiProbe = retryAi.report
             }
             if (!check.flow.isOk) {
                 val retryFlow = GeoBypassEngine.discoverAndChainBestRoute(
-                    context, GeoBypassEngine.TargetService.GOOGLE_FLOW, allowHarvest = false, maxCandidates = 20
+                    context, GeoBypassEngine.TargetService.GOOGLE_FLOW, allowHarvest = false, maxCandidates = 44
                 ) { emit("  [re-chain Flow] $it") }
                 flowProbe = retryFlow.report
             }
@@ -475,7 +475,7 @@ object NewbieAutopilot {
                 context = context,
                 targetService = GeoBypassEngine.TargetService.AI_STUDIO,
                 allowHarvest = true,
-                maxCandidates = 18
+                maxCandidates = 36
             ) { step -> emit("    $step") }
             aiProbe = discoveredAi.report
             emit("  → AI Studio: ${discoveredAi.summary}")
@@ -496,7 +496,7 @@ object NewbieAutopilot {
                 context = context,
                 targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
                 allowHarvest = true,
-                maxCandidates = 20
+                maxCandidates = 44
             ) { step -> emit("    $step") }
             flowProbe = discoveredFlow.report
             emit("  → Google Flow: ${discoveredFlow.summary}")

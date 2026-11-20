@@ -455,10 +455,30 @@ def start(server_index=0):
     return False, None
 
 
+def _route_to_chain_hops(route):
+    scheme, host, port, _ = route
+    if scheme == "chain" and isinstance(host, list):
+        return [
+            {
+                "scheme": h[0],
+                "host": h[1],
+                "port": int(h[2]),
+                "username": h[3] if len(h) > 3 else "",
+                "password": h[4] if len(h) > 4 else "",
+            }
+            for h in host
+        ]
+    if scheme in ("http", "socks5") and host and int(port or 0) > 0:
+        return [{"scheme": scheme, "host": host, "port": int(port), "username": "", "password": ""}]
+    return []
+
+
 def _start_android_bridge(server_index, pool_path, idxfile, bridgefile):
-    """Android bridge: verify external Lantern VPN and auto-chain 1/2/3 proxy layers until AI Studio is non-georestricted."""
-    print("[aistudio] Android Python Core: deep geo-gate probing & multi-layer route chaining...")
-    results = _shim.discover_best_android_route(probe_aistudio_gates, target_service="aistudio")
+    """Android bridge: verify external Lantern VPN and progressively auto-chain 1/2/3/4 proxy layers until AI Studio is non-georestricted."""
+    print("[aistudio] Android Python Core: deep geo-gate probing & progressive multi-layer route chaining...")
+    results = _shim.discover_best_android_route(
+        probe_aistudio_gates, target_service="aistudio", max_candidates=36
+    )
     best = None
     for route, g in results:
         scheme, host, port, label = route
@@ -480,18 +500,14 @@ def _start_android_bridge(server_index, pool_path, idxfile, bridgefile):
 
     route, g = best
     scheme, host, port, label = route
-    chain_hops = (
-        [{"scheme": h[0], "host": h[1], "port": h[2]} for h in host]
-        if scheme == "chain" and isinstance(host, list)
-        else []
-    )
+    chain_hops = _route_to_chain_hops(route)
     with open(bridgefile, "w") as fh:
         json.dump(
             {
                 "scheme": scheme,
                 "host": host if scheme != "chain" else "",
                 "port": port,
-                "hops": len(chain_hops) if scheme == "chain" else (0 if scheme == "direct" else 1),
+                "hops": len(chain_hops),
                 "chain": chain_hops,
                 "label": label,
                 "egress": g["egress"],
@@ -499,6 +515,16 @@ def _start_android_bridge(server_index, pool_path, idxfile, bridgefile):
             },
             fh,
         )
+    _shim.emit_event(
+        "SYNC_SERVICE_CHAIN",
+        {
+            "target_service": "aistudio",
+            "chain": chain_hops,
+            "label": label,
+            "egress": g["egress"],
+            "country": g["country"],
+        },
+    )
     print(f"[aistudio] Unlocked via {label} | {g['reason']}")
     print("[aistudio] Opening AI Studio in DastYab Browser...")
     proxy_port = port if scheme in ("http", "socks5") and port > 0 else None
@@ -671,16 +697,33 @@ def verify():
     has_xray = _find_xray_optional() is not None
 
     if not has_xray and _shim.is_android():
-        print("[aistudio] Checking Android Layer 0 (Lantern) & multi-layer routes for AI Studio:")
-        results = _shim.discover_best_android_route(probe_aistudio_gates, target_service="aistudio")
+        print("[aistudio] Checking Android Layer 0 (Lantern) & progressive multi-layer routes for AI Studio:")
+        results = _shim.discover_best_android_route(
+            probe_aistudio_gates, target_service="aistudio", max_candidates=36
+        )
         passed_count = 0
+        best = None
         for route, g in results:
             if g["verdict"]:
                 passed_count += 1
                 mark = f"OK   {g['country']} {g['egress']} (HTTP {g['http_code']}, {g['latency_ms']}ms)"
+                if best is None or gate_score(g) < gate_score(best[1]):
+                    best = (route, g)
             else:
                 mark = f"FAIL ({g['reason']})"
             print(f"   • {route[3]}  {mark}", flush=True)
+        if best is not None:
+            b_route, b_g = best
+            _shim.emit_event(
+                "SYNC_SERVICE_CHAIN",
+                {
+                    "target_service": "aistudio",
+                    "chain": _route_to_chain_hops(b_route),
+                    "label": b_route[3],
+                    "egress": b_g["egress"],
+                    "country": b_g["country"],
+                },
+            )
         print(f"[aistudio] {passed_count}/{len(results)} route(s) passed AI Studio non-georestricted gates.")
         if pool:
             print(f"[aistudio] Probing TCP/TLS latency for {len(pool)} stored VLESS server(s):")

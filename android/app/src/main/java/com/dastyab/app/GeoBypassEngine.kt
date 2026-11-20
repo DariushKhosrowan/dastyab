@@ -854,87 +854,166 @@ object GeoBypassEngine {
         return score
     }
 
-    /** Builds candidate hop chains (0, 1, 2, and 3 layers) to stack on top of external VPN / Lantern. */
-    fun buildMultiLayerCandidateChains(
+    /**
+     * Builds progressive multi-layer candidate chains grouped by hop count:
+     * Stage 0 (0 extra layers / saved), Stage 1 (1-hop), Stage 2 (2-hop in both [A,B] & [B,A] orders),
+     * Stage 3 (3-hop cascades), and Stage 4 (4-hop deep fallback cascades).
+     */
+    fun buildProgressiveLayerStages(
         existingHops: List<TunnelConfig.ProxyHop>,
         listening: List<ListeningProxy>,
         harvestedHops: List<TunnelConfig.ProxyHop>,
-        maxCandidates: Int = 20
-    ): List<List<TunnelConfig.ProxyHop>> {
-        val out = ArrayList<List<TunnelConfig.ProxyHop>>()
+        preferredEntries: List<TunnelConfig.ProxyHop> = emptyList(),
+        preferredExits: List<TunnelConfig.ProxyHop> = emptyList(),
+        maxTotalCandidates: Int = 48
+    ): List<List<List<TunnelConfig.ProxyHop>>> {
         val seen = HashSet<String>()
+        var totalAdded = 0
 
-        fun addChain(hops: List<TunnelConfig.ProxyHop>) {
-            if (out.size >= maxCandidates) return
-            // Reject duplicate host:port within the same chain to avoid loops
+        fun addTo(stage: MutableList<List<TunnelConfig.ProxyHop>>, hops: List<TunnelConfig.ProxyHop>, stageLimit: Int) {
+            if (totalAdded >= maxTotalCandidates || stage.size >= stageLimit) return
             val distinctHops = hops.distinctBy { "${it.host}:${it.port}" }
             if (distinctHops.size != hops.size) return
             val key = distinctHops.joinToString("->") { "${it.scheme.name}:${it.host}:${it.port}" }
             if (seen.add(key)) {
-                out.add(distinctHops)
+                stage.add(distinctHops)
+                totalAdded++
             }
         }
 
-        // Layer 0: Direct / Active External VPN (Lantern)
-        addChain(emptyList())
+        val stage0 = ArrayList<List<TunnelConfig.ProxyHop>>()
+        val stage1 = ArrayList<List<TunnelConfig.ProxyHop>>()
+        val stage2 = ArrayList<List<TunnelConfig.ProxyHop>>()
+        val stage3 = ArrayList<List<TunnelConfig.ProxyHop>>()
+        val stage4 = ArrayList<List<TunnelConfig.ProxyHop>>()
 
-        // Existing saved chain for this service
+        // Stage 0: Layer 0 (Direct / Active External Lantern VPN) + existing saved service chain
+        addTo(stage0, emptyList(), 4)
         if (existingHops.isNotEmpty()) {
-            addChain(existingHops)
+            addTo(stage0, existingHops, 4)
         }
 
         val listenHops = listening.map {
             TunnelConfig.ProxyHop(it.preset.scheme, it.preset.host, it.preset.port)
         }
 
-        // Layer 1: Single-hop listening local proxies and harvested SOCKS5/HTTP nodes
-        for (h in listenHops) addChain(listOf(h))
-        for (h in harvestedHops) addChain(listOf(h))
+        // Order harvested hops so preferred exits / entries appear up front while preserving all nodes
+        val orderedHarvested = LinkedHashMap<String, TunnelConfig.ProxyHop>()
+        for (h in preferredExits + harvestedHops + preferredEntries) {
+            orderedHarvested.putIfAbsent("${h.scheme.name}:${h.host}:${h.port}", h)
+        }
+        val pool = orderedHarvested.values.toList()
+        val entriesPool = LinkedHashMap<String, TunnelConfig.ProxyHop>().apply {
+            for (h in preferredEntries + pool) putIfAbsent("${h.scheme.name}:${h.host}:${h.port}", h)
+        }.values.toList()
+        val exitsPool = LinkedHashMap<String, TunnelConfig.ProxyHop>().apply {
+            for (h in preferredExits + pool) putIfAbsent("${h.scheme.name}:${h.host}:${h.port}", h)
+        }.values.toList()
 
-        // Layer 2: Two-hop cascades (listening -> listening, listening -> harvested, harvested -> harvested)
-        for (a in listenHops) {
-            for (b in listenHops) {
-                addChain(listOf(a, b))
-            }
-            for (b in harvestedHops.take(6)) {
-                addChain(listOf(a, b))
+        // Stage 1: Single-hop routes (listening local proxies + top fast alive harvested hops)
+        for (h in listenHops) addTo(stage1, listOf(h), 14)
+        for (h in pool) addTo(stage1, listOf(h), 12)
+
+        // Stage 2: Two-hop cascades in BOTH orders (listen -> harvested, listenA <-> listenB, A <-> B)
+        for (b in exitsPool.take(8)) {
+            for (a in listenHops) {
+                addTo(stage2, listOf(a, b), 18)
             }
         }
-        for (a in harvestedHops.take(4)) {
-            for (b in harvestedHops.take(4)) {
-                addChain(listOf(a, b))
+        for (i in listenHops.indices) {
+            for (j in i + 1 until listenHops.size) {
+                addTo(stage2, listOf(listenHops[i], listenHops[j]), 18)
+                addTo(stage2, listOf(listenHops[j], listenHops[i]), 18)
+            }
+        }
+        // Interleave [A, B] and [B, A] across pairs so one bad entry never starves reverse orders
+        val cap2 = entriesPool.size.coerceAtMost(6)
+        val cap2Exit = exitsPool.size.coerceAtMost(6)
+        for (i in 0 until cap2) {
+            for (j in 0 until cap2Exit) {
+                val a = entriesPool[i]
+                val b = exitsPool[j]
+                addTo(stage2, listOf(a, b), 18)
+                addTo(stage2, listOf(b, a), 18)
             }
         }
 
-        // Layer 3: Three-hop deep cascades (listening -> harvestedA -> harvestedB) for stubborn geo blocks
+        // Stage 3: Three-hop deep cascades across diverse entry/middle/exit permutations
+        val e3 = entriesPool.take(5)
+        val x3 = exitsPool.take(5)
         for (a in listenHops.take(2)) {
-            for (b in harvestedHops.take(4)) {
-                for (c in harvestedHops.take(4)) {
-                    addChain(listOf(a, b, c))
+            for (i in e3.indices) {
+                for (j in x3.indices) {
+                    addTo(stage3, listOf(a, e3[i], x3[j]), 14)
+                    addTo(stage3, listOf(a, x3[j], e3[i]), 14)
                 }
             }
         }
-        for (a in harvestedHops.take(3)) {
-            for (b in harvestedHops.take(3)) {
-                for (c in harvestedHops.take(3)) {
-                    addChain(listOf(a, b, c))
+        if (listenHops.size >= 2) {
+            for (x in x3.take(3)) {
+                addTo(stage3, listOf(listenHops[0], listenHops[1], x), 14)
+                addTo(stage3, listOf(listenHops[1], listenHops[0], x), 14)
+            }
+        }
+        for (i in e3.indices) {
+            for (j in e3.indices) {
+                for (k in x3.indices) {
+                    addTo(stage3, listOf(e3[i], e3[j], x3[k]), 14)
+                    addTo(stage3, listOf(e3[j], e3[i], x3[k]), 14)
                 }
             }
         }
 
-        return out.take(maxCandidates)
+        // Stage 4: Four-hop ultimate fallback cascades for stubborn multi-layer geo-blocks
+        if (pool.size >= 3) {
+            for (a in listenHops.take(2)) {
+                for (i in 0 until pool.size.coerceAtMost(4)) {
+                    for (j in 0 until pool.size.coerceAtMost(4)) {
+                        for (k in 0 until pool.size.coerceAtMost(4)) {
+                            addTo(stage4, listOf(a, pool[i], pool[j], pool[k]), 10)
+                        }
+                    }
+                }
+            }
+        }
+        if (pool.size >= 4) {
+            for (shift in 0 until pool.size.coerceAtMost(5)) {
+                val a = pool[shift]
+                val b = pool[(shift + 1) % pool.size]
+                val c = pool[(shift + 2) % pool.size]
+                val d = pool[(shift + 3) % pool.size]
+                addTo(stage4, listOf(a, b, c, d), 10)
+                addTo(stage4, listOf(d, c, b, a), 10)
+            }
+        }
+
+        return listOf(stage0, stage1, stage2, stage3, stage4)
     }
 
+    /** Flat view of [buildProgressiveLayerStages] ordered 0 -> 1 -> 2 -> 3 -> 4 hops. */
+    fun buildMultiLayerCandidateChains(
+        existingHops: List<TunnelConfig.ProxyHop>,
+        listening: List<ListeningProxy>,
+        harvestedHops: List<TunnelConfig.ProxyHop>,
+        maxCandidates: Int = 36
+    ): List<List<TunnelConfig.ProxyHop>> = buildProgressiveLayerStages(
+        existingHops = existingHops,
+        listening = listening,
+        harvestedHops = harvestedHops,
+        maxTotalCandidates = maxCandidates
+    ).flatten().take(maxCandidates)
+
     /**
-     * Tests Layer 0 (External Lantern VPN) and progressively stacks 1-, 2-, and 3-hop proxy layers
-     * on top until [targetService] passes ALL strict geo-restriction, HTTPS, account, and app-shell checks.
-     * Persists winning routes separately for [TargetService.AI_STUDIO] vs [TargetService.GOOGLE_FLOW].
+     * Tests Layer 0 (External Lantern VPN) and progressively escalates 1 -> 2 -> 3 -> 4 proxy layers
+     * in diverse orders until [targetService] passes ALL strict geo-restriction, HTTPS, account,
+     * and app-shell checks. Skips dead Layer-1 entry hops as first-hop entries while still trying
+     * them behind working relays (`[Relay, Hop]`) in higher layers.
      */
     fun discoverAndChainBestRoute(
         context: Context,
         targetService: TargetService,
         allowHarvest: Boolean = true,
-        maxCandidates: Int = 18,
+        maxCandidates: Int = 40,
         onStep: (String) -> Unit = {}
     ): ChainDiscoveryResult {
         val settings = TunnelConfig.load(context)
@@ -956,33 +1035,44 @@ object GeoBypassEngine {
             }
         }
 
-        // Pre-benchmark harvested external proxy hops quickly by TCP latency
+        // Pre-benchmark up to 48 harvested proxy hops in parallel to preserve geographic diversity
         val aliveHarvested = if (proxyHops.isNotEmpty()) {
-            onStep("Benchmarking ${proxyHops.size.coerceAtMost(24)} harvested proxy nodes…")
-            benchmarkAliveHops(proxyHops.take(24), timeoutMs = 1100).take(8)
+            val sampleSize = proxyHops.size.coerceAtMost(48)
+            onStep("Benchmarking $sampleSize harvested proxy nodes…")
+            benchmarkAliveHops(proxyHops.take(sampleSize), timeoutMs = 1100).take(16)
         } else {
             emptyList()
         }
 
-        val candidates = buildMultiLayerCandidateChains(
+        val stagesInitial = buildProgressiveLayerStages(
             existingHops = existingHops,
             listening = listening,
             harvestedHops = aliveHarvested,
-            maxCandidates = maxCandidates
+            maxTotalCandidates = (maxCandidates * 2).coerceAtLeast(72)
         )
 
         val attempts = ArrayList<ChainAttempt>()
+        val probedKeys = HashSet<String>()
+        val failedEntryKeys = HashSet<String>()
+        val reachableBridgeHops = ArrayList<TunnelConfig.ProxyHop>()
+        val supportedExitHops = ArrayList<TunnelConfig.ProxyHop>()
         var bestAttempt: ChainAttempt? = null
+        var testedCount = 0
 
-        for ((idx, hops) in candidates.withIndex()) {
+        fun hopKey(hop: TunnelConfig.ProxyHop): String = "${hop.scheme.name}:${hop.host}:${hop.port}"
+        fun chainKey(hops: List<TunnelConfig.ProxyHop>): String = hops.joinToString("->") { hopKey(it) }
+
+        fun probeCandidate(hops: List<TunnelConfig.ProxyHop>, stageNum: Int): ChainAttempt {
             val label = if (hops.isEmpty()) {
                 if (extVpn) "Layer 0 · Active External VPN (Lantern)" else "Layer 0 · Direct Network"
             } else {
                 "Layer ${hops.size} · ${hops.joinToString(" → ") { it.displayLabel() }}" +
                     if (extVpn) " + External VPN" else ""
             }
-            onStep("[${idx + 1}/${candidates.size}] Probing ${targetService.displayName}: $label…")
+            testedCount++
+            onStep("[L$stageNum #$testedCount] Probing ${targetService.displayName}: $label…")
 
+            var bridgeError: String? = null
             val report = if (hops.isEmpty()) {
                 val directRoute = RouteResolution(
                     shouldStartDastyabVpn = false,
@@ -995,20 +1085,126 @@ object GeoBypassEngine {
                 )
                 runAccessProbe(directRoute, timeoutMs = 4500)
             } else {
-                probeChainThroughEphemeralBridge(hops, label, extVpn, targetService, timeoutMs = 4500)
+                val (r, err) = probeChainThroughEphemeralBridgeWithError(hops, label, extVpn, targetService, timeoutMs = 4500)
+                bridgeError = err
+                r
+            }
+
+            // Record Hop-1 intelligence for pruning & smart multi-hop re-ordering
+            if (hops.isNotEmpty()) {
+                val firstHop = hops.first()
+                val firstKey = hopKey(firstHop)
+                val hop1Died = (report.egress == null && !report.aiStudio.reachable && !report.flow.reachable) &&
+                    (hops.size == 1 || bridgeError?.startsWith("Hop 1/") == true || bridgeError?.contains("Chain startup") == true)
+                if (hop1Died) {
+                    failedEntryKeys.add(firstKey)
+                } else if (hops.size == 1 && report.egress != null) {
+                    // Hop 1 works on TCP/TLS from this network! Useful as an entry/bridge hop in Stage 2+.
+                    reachableBridgeHops.add(firstHop)
+                    val cc = report.egress.countryCode
+                    val ccSupported = if (targetService == TargetService.GOOGLE_FLOW) {
+                        isFlowCountrySupported(cc)
+                    } else {
+                        isAiStudioCountrySupported(cc)
+                    }
+                    if (ccSupported) supportedExitHops.add(firstHop)
+                }
             }
 
             val score = gateScore(report, targetService)
             val attempt = ChainAttempt(label, hops, report, score)
             attempts.add(attempt)
-
-            if (bestAttempt == null || score < bestAttempt.score) {
+            if (bestAttempt == null || score < bestAttempt!!.score) {
                 bestAttempt = attempt
             }
+            return attempt
+        }
 
-            // Early exit on a clean non-hosting verified pass!
-            if (report.targetReady(targetService) && report.egress?.isProxyOrHosting == false) {
+        // Run Stage 0 and Stage 1 first, collecting live country & reachability intel per hop
+        var unlockedCleanly = false
+        var fallbackChecksLeftInStage = -1
+
+        for (stageIdx in 0 until stagesInitial.size.coerceAtMost(2)) {
+            if (unlockedCleanly || testedCount >= maxCandidates) break
+            if (stagesInitial[stageIdx].isEmpty()) continue
+            fallbackChecksLeftInStage = -1
+            for (hops in stagesInitial[stageIdx]) {
+                if (testedCount >= maxCandidates) break
+                val ck = chainKey(hops)
+                if (!probedKeys.add(ck)) continue
+                val attempt = probeCandidate(hops, stageIdx)
+                if (attempt.report.targetReady(targetService)) {
+                    if (attempt.report.egress?.isProxyOrHosting == false) {
+                        unlockedCleanly = true
+                        break
+                    }
+                    if (fallbackChecksLeftInStage < 0) fallbackChecksLeftInStage = 2 else fallbackChecksLeftInStage--
+                    if (fallbackChecksLeftInStage <= 0) {
+                        unlockedCleanly = true
+                        break
+                    }
+                } else if (fallbackChecksLeftInStage > 0) {
+                    fallbackChecksLeftInStage--
+                    if (fallbackChecksLeftInStage == 0) {
+                        unlockedCleanly = true
+                        break
+                    }
+                }
+            }
+            if (bestAttempt?.report?.targetReady(targetService) == true) {
+                unlockedCleanly = true
                 break
+            }
+        }
+
+        // Escalate progressively to Stage 2 -> Stage 3 -> Stage 4 ONLY if Stages 0-1 did not pass!
+        if (!unlockedCleanly && testedCount < maxCandidates) {
+            val smartStages = buildProgressiveLayerStages(
+                existingHops = existingHops,
+                listening = listening,
+                harvestedHops = aliveHarvested,
+                preferredEntries = reachableBridgeHops,
+                preferredExits = supportedExitHops,
+                maxTotalCandidates = (maxCandidates * 2).coerceAtLeast(72)
+            )
+            // Skip stages 0 & 1 since we already ran them above, execute 2 -> 3 -> 4 progressively
+            for (sIdx in 2 until smartStages.size) {
+                if (unlockedCleanly || testedCount >= maxCandidates) break
+                val stageCandidates = smartStages[sIdx]
+                if (stageCandidates.isEmpty()) continue
+                onStep("Escalating to Layer $sIdx (${stageCandidates.size} candidate order(s))…")
+                fallbackChecksLeftInStage = -1
+                for (hops in stageCandidates) {
+                    if (testedCount >= maxCandidates) break
+                    if (hops.isNotEmpty() && failedEntryKeys.contains(hopKey(hops.first()))) {
+                        // First hop failed direct dialing; skip as entry (still allowed as Hop 2/3/4!)
+                        continue
+                    }
+                    val ck = chainKey(hops)
+                    if (!probedKeys.add(ck)) continue
+                    val attempt = probeCandidate(hops, sIdx)
+                    if (attempt.report.targetReady(targetService)) {
+                        if (attempt.report.egress?.isProxyOrHosting == false) {
+                            unlockedCleanly = true
+                            break
+                        }
+                        if (fallbackChecksLeftInStage < 0) fallbackChecksLeftInStage = 2 else fallbackChecksLeftInStage--
+                        if (fallbackChecksLeftInStage <= 0) {
+                            unlockedCleanly = true
+                            break
+                        }
+                    } else if (fallbackChecksLeftInStage > 0) {
+                        fallbackChecksLeftInStage--
+                        if (fallbackChecksLeftInStage == 0) {
+                            unlockedCleanly = true
+                            break
+                        }
+                    }
+                }
+                if (bestAttempt?.report?.targetReady(targetService) == true) {
+                    unlockedCleanly = true
+                    break
+                }
             }
         }
 
@@ -1079,7 +1275,21 @@ object GeoBypassEngine {
         externalVpnActive: Boolean,
         targetService: TargetService,
         timeoutMs: Int
-    ): AccessProbeReport {
+    ): AccessProbeReport = probeChainThroughEphemeralBridgeWithError(
+        hops = hops,
+        label = label,
+        externalVpnActive = externalVpnActive,
+        targetService = targetService,
+        timeoutMs = timeoutMs
+    ).first
+
+    private fun probeChainThroughEphemeralBridgeWithError(
+        hops: List<TunnelConfig.ProxyHop>,
+        label: String,
+        externalVpnActive: Boolean,
+        targetService: TargetService,
+        timeoutMs: Int
+    ): Pair<AccessProbeReport, String?> {
         val upstream = TunnelConfig.toLocalProxyUpstream(hops)
         val ephemeral = LocalProxyServer(requestedPort = 0, upstream = upstream)
         return try {
@@ -1094,15 +1304,17 @@ object GeoBypassEngine {
                 upstreamChainSpec = TunnelConfig.formatProxyChain(hops),
                 targetService = targetService
             )
-            runAccessProbe(route, timeoutMs)
+            val report = runAccessProbe(route, timeoutMs)
+            report to ephemeral.stats().lastError
         } catch (e: Exception) {
+            val errMsg = e.message ?: ephemeral.stats().lastError ?: "Chain startup failed"
             val errProbe = ServiceProbeResult(
                 reachable = false,
                 httpCode = -1,
                 latencyMs = -1,
                 unsupportedRegion = false,
                 finalLocation = "",
-                detail = "Chain startup failed (${e.message})",
+                detail = "Chain startup failed ($errMsg)",
                 appShellOk = false
             )
             AccessProbeReport(
@@ -1112,10 +1324,10 @@ object GeoBypassEngine {
                 aiStudio = errProbe,
                 flow = errProbe,
                 headline = "Chain Failed ($label)",
-                recommendation = e.message ?: "Unable to bind ephemeral proxy bridge",
+                recommendation = errMsg,
                 accountsReachable = false,
                 aiStudioCountrySupported = false
-            )
+            ) to "Chain startup: $errMsg"
         } finally {
             runCatching { ephemeral.close() }
         }

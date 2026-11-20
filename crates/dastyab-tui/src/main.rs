@@ -55,15 +55,15 @@ fn run_app(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
     loop {
         terminal.draw(|frame| {
             let area = frame.area();
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3), // title bar
-                    Constraint::Length(1), // tab strip
-                    Constraint::Length(1), // separator
-                    Constraint::Min(0), // body
-                ])
-                .split(area);
+            // Vertical layout: title bar (3), tab strip (1), separator (1), body (rest).
+            let constraints = [
+                Constraint::Length(3),
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(0),
+            ];
+            let layout = Layout::default().direction(Direction::Vertical);
+            let chunks = layout.constraints(constraints).split(area);
 
             // Title bar
             let title = Paragraph::new(Line::from(vec![

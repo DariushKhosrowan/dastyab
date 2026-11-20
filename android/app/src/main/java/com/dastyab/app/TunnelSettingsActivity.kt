@@ -255,7 +255,7 @@ class TunnelSettingsActivity : DastyabActivity() {
                 context = this,
                 targetService = target,
                 allowHarvest = true,
-                maxCandidates = 18
+                maxCandidates = if (target == GeoBypassEngine.TargetService.GOOGLE_FLOW) 44 else 36
             )
             runOnUiThread {
                 if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
