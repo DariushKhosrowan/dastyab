@@ -195,6 +195,73 @@ class UniversalConfigTest {
         assertEquals("UnpaddedNpv", npvUnpadded.label)
     }
 
+    @Test
+    fun mtproto_acceptsSupportedFormsAndRejectsMalformedForms() {
+        val validLinks = listOf(
+            "tg://proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "https://t.me/proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "http://t.me/proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "https://telegram.me/proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "http://telegram.me/proxy?server=1.2.3.4&port=443&secret=dd00001111",
+            "HTTPS://T.ME/PROXY?server=1.2.3.4&port=443&secret=dd00001111",
+            "TG://PROXY?host=1.2.3.4&port=443&secret=dd00001111"
+        )
+        for (link in validLinks) {
+            assertTrue("Expected isMtProtoUri for $link", UniversalConfig.isMtProtoUri(link))
+            val parsed = UniversalConfig.parse(link)
+            assertNotNull("Expected non-null parse for $link", parsed)
+            assertEquals("mtproto", parsed!!.protocol)
+            assertEquals(UniversalConfig.Family.TELEGRAM_MTPROTO, parsed.family)
+            assertEquals("1.2.3.4", parsed.host)
+            assertEquals(443, parsed.port)
+        }
+
+        val withFrag = UniversalConfig.parse("tg://proxy?server=1.2.3.4&port=8443&secret=ee12#FastTag")
+        assertNotNull(withFrag)
+        assertEquals(8443, withFrag!!.port)
+        assertEquals("FastTag", withFrag.label)
+
+        val malformedLinks = listOf(
+            "https://evil.example/t.me/proxy?server=1.2.3.4&port=443&secret=abc",
+            "https://evil.example/https://t.me/proxy?server=1.2.3.4&port=443&secret=abc",
+            "ftp://t.me/proxy?server=1.2.3.4&port=443&secret=abc",
+            "tg://proxyevil?server=1.2.3.4&port=443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=0&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=65536&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=abc&secret=abc",
+            "tg://proxy?server=1.2.3.4&secret=abc",
+            "tg://proxy?port=443&secret=abc",
+            "tg://proxy?server=%20%20&port=443&secret=abc",
+            "tg://proxy?server=1.2.3.4/path&port=443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=443",
+            "tg://proxy?server=1.2.3.4&port=443&secret=",
+            "tg://proxy?server=1.2.3.4&port=443&secret=%20",
+            "tg://proxy?server=1.2.3.4&server=5.6.7.8&port=443&secret=abc",
+            "tg://proxy?server=1.2.3.4&host=5.6.7.8&port=443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=443&port=8443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=443&secret=abc&secret=def"
+        )
+        for (bad in malformedLinks) {
+            assertNull("Expected null for $bad", UniversalConfig.parse(bad))
+        }
+
+        val html = """
+            <a href="HTTPS://T.ME/PROXY?server=1.2.3.4&amp;port=443&amp;secret=abc">p</a>
+            <span>(tg://proxy?server=5.6.7.8&amp;port=8443&amp;secret=def),</span>
+            <a href="https://evil.example/t.me/proxy?server=9.9.9.9&amp;port=443&amp;secret=bad">x</a>
+            <a href="https://evil.example/https://t.me/proxy?server=8.8.8.8&amp;port=443&amp;secret=bad">y</a>
+            <span>tg://proxy?server=7.7.7.7&amp;port=443</span>
+        """.trimIndent()
+        val extracted = UniversalConfig.extractAll(html)
+        assertEquals(
+            listOf(
+                "tg://proxy?server=5.6.7.8&port=8443&secret=def",
+                "HTTPS://T.ME/PROXY?server=1.2.3.4&port=443&secret=abc"
+            ),
+            extracted
+        )
+    }
+
     private fun encodeBase64(text: String): String {
         val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
         val bytes = text.toByteArray(Charsets.UTF_8)

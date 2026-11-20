@@ -74,12 +74,12 @@ object UniversalConfig {
     )
 
     private val MTPROTO_URI_REGEX = Regex(
-        """(?:tg://proxy\?[^\s"'<>`\\]+|https?://(?:t\.me|telegram\.me)/proxy\?[^\s"'<>`\\]+)""",
+        """(?<![A-Za-z0-9+./-])(?:tg://proxy\?[^\s"'<>`\\]+|https?://(?:t\.me|telegram\.me)/proxy\?[^\s"'<>`\\]+)""",
         RegexOption.IGNORE_CASE
     )
 
     private val TG_SOCKS_URI_REGEX = Regex(
-        """(?:tg://socks\?[^\s"'<>`\\]+|https?://(?:t\.me|telegram\.me)/socks\?[^\s"'<>`\\]+)""",
+        """(?<![A-Za-z0-9+./-])(?:tg://socks\?[^\s"'<>`\\]+|https?://(?:t\.me|telegram\.me)/socks\?[^\s"'<>`\\]+)""",
         RegexOption.IGNORE_CASE
     )
 
@@ -369,12 +369,12 @@ object UniversalConfig {
         ) {
             return "openvpn"
         }
-        if (trimmed.startsWith("tg://proxy", ignoreCase = true) ||
+        if (trimmed.startsWith("tg://proxy?", ignoreCase = true) ||
             Regex("^https?://(?:t\\.me|telegram\\.me)/proxy\\?", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
         ) {
             return "mtproto"
         }
-        if (trimmed.startsWith("tg://socks", ignoreCase = true) ||
+        if (trimmed.startsWith("tg://socks?", ignoreCase = true) ||
             Regex("^https?://(?:t\\.me|telegram\\.me)/socks\\?", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
         ) {
             return "socks5"
@@ -434,18 +434,12 @@ object UniversalConfig {
 
         // Telegram MTProto proxy links
         if (proto == "mtproto") {
-            val query = trimmed.substringAfter('?', "")
-            val params = parseQueryParams(query)
-            val server = params["server"]?.trim().orEmpty()
-            val port = params["port"]?.trim()?.toIntOrNull() ?: 443
-            if (server.isEmpty() || port !in 1..65535) return null
-            return ParsedEndpoint(trimmed, "mtproto", Family.TELEGRAM_MTPROTO, server, port, "Telegram MTProto")
+            return parseMtProto(trimmed)
         }
 
         // Telegram SOCKS5 share links (tg://socks?server=...&port=...&user=...&pass=...)
-        if (proto == "socks5" && (trimmed.startsWith("tg://socks", ignoreCase = true) ||
-                trimmed.contains("t.me/socks?", ignoreCase = true) ||
-                trimmed.contains("telegram.me/socks?", ignoreCase = true))
+        if (proto == "socks5" && (trimmed.startsWith("tg://socks?", ignoreCase = true) ||
+                Regex("^https?://(?:t\\.me|telegram\\.me)/socks\\?", RegexOption.IGNORE_CASE).containsMatchIn(trimmed))
         ) {
             val hop = TunnelConfig.parseProxyHop(trimmed) ?: return null
             return ParsedEndpoint(trimmed, "socks5", Family.PROXY_TUNNEL, hop.host, hop.port, "Telegram SOCKS5")
@@ -659,6 +653,51 @@ object UniversalConfig {
         val port = s.substring(colon + 1).trim().toIntOrNull() ?: return null
         if (host.isEmpty() || port !in 1..65535 || host.any { it.isWhitespace() }) return null
         return host to port
+    }
+
+    private fun parseMtProto(trimmed: String): ParsedEndpoint? {
+        val rawQuery = trimmed.substringAfter('?', "")
+        val query = rawQuery.substringBefore('#')
+        if (query.isBlank()) return null
+
+        var server: String? = null
+        var port: Int? = null
+        var secret: String? = null
+
+        for (pair in query.split('&')) {
+            if (pair.isEmpty()) continue
+            val idx = pair.indexOf('=')
+            if (idx <= 0) continue
+            val key = pair.substring(0, idx).trim().lowercase()
+            val value = decodePercent(pair.substring(idx + 1).trim()).trim()
+            when (key) {
+                "server", "host" -> {
+                    if (server != null || value.isEmpty() || value.any { it.isWhitespace() } || value.contains('/')) {
+                        return null
+                    }
+                    server = value
+                }
+                "port" -> {
+                    val p = value.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+                    if (port != null) return null
+                    port = p
+                }
+                "secret" -> {
+                    if (secret != null || value.isEmpty() || value.any { it.isWhitespace() }) {
+                        return null
+                    }
+                    secret = value
+                }
+            }
+        }
+
+        val host = server ?: return null
+        val validPort = port ?: return null
+        if (secret == null) return null
+        val label = rawQuery.substringAfter('#', "")
+            .let { decodePercent(it).trim() }
+            .ifBlank { "Telegram MTProto" }
+        return ParsedEndpoint(trimmed, "mtproto", Family.TELEGRAM_MTPROTO, host, validPort, label)
     }
 
     private fun parseQueryParams(query: String): Map<String, String> {

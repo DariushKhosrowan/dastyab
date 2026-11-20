@@ -501,10 +501,10 @@ object TunnelConfig {
         val trimmed = rawToken?.trim().orEmpty()
         if (trimmed.isEmpty() || trimmed.equals("direct", ignoreCase = true)) return null
 
-        if (trimmed.startsWith("tg://socks", ignoreCase = true) ||
+        if (trimmed.startsWith("tg://socks?", ignoreCase = true) ||
             Regex("^https?://(?:t\\.me|telegram\\.me)/socks\\?", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
         ) {
-            val query = trimmed.substringAfter('?', "")
+            val query = trimmed.substringAfter('?', "").substringBefore('#')
             val params = mutableMapOf<String, String>()
             query.split('&').forEach { pair ->
                 val idx = pair.indexOf('=')
