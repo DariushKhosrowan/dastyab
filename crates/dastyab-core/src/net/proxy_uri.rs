@@ -214,7 +214,8 @@ fn parse_napsternet(out: &mut ProxyUri, rest: &str) -> bool {
     let clean = rest.split(['?', '#']).next().unwrap_or(rest);
     if let Some(decoded) = b64_decode(clean) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&decoded) {
-            let host = first_non_empty_str(&v, &["add", "host", "server", "address"]).unwrap_or("");
+            let host_keys = ["add", "host", "server", "address"];
+            let host = first_non_empty_str(&v, &host_keys).unwrap_or("");
             let port_opt = ["port", "serverPort"].iter().find_map(|k| {
                 v.get(*k).and_then(|x| {
                     x.as_str()
@@ -224,8 +225,8 @@ fn parse_napsternet(out: &mut ProxyUri, rest: &str) -> bool {
                         .or_else(|| x.as_u64().map(|n| n.to_string()))
                 })
             });
-            let id = first_non_empty_str(&v, &["id", "uuid", "password", "username"])
-                .unwrap_or("napsternetv");
+            let id_keys = ["id", "uuid", "password", "username"];
+            let id = first_non_empty_str(&v, &id_keys).unwrap_or("napsternetv");
             if let Some(port_str) = port_opt {
                 if let Ok(port) = port_str.parse::<u16>() {
                     if !host.is_empty() && port > 0 {
@@ -250,8 +251,10 @@ fn parse_napsternet(out: &mut ProxyUri, rest: &str) -> bool {
 
 /// Return the first non-empty string value among candidate JSON keys.
 fn first_non_empty_str<'a>(v: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
-    keys.iter()
-        .find_map(|k| v.get(*k).and_then(|x| x.as_str()).filter(|s| !s.is_empty()))
+    keys.iter().find_map(|k| {
+        let s = v.get(*k)?.as_str()?;
+        (!s.is_empty()).then_some(s)
+    })
 }
 
 /// Telegram MTProto links (`tg://proxy?server=...&port=...&secret=...`
@@ -385,7 +388,11 @@ fn parse_vmess(out: &mut ProxyUri, rest: &str) -> bool {
     out.port = port;
     out.id = id.to_string();
     // `ps` is the friendly name — prefer it as the alias.
-    if let Some(ps) = v.get("ps").and_then(|x| x.as_str()).filter(|s| !s.is_empty()) {
+    if let Some(ps) = v
+        .get("ps")
+        .and_then(|x| x.as_str())
+        .filter(|s| !s.is_empty())
+    {
         out.alias = ps.to_string();
     }
     true
