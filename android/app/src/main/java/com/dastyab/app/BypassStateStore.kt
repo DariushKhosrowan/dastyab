@@ -40,7 +40,7 @@ object BypassStateStore {
         val intent = Intent(ACTION_BYPASS_SUCCESSFUL).apply {
             putExtra(EXTRA_SERVICE, service)
             putExtra(EXTRA_ROUTE, route)
-            package = context.packageName
+            setPackage(context.packageName)
         }
         runCatching { context.sendBroadcast(intent) }
     }

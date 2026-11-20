@@ -269,6 +269,10 @@
     <string name="simple_btn_open_advanced">ابزارهای پیشرفته</string>
 
     <!-- v3.0.0 Persian Strings -->
+    <string name="lion_edition_title">دستیاب · نسخه شیر برّنده 🦁</string>
+    <string name="lion_shield_label">🛡️ سپر سلطنتی شیر در برابر تحریم</string>
+    <string name="lion_autopilot_label">⚡ اتوپایلوت هوشمند شیر برّنده</string>
+    <string name="lion_browser_badge">👑 مرورگر سلطنتی آبسیدین شیر</string>
     <string name="widget_label">ویجت VPN دستیاب (تک‌کلیک)</string>
     <string name="browser_btn_autofix">رفع خودکار</string>
     <string name="browser_btn_chrome">کروم</string>

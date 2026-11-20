@@ -284,6 +284,10 @@
     <string name="simple_btn_open_advanced">Open Advanced Tools</string>
 
     <!-- v3.0.0: Home Widget, In-App Browser, QR Share, Domain DNS Rules, Watchdog & Bilingual -->
+    <string name="lion_edition_title">Dastyab · Brutal Lion Edition 🦁</string>
+    <string name="lion_shield_label">🛡️ Sovereign Lion Geoblock Shield</string>
+    <string name="lion_autopilot_label">⚡ Brutal Lion Apex Autopilot</string>
+    <string name="lion_browser_badge">👑 Royal Obsidian Lion Browser</string>
     <string name="widget_label">DastYab VPN (1-Tap)</string>
     <string name="browser_btn_autofix">Auto-Fix</string>
     <string name="browser_btn_chrome">Chrome</string>
