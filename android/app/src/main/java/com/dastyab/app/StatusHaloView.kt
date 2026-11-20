@@ -72,7 +72,7 @@ class StatusHaloView @JvmOverloads constructor(
         return isAttachedToWindow &&
             visibility == VISIBLE &&
             state != HaloState.IDLE &&
-            ValueAnimator.areAnimatorsEnabled()
+            DastyabMotion.areAnimationsEnabled(context)
     }
 
     private fun restartAnimatorIfVisible() {

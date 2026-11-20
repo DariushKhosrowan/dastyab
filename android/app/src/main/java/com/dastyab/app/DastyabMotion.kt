@@ -3,6 +3,9 @@ package com.dastyab.app
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -15,12 +18,28 @@ import android.widget.ScrollView
  * DastyabMotion — Tactile native Android micro-interactions and entrance choreography.
  *
  * Pure Android SDK (`android.view.ViewPropertyAnimator`, `ValueAnimator`) — zero external
- * libraries required and 100% respects system animator disable/accessibility settings.
+ * libraries required and 100% respects system animator disable/accessibility settings on API 24+.
  */
 object DastyabMotion {
 
     private val decel = DecelerateInterpolator(1.6f)
     private val overshoot = OvershootInterpolator(1.45f)
+
+    fun areAnimationsEnabled(context: Context? = null): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ValueAnimator.areAnimatorsEnabled()
+        } else if (context != null) {
+            runCatching {
+                Settings.Global.getFloat(
+                    context.contentResolver,
+                    Settings.Global.ANIMATOR_DURATION_SCALE,
+                    1.0f
+                ) > 0f
+            }.getOrDefault(true)
+        } else {
+            true
+        }
+    }
 
     fun enhanceActivityAfterLayout(activity: Activity) {
         if (!UiSafety.isActivityAlive(activity)) return
@@ -49,7 +68,7 @@ object DastyabMotion {
         if (view.getTag(R.id.dastyab_press_spring_bound) == true) return
         view.setTag(R.id.dastyab_press_spring_bound, true)
         view.setOnTouchListener { v, event ->
-            if (!v.isEnabled || !ValueAnimator.areAnimatorsEnabled()) return@setOnTouchListener false
+            if (!v.isEnabled || !areAnimationsEnabled(v.context)) return@setOnTouchListener false
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     v.animate().cancel()
@@ -75,7 +94,7 @@ object DastyabMotion {
     }
 
     fun playEntranceChoreography(root: View) {
-        if (!ValueAnimator.areAnimatorsEnabled()) return
+        if (!areAnimationsEnabled(root.context)) return
         if (root.getTag(R.id.dastyab_entrance_done) == true) return
         root.setTag(R.id.dastyab_entrance_done, true)
 
@@ -120,7 +139,7 @@ object DastyabMotion {
         }
         val wasVisible = target.visibility == View.VISIBLE
         target.visibility = View.VISIBLE
-        if (!ValueAnimator.areAnimatorsEnabled() || wasVisible) {
+        if (!areAnimationsEnabled(target.context) || wasVisible) {
             target.alpha = 1f
             target.translationX = 0f
             return
@@ -141,7 +160,7 @@ object DastyabMotion {
     fun revealPanel(view: View) {
         val alreadyVisible = view.visibility == View.VISIBLE && view.alpha >= 0.99f
         view.visibility = View.VISIBLE
-        if (alreadyVisible || !ValueAnimator.areAnimatorsEnabled()) {
+        if (alreadyVisible || !areAnimationsEnabled(view.context)) {
             view.alpha = 1f
             view.translationY = 0f
             return
@@ -159,7 +178,7 @@ object DastyabMotion {
     }
 
     fun pulseAttention(view: View) {
-        if (!ValueAnimator.areAnimatorsEnabled()) return
+        if (!areAnimationsEnabled(view.context)) return
         view.animate().cancel()
         view.animate()
             .scaleX(1.022f)
