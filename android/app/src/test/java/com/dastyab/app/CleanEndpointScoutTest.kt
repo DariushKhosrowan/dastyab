@@ -37,4 +37,17 @@ class CleanEndpointScoutTest {
 
         assertNull(CleanEndpointScout.patchVlessWithCleanIp(original, "999.999.1.1"))
     }
+
+    @Test
+    fun sampleNeighborhoodIps_clustersAroundWinningSeedSlash24() {
+        val neighbors = CleanEndpointScout.sampleNeighborhoodIps(
+            seedIps = listOf("104.16.132.50"),
+            count = 10,
+            rng = Random(7)
+        )
+        assertEquals(10, neighbors.size)
+        assertEquals("104.16.132.50", neighbors.first())
+        assertTrue(neighbors.all { it.startsWith("104.16.") && TunnelConfig.isValidIpv4(it) })
+        assertTrue(CleanEndpointScout.sampleNeighborhoodIps(listOf("bad-ip"), 5).isEmpty())
+    }
 }

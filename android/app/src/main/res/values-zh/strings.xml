@@ -785,4 +785,26 @@
     <string name="layers_btn_build_shield">自动构建强力多层 VPN 防护</string>
     <string name="layers_shield_building">正在构建并测速多协议 VPN 层…</string>
     <string name="layers_shield_built_toast">已构建 %1$d 层高抗封锁 VPN 防护！</string>
+
+    <!-- Autopilot Intent Presets, Live 3-Step Stepper, Brain Drawer & Smart Tile -->
+    <string name="intent_balanced_short">均衡网页</string>
+    <string name="intent_aistudio_short">AI Studio</string>
+    <string name="intent_flow_short">Flow ⚔</string>
+    <string name="intent_blackout_short">断网应急</string>
+    <string name="simple_step_sensing">步骤 1/3 · 正在感知网络环境与可用路径…</string>
+    <string name="simple_step_racing">步骤 2/3 · 多协议错峰竞速与 DoH 探测…</string>
+    <string name="simple_step_verifying">步骤 3/3 · 正在校验地区解锁并保存热备…</string>
+    <string name="simple_brain_toggle_show">自动引擎大脑与学习路线 ▾</string>
+    <string name="simple_brain_toggle_hide">收起自动引擎大脑 ▴</string>
+    <string name="simple_brain_empty">当前网络尚无已学习的路由统计。</string>
+    <string name="simple_brain_summary_fmt">网络: %1$s · 当前: %2$s\n热备: %3$d · 隔离: %4$d · 守护: %5$ds\n优选: %6$s</string>
+    <string name="simple_brain_reset_btn">重置已学路线</string>
+    <string name="simple_brain_reset_done">已清除自动引擎学习的路线与熔断记录。</string>
+    <string name="tile_tap_standby_ready">点击连接（%1$d 个热备就绪）</string>
+    <string name="flow_warrior_card_title">Flow 勇士 ⚔</string>
+    <string name="flow_warrior_card_sub">专为严苛 Google Flow 打造的独立铁鹰突破引擎</string>
+    <string name="flow_warrior_launch_btn">⚔ Flow 勇士</string>
+    <string name="flow_warrior_running">⚔ Flow 勇士正在执行铁鹰突破…</string>
+    <string name="flow_warrior_conquered">⚔ Flow 勇士已突破 ✓ (%1$s · %2$dms)</string>
+    <string name="flow_warrior_retry_btn">⚔ 重试强力多跳突破</string>
 </resources>

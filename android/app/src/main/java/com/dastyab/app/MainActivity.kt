@@ -68,9 +68,21 @@ class MainActivity : DastyabActivity() {
     private lateinit var simpleStatusDot: View
     private lateinit var tvSimpleHeroTitle: TextView
     private lateinit var tvSimpleReachability: TextView
+    private lateinit var tvSimpleStepLine: TextView
     private lateinit var simpleProgress: ProgressBar
     private lateinit var btnSimpleMagicAutopilot: Button
     private lateinit var btnSimpleQuickToggle: Button
+    private lateinit var btnIntentBalanced: Button
+    private lateinit var btnIntentAiStudio: Button
+    private lateinit var btnIntentFlow: Button
+    private lateinit var btnIntentBlackout: Button
+    private lateinit var simpleConnectedActions: LinearLayout
+    private lateinit var btnSimpleLaunchAiStudio: Button
+    private lateinit var btnSimpleLaunchFlow: Button
+    private lateinit var btnToggleBrainDrawer: Button
+    private lateinit var simpleBrainDrawer: LinearLayout
+    private lateinit var tvSimpleBrainDetails: TextView
+    private lateinit var btnResetBrain: Button
 
     // Terminal Mode views (CPython 3.11 Linux-compatible shell)
     private lateinit var tvTerminalRuntimeBadge: TextView
@@ -127,6 +139,7 @@ class MainActivity : DastyabActivity() {
     private var pendingGoogleLaunchName: String? = null
     private var vpnReceiverRegistered = false
     private val postConnectGeoInFlight = AtomicBoolean(false)
+    private val flowWarriorInFlight = AtomicBoolean(false)
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -190,9 +203,21 @@ class MainActivity : DastyabActivity() {
         simpleStatusDot = findViewById(R.id.simpleStatusDot)
         tvSimpleHeroTitle = findViewById(R.id.tvSimpleHeroTitle)
         tvSimpleReachability = findViewById(R.id.tvSimpleReachability)
+        tvSimpleStepLine = findViewById(R.id.tvSimpleStepLine)
         simpleProgress = findViewById(R.id.simpleProgress)
         btnSimpleMagicAutopilot = findViewById(R.id.btnSimpleMagicAutopilot)
         btnSimpleQuickToggle = findViewById(R.id.btnSimpleQuickToggle)
+        btnIntentBalanced = findViewById(R.id.btnIntentBalanced)
+        btnIntentAiStudio = findViewById(R.id.btnIntentAiStudio)
+        btnIntentFlow = findViewById(R.id.btnIntentFlow)
+        btnIntentBlackout = findViewById(R.id.btnIntentBlackout)
+        simpleConnectedActions = findViewById(R.id.simpleConnectedActions)
+        btnSimpleLaunchAiStudio = findViewById(R.id.btnSimpleLaunchAiStudio)
+        btnSimpleLaunchFlow = findViewById(R.id.btnSimpleLaunchFlow)
+        btnToggleBrainDrawer = findViewById(R.id.btnToggleBrainDrawer)
+        simpleBrainDrawer = findViewById(R.id.simpleBrainDrawer)
+        tvSimpleBrainDetails = findViewById(R.id.tvSimpleBrainDetails)
+        btnResetBrain = findViewById(R.id.btnResetBrain)
 
         // Terminal Mode bindings
         tvTerminalRuntimeBadge = findViewById(R.id.tvTerminalRuntimeBadge)
@@ -311,8 +336,37 @@ class MainActivity : DastyabActivity() {
         setupTerminalModeUi()
         applyUiMode(UiModePrefs.getMode(this), persist = false)
 
-        // ── Simple Mode 1-Click Controls ──
+        // ── Simple Mode 1-Click & Intent Controls ──
+        AutopilotBrain.ensureLoaded(this)
+        refreshIntentChips(AutopilotBrain.getSavedIntent(this))
+        btnIntentBalanced.setOnClickListener { selectAutopilotIntent(AutopilotBrain.AutopilotIntent.BALANCED_WEB) }
+        btnIntentAiStudio.setOnClickListener { selectAutopilotIntent(AutopilotBrain.AutopilotIntent.AI_STUDIO) }
+        btnIntentFlow.setOnClickListener { selectAutopilotIntent(AutopilotBrain.AutopilotIntent.GOOGLE_FLOW) }
+        btnIntentBlackout.setOnClickListener { selectAutopilotIntent(AutopilotBrain.AutopilotIntent.BLACKOUT_SURVIVAL) }
+
         btnSimpleMagicAutopilot.setOnClickListener { runNewbieAutopilot() }
+        btnSimpleLaunchAiStudio.setOnClickListener {
+            openBrowserUrl(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
+        }
+        btnSimpleLaunchFlow.setOnClickListener {
+            if (operation.get() == null) runFlowWarriorAndOpen()
+        }
+        btnToggleBrainDrawer.setOnClickListener {
+            val opening = simpleBrainDrawer.visibility != View.VISIBLE
+            simpleBrainDrawer.visibility = if (opening) View.VISIBLE else View.GONE
+            btnToggleBrainDrawer.text = getString(
+                if (opening) R.string.simple_brain_toggle_hide else R.string.simple_brain_toggle_show
+            )
+            if (opening) refreshBrainDrawer()
+        }
+        btnResetBrain.setOnClickListener {
+            AutopilotBrain.clearAllLearned(this)
+            FlowWarriorEngine.clearWarriorMemory(this)
+            refreshIntentChips(AutopilotBrain.AutopilotIntent.BALANCED_WEB)
+            refreshBrainDrawer()
+            Toast.makeText(this, getString(R.string.simple_brain_reset_done), Toast.LENGTH_SHORT).show()
+        }
+
         btnSimpleQuickToggle.setOnClickListener { toggleVpnTunnel() }
         findViewById<Button>(R.id.btnSimpleSpeedIp).setOnClickListener { runQuickSpeedAndIpCheck() }
         findViewById<View>(R.id.btnSimpleLanternAutopilot).setOnClickListener {
@@ -322,7 +376,7 @@ class MainActivity : DastyabActivity() {
             if (operation.get() == null) launchGoogleServiceViaVpn(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
         }
         findViewById<View>(R.id.btnSimpleOneClickFlow).setOnClickListener {
-            if (operation.get() == null) launchGoogleServiceViaVpn(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
+            if (operation.get() == null) runFlowWarriorAndOpen()
         }
         findViewById<View>(R.id.btnSimpleOneClickRefresh).setOnClickListener {
             openRescueHub(BlackoutRescueActivity.ACTION_HARVEST)
@@ -404,7 +458,7 @@ class MainActivity : DastyabActivity() {
             true
         }
         btnSimpleFlow.setOnClickListener {
-            if (operation.get() == null) launchGoogleServiceViaVpn(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
+            if (operation.get() == null) runFlowWarriorAndOpen()
         }
         btnSimpleFlow.setOnLongClickListener {
             showGoogleRescueDialog(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
@@ -625,6 +679,7 @@ class MainActivity : DastyabActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_VPN_PREPARE) {
             if (resultCode == RESULT_OK) {
+                AutopilotBrain.markConsentRemembered(this, true)
                 DastyabVpnService.start(this)
                 postOutput(getString(R.string.main_vpn_started_log) + "\n")
                 refreshVpnCard()
@@ -666,28 +721,14 @@ class MainActivity : DastyabActivity() {
                 try { Thread.sleep(700) } catch (_: InterruptedException) {}
                 val settings = TunnelConfig.load(this)
                 val aiRoute = GeoBypassEngine.resolveCurrentRoute(this, settings, GeoBypassEngine.TargetService.AI_STUDIO)
-                val flowRoute = GeoBypassEngine.resolveCurrentRoute(this, settings, GeoBypassEngine.TargetService.GOOGLE_FLOW)
                 var aiProbe = GeoBypassEngine.runAccessProbe(aiRoute, timeoutMs = 4000)
-                var flowProbe = if (flowRoute.upstreamChainSpec == aiRoute.upstreamChainSpec && flowRoute.javaNetProxy == aiRoute.javaNetProxy) {
-                    aiProbe
-                } else {
-                    GeoBypassEngine.runAccessProbe(flowRoute, timeoutMs = 4000)
-                }
 
                 val excludedIps = LinkedHashSet<String>()
                 if (!aiProbe.readyForAiStudio) aiProbe.egress?.ip?.takeIf { it.isNotBlank() }?.let { excludedIps.add(it) }
-                if (!flowProbe.readyForFlow) flowProbe.egress?.ip?.takeIf { it.isNotBlank() }?.let { excludedIps.add(it) }
 
-                if (!aiProbe.readyForAiStudio || !flowProbe.readyForFlow) {
-                    val blockedTarget = if (!aiProbe.readyForAiStudio && !flowProbe.readyForFlow) {
-                        "AI Studio & Flow"
-                    } else if (!aiProbe.readyForAiStudio) {
-                        "AI Studio"
-                    } else {
-                        "Google Flow"
-                    }
-                    val ccTag = flowProbe.egress?.countryCode ?: aiProbe.egress?.countryCode ?: "??"
-                    val chainBanner = getString(R.string.main_connect_auto_chaining, blockedTarget, ccTag)
+                if (!aiProbe.readyForAiStudio) {
+                    val ccTag = aiProbe.egress?.countryCode ?: "??"
+                    val chainBanner = getString(R.string.main_connect_auto_chaining, "AI Studio", ccTag)
                     postUi {
                         if (!UiSafety.isActivityAlive(this)) return@postUi
                         tvSimpleReachability.text = chainBanner
@@ -696,58 +737,31 @@ class MainActivity : DastyabActivity() {
                     }
                     postOutput("[connect] $chainBanner\n")
 
-                    var unlockedAny = false
-                    if (!aiProbe.readyForAiStudio) {
-                        val aiRes = GeoBypassEngine.discoverAndChainBestRoute(
-                            context = this,
-                            targetService = GeoBypassEngine.TargetService.AI_STUDIO,
-                            allowHarvest = true,
-                            maxCandidates = 44,
-                            excludedEgressIps = excludedIps,
-                            excludeCurrentRoute = true,
-                            excludedChainSpecs = setOfNotNull(aiRoute.upstreamChainSpec.takeIf { it.isNotBlank() }),
-                            maxRounds = 3
-                        ) { step -> postOutput("  [connect-ai] $step\n") }
-                        aiProbe = aiRes.report
-                        if (aiRes.success) {
-                            unlockedAny = true
-                        } else {
-                            aiRes.report.egress?.ip?.takeIf { it.isNotBlank() }?.let { excludedIps.add(it) }
-                        }
-                    }
-
-                    if (!flowProbe.readyForFlow) {
-                        val flowRes = GeoBypassEngine.discoverAndChainBestRoute(
-                            context = this,
-                            targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
-                            allowHarvest = true,
-                            maxCandidates = 52,
-                            excludedEgressIps = excludedIps,
-                            excludeCurrentRoute = true,
-                            excludedChainSpecs = setOfNotNull(flowRoute.upstreamChainSpec.takeIf { it.isNotBlank() }),
-                            maxRounds = 3
-                        ) { step -> postOutput("  [connect-flow] $step\n") }
-                        flowProbe = flowRes.report
-                        if (flowRes.success) {
-                            unlockedAny = true
-                        }
-                    }
-
-                    if (unlockedAny && DastyabVpnService.isConnected()) {
+                    val aiRes = GeoBypassEngine.discoverAndChainBestRoute(
+                        context = this,
+                        targetService = GeoBypassEngine.TargetService.AI_STUDIO,
+                        allowHarvest = true,
+                        maxCandidates = 44,
+                        excludedEgressIps = excludedIps,
+                        excludeCurrentRoute = true,
+                        excludedChainSpecs = setOfNotNull(aiRoute.upstreamChainSpec.takeIf { it.isNotBlank() }),
+                        maxRounds = 3
+                    ) { step -> postOutput("  [connect-ai] $step\n") }
+                    aiProbe = aiRes.report
+                    if (aiRes.success && DastyabVpnService.isConnected()) {
                         DastyabVpnService.start(this)
                     }
                 }
 
                 val aiOk = aiProbe.readyForAiStudio
-                val flowOk = flowProbe.readyForFlow
-                val finalCc = flowProbe.egress?.countryCode ?: aiProbe.egress?.countryCode ?: "??"
-                val finalIp = flowProbe.egress?.ip ?: aiProbe.egress?.ip ?: ""
+                val finalCc = aiProbe.egress?.countryCode ?: "??"
+                val finalIp = aiProbe.egress?.ip ?: ""
 
                 postUi {
                     if (!UiSafety.isActivityAlive(this)) return@postUi
                     simpleProgress.visibility = View.GONE
                     refreshVpnCard()
-                    if (aiOk && flowOk) {
+                    if (aiOk) {
                         val msg = getString(R.string.main_connect_all_clear, finalCc)
                         tvSimpleReachability.text = msg
                         tvReachabilityBadge.text = msg
@@ -755,14 +769,13 @@ class MainActivity : DastyabActivity() {
                         setStatusDot(DotState.GREEN)
                         postOutput("[connect] $msg ($finalIp)\n")
                     } else {
-                        val aiTag = if (aiOk) "AI Studio ✓" else "AI Studio Geo-Blocked ✗"
-                        val flowTag = if (flowOk) "Flow ✓" else "Flow Geo-Blocked ✗"
-                        val badge = getString(R.string.main_connect_partial_or_blocked, finalCc, aiTag, flowTag)
+                        val aiTag = "AI Studio Geo-Blocked ✗"
+                        val badge = "$finalCc · $aiTag"
                         tvSimpleReachability.text = badge
                         tvReachabilityBadge.text = badge
                         postStatus(badge)
-                        setStatusDot(if (aiOk || flowOk) DotState.ORANGE else DotState.RED)
-                        postOutput("[connect] Geo-verification result: $badge (IP: $finalIp)\n")
+                        setStatusDot(DotState.ORANGE)
+                        postOutput("[connect] AI Studio check: $badge (IP: $finalIp)\n")
                     }
                 }
             } finally {
@@ -1054,6 +1067,96 @@ class MainActivity : DastyabActivity() {
         }
     }
 
+    /**
+     * Independent "Flow Warrior (Brutal Eagle)" launcher completely isolated from AI Studio.
+     * Proactively runs FlowWarriorEngine against Flow's harsh geo-blocks and opens Flow on conquest.
+     */
+    private fun runFlowWarriorAndOpen(
+        excludedIps: Set<String> = emptySet(),
+        excludedChainSpecs: Set<String> = emptySet(),
+        excludeCurrentRoute: Boolean = false
+    ) {
+        if (operation.get() != null) return
+        if (!flowWarriorInFlight.compareAndSet(false, true)) return
+        setBusy(true)
+        simpleProgress.visibility = View.VISIBLE
+        tvSimpleStepLine.visibility = View.VISIBLE
+        val warriorRunning = getString(R.string.flow_warrior_running)
+        tvSimpleStepLine.text = warriorRunning
+        tvSimpleReachability.text = warriorRunning
+        tvReachabilityBadge.text = warriorRunning
+        postStatus(warriorRunning)
+        setStatusDot(DotState.ORANGE)
+        applyFormattedOutput("\n=== ⚔ ${FlowWarriorEngine.WARRIOR_TITLE} ===\n")
+
+        thread(isDaemon = true, name = "dastyab-flow-warrior") {
+            val report = try {
+                FlowWarriorEngine.runFlowWarriorAutopilot(
+                    context = this,
+                    excludedEgressIps = excludedIps,
+                    excludedChainSpecs = excludedChainSpecs,
+                    excludeCurrentRoute = excludeCurrentRoute
+                ) { step ->
+                    postOutput("$step\n")
+                    postUi {
+                        if (UiSafety.isActivityAlive(this)) {
+                            tvSimpleStepLine.text = step.take(96)
+                        }
+                    }
+                }
+            } finally {
+                flowWarriorInFlight.set(false)
+            }
+            if (report.conquered && DastyabVpnService.isConnected()) {
+                DastyabVpnService.start(this)
+            }
+            postUi {
+                setBusy(false)
+                simpleProgress.visibility = View.GONE
+                refreshVpnCard()
+                refreshBrainDrawer()
+                val ccTag = report.exitCountry ?: "??"
+                if (report.conquered) {
+                    val msg = getString(R.string.flow_warrior_conquered, ccTag, report.latencyMs)
+                    tvSimpleReachability.text = msg
+                    tvReachabilityBadge.text = msg
+                    tvSimpleStepLine.text = report.headline
+                    postStatus(report.headline)
+                    setStatusDot(DotState.GREEN)
+                    openBrowserUrl(FlowWarriorEngine.WARRIOR_TITLE, CommandCompat.FLOW_URL)
+                } else {
+                    val failBadge = "${FlowWarriorEngine.WARRIOR_BADGE_PREFIX} ✗ ($ccTag)"
+                    tvSimpleReachability.text = failBadge
+                    tvReachabilityBadge.text = failBadge
+                    tvSimpleStepLine.text = report.headline
+                    postStatus(report.headline)
+                    setStatusDot(DotState.RED)
+                    UiSafety.safeShowDialog(
+                        this,
+                        AlertDialog.Builder(this)
+                            .setTitle(report.headline)
+                            .setMessage("Exit tested: ${report.exitIp ?: "-"} ($ccTag)\n\n${report.recommendation}")
+                            .setPositiveButton(getString(R.string.flow_warrior_retry_btn)) { _, _ ->
+                                runFlowWarriorAndOpen(
+                                    excludedIps = setOfNotNull(report.exitIp),
+                                    excludedChainSpecs = setOfNotNull(report.chainSpec.takeIf { it.isNotBlank() }),
+                                    excludeCurrentRoute = true
+                                )
+                            }
+                            .setNeutralButton(getString(R.string.main_btn_route_proxy_modes)) { _, _ ->
+                                GoogleAccessSheet.show(this, FlowWarriorEngine.WARRIOR_TITLE, CommandCompat.FLOW_URL) {
+                                    refreshVpnCard()
+                                }
+                            }
+                            .setNegativeButton(getString(R.string.main_btn_open_anyway)) { _, _ ->
+                                openBrowserUrl(FlowWarriorEngine.WARRIOR_TITLE, CommandCompat.FLOW_URL)
+                            }
+                    )
+                }
+            }
+        }
+    }
+
     private fun autoChainAndOpenGoogleService(
         serviceName: String,
         url: String,
@@ -1061,6 +1164,14 @@ class MainActivity : DastyabActivity() {
         excludedIps: Set<String> = emptySet(),
         excludedChainSpecs: Set<String> = emptySet()
     ) {
+        if (targetService == GeoBypassEngine.TargetService.GOOGLE_FLOW) {
+            runFlowWarriorAndOpen(
+                excludedIps = excludedIps,
+                excludedChainSpecs = excludedChainSpecs,
+                excludeCurrentRoute = excludedIps.isNotEmpty() || excludedChainSpecs.isNotEmpty()
+            )
+            return
+        }
         if (operation.get() != null) return
         setBusy(true)
         simpleProgress.visibility = View.VISIBLE
@@ -1073,7 +1184,7 @@ class MainActivity : DastyabActivity() {
                 context = this,
                 targetService = targetService,
                 allowHarvest = true,
-                maxCandidates = if (targetService == GeoBypassEngine.TargetService.GOOGLE_FLOW) 52 else 44,
+                maxCandidates = 44,
                 excludedEgressIps = excludedIps,
                 excludeCurrentRoute = excludedIps.isNotEmpty() || excludedChainSpecs.isNotEmpty(),
                 excludedChainSpecs = excludedChainSpecs,
@@ -1117,42 +1228,100 @@ class MainActivity : DastyabActivity() {
         }
     }
 
+    private fun selectAutopilotIntent(intent: AutopilotBrain.AutopilotIntent) {
+        AutopilotBrain.saveIntent(this, intent)
+        refreshIntentChips(intent)
+        refreshBrainDrawer()
+    }
+
+    private fun refreshIntentChips(activeIntent: AutopilotBrain.AutopilotIntent) {
+        styleQuickModeChip(btnIntentBalanced, activeIntent == AutopilotBrain.AutopilotIntent.BALANCED_WEB)
+        styleQuickModeChip(btnIntentAiStudio, activeIntent == AutopilotBrain.AutopilotIntent.AI_STUDIO)
+        styleQuickModeChip(btnIntentFlow, activeIntent == AutopilotBrain.AutopilotIntent.GOOGLE_FLOW)
+        styleQuickModeChip(btnIntentBlackout, activeIntent == AutopilotBrain.AutopilotIntent.BLACKOUT_SURVIVAL)
+    }
+
+    private fun refreshBrainDrawer() {
+        val snap = AutopilotBrain.getSessionSnapshot()
+        val watchdog = FailoverWatchdog.getSnapshot()
+        val netKey = AutopilotBrain.detectNetworkContextKey(this)
+        val quarantined = AutopilotBrain.countQuarantined(netKey)
+        val standby = AutopilotBrain.loadStandbyUris(this).size
+        val topScores = snap.topScoredLines.take(3).joinToString(" | ").ifBlank { getString(R.string.simple_brain_empty) }
+        val activeLabel = snap.activeArmLabel.ifBlank { watchdog.lastSummary }
+        tvSimpleBrainDetails.text = getString(
+            R.string.simple_brain_summary_fmt,
+            netKey,
+            activeLabel,
+            standby,
+            quarantined,
+            watchdog.nextIntervalSeconds,
+            topScores
+        )
+    }
+
     /**
-     * 1-Tap Newbie Autopilot: does everything automatically (reachability check, DoH scout,
-     * non-blackholing VPN activation, GitHub→Telegram harvest, parallel config benchmark,
-     * and final AI Studio & Google Flow verification).
+     * 1-Tap Zero-Dialog Autopilot: senses network context, races protocol-diverse routes
+     * with Happy Eyeballs v2 + Contextual UCB1/EWMA Bandits, updates live 3-step stepper UI,
+     * and unlocks inline quick-launch actions without blocking popups on success.
      */
     private fun runNewbieAutopilot() {
         if (operation.get() != null) return
+        val chosenIntent = AutopilotBrain.getSavedIntent(this)
         setBusy(true)
         btnNewbieAutopilot.isEnabled = false
         btnSimpleMagicAutopilot.isEnabled = false
         simpleProgress.visibility = View.VISIBLE
+        simpleConnectedActions.visibility = View.GONE
+        tvSimpleStepLine.visibility = View.VISIBLE
+        tvSimpleStepLine.text = getString(R.string.simple_step_sensing)
         postStatus(getString(R.string.autopilot_status_running))
         setStatusDot(DotState.ORANGE)
         val runningText = getString(R.string.autopilot_badge_running)
         tvReachabilityBadge.text = runningText
         tvSimpleReachability.text = runningText
-        applyFormattedOutput("\n=== DASTYAB 1-TAP NEWBIE AUTOPILOT ===\n")
+        applyFormattedOutput("\n=== DASTYAB 1-TAP AUTOPILOT (${chosenIntent.name}) ===\n")
 
         thread(isDaemon = true, name = "dastyab-newbie-autopilot") {
-            val report = NewbieAutopilot.run(this) { step ->
-                postOutput("$step\n")
-            }
+            val report = NewbieAutopilot.run(
+                context = this,
+                onStep = { step ->
+                    postOutput("$step\n")
+                    val snap = AutopilotBrain.getSessionSnapshot()
+                    postUi {
+                        if (!UiSafety.isActivityAlive(this)) return@postUi
+                        val label = when (snap.stepIndex) {
+                            1 -> getString(R.string.simple_step_sensing)
+                            2 -> getString(R.string.simple_step_racing)
+                            3 -> getString(R.string.simple_step_verifying)
+                            else -> snap.stepHeadline.ifBlank { runningText }
+                        }
+                        tvSimpleStepLine.text = label
+                    }
+                },
+                intent = chosenIntent
+            )
             postUi {
                 setBusy(false)
                 btnNewbieAutopilot.isEnabled = true
                 btnSimpleMagicAutopilot.isEnabled = true
                 simpleProgress.visibility = View.GONE
                 refreshVpnCard()
+                refreshBrainDrawer()
 
                 val v = report.verification
                 val webMark = if (v.internet.isOk) "Web ✓" else "Web ✗"
-                val aiMark = if (v.aiStudio.isOk) "AI Studio ✓" else "AI Studio ✗"
-                val flowMark = if (v.flow.isOk) "Flow ✓" else "Flow ✗"
-                val badge = "$webMark · $aiMark · $flowMark"
+                val badge = if (chosenIntent == AutopilotBrain.AutopilotIntent.GOOGLE_FLOW) {
+                    val flowMark = if (v.flow.isOk) "${FlowWarriorEngine.WARRIOR_BADGE_PREFIX} ✓" else "${FlowWarriorEngine.WARRIOR_BADGE_PREFIX} ✗"
+                    "$webMark · $flowMark"
+                } else {
+                    val aiMark = if (v.aiStudio.isOk) "AI Studio ✓" else "AI Studio ✗"
+                    "$webMark · $aiMark"
+                }
                 tvReachabilityBadge.text = badge
                 tvSimpleReachability.text = badge
+                tvSimpleStepLine.visibility = View.VISIBLE
+                tvSimpleStepLine.text = report.headline
 
                 postStatus(report.headline)
                 setStatusDot(
@@ -1165,28 +1334,21 @@ class MainActivity : DastyabActivity() {
                     }
                 )
 
-                val dialog = AlertDialog.Builder(this)
-                    .setTitle(report.headline)
-                    .setMessage(report.summary)
-
                 when (report.outcome) {
                     NewbieAutopilot.Outcome.READY_DIRECT,
                     NewbieAutopilot.Outcome.READY_WITH_VPN -> {
-                        dialog.setPositiveButton(getString(R.string.autopilot_open_aistudio)) { _, _ ->
-                            openBrowserUrl(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
-                        }
-                        dialog.setNeutralButton(getString(R.string.autopilot_open_flow)) { _, _ ->
-                            openBrowserUrl(getString(R.string.service_name_flow), CommandCompat.FLOW_URL)
-                        }
-                        dialog.setNegativeButton(android.R.string.ok, null)
+                        // Zero-Dialog happy path: show inline action buttons directly inside the Hero Card
+                        simpleConnectedActions.visibility = View.VISIBLE
+                        DastyabWidgetProvider.updateAllWidgets(this)
                     }
                     NewbieAutopilot.Outcome.NEEDS_VPN_CONSENT -> {
-                        dialog.setPositiveButton(getString(R.string.autopilot_allow_connect_vpn)) { _, _ ->
-                            requestStartVpn(getString(R.string.service_name_aistudio), CommandCompat.AISTUDIO_URL)
-                        }
-                        dialog.setNegativeButton(android.R.string.cancel, null)
+                        // Trigger OS VPN permission directly with zero extra confirmation popup
+                        requestStartVpn(null, null)
                     }
                     NewbieAutopilot.Outcome.NEEDS_FULL_PROXY_APP -> {
+                        val dialog = AlertDialog.Builder(this)
+                            .setTitle(report.headline)
+                            .setMessage(report.summary)
                         val bestUri = report.bestHarvestedUri
                         val firstApp = report.installedProxyApps.firstOrNull()
                         if (bestUri != null) {
@@ -1206,15 +1368,19 @@ class MainActivity : DastyabActivity() {
                         }
                         dialog.setNeutralButton(getString(R.string.autopilot_open_rescue_hub)) { _, _ -> openRescueHub() }
                         dialog.setNegativeButton(android.R.string.ok, null)
+                        UiSafety.safeShowDialog(this, dialog)
                     }
                     NewbieAutopilot.Outcome.OFFLINE_OR_BLACKOUT -> {
-                        dialog.setPositiveButton(getString(R.string.autopilot_open_blackout_rescue)) { _, _ ->
-                            openRescueHub(BlackoutRescueActivity.ACTION_TROUBLESHOOT)
-                        }
-                        dialog.setNegativeButton(android.R.string.ok, null)
+                        val dialog = AlertDialog.Builder(this)
+                            .setTitle(report.headline)
+                            .setMessage(report.summary)
+                            .setPositiveButton(getString(R.string.autopilot_open_blackout_rescue)) { _, _ ->
+                                openRescueHub(BlackoutRescueActivity.ACTION_TROUBLESHOOT)
+                            }
+                            .setNegativeButton(android.R.string.ok, null)
+                        UiSafety.safeShowDialog(this, dialog)
                     }
                 }
-                UiSafety.safeShowDialog(this, dialog)
             }
         }
     }
@@ -1334,7 +1500,7 @@ class MainActivity : DastyabActivity() {
         val iranBypassTag = if (DomainDnsRules.load(this).iranBypassEnabled) " · .ir Bypass" else ""
         val watchdogSnap = FailoverWatchdog.getSnapshot()
         val watchdogTag = if (statusObj.state == DastyabVpnService.State.CONNECTED && watchdogSnap.active) {
-            " · 5m Auto-Heal"
+            " · ${watchdogSnap.nextIntervalSeconds}s Auto-Heal"
         } else {
             ""
         }
@@ -1345,6 +1511,14 @@ class MainActivity : DastyabActivity() {
             else -> ""
         }
         tvVpnDetails.text = "$endpoint · DNS ${settings.dnsPrimary}$splitSuffix$iranBypassTag$watchdogTag$proxyTag"
+        if (statusObj.state == DastyabVpnService.State.CONNECTED || externalVpn) {
+            simpleConnectedActions.visibility = View.VISIBLE
+        } else if (operation.get() == null && AutopilotBrain.getSessionSnapshot().phase != AutopilotBrain.SessionPhase.CONNECTED) {
+            simpleConnectedActions.visibility = View.GONE
+        }
+        if (simpleBrainDrawer.visibility == View.VISIBLE) {
+            refreshBrainDrawer()
+        }
 
         // Highlight active quick-mode chip cleanly
         val isSplit = activeMode == TunnelConfig.Mode.SPLIT_INCLUDE || activeMode == TunnelConfig.Mode.SPLIT_EXCLUDE

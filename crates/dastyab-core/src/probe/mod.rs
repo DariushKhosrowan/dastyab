@@ -2,6 +2,7 @@
 
 pub mod auto_heal;
 pub mod autopilot;
+pub mod bandit;
 pub mod cleanip;
 pub mod cycle_guard;
 pub mod diagnose;

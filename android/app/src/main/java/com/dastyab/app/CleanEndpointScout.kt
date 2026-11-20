@@ -150,6 +150,93 @@ object CleanEndpointScout {
         }
     }
 
+    /**
+     * Pure-Kotlin /24 neighborhood sampler: expands proven winning [seedIps] into sibling IPs
+     * inside their `/24` (and `/22` fallback) subnets so scouting exploits clean edge clusters first.
+     */
+    fun sampleNeighborhoodIps(
+        seedIps: List<String>,
+        count: Int,
+        rng: Random = Random.Default
+    ): List<String> {
+        if (seedIps.isEmpty() || count <= 0) return emptyList()
+        val result = LinkedHashSet<String>()
+        val validSeeds = seedIps.mapNotNull { ip ->
+            val parts = ip.trim().split('.').mapNotNull { it.toIntOrNull() }
+            if (parts.size == 4 && parts.all { it in 0..255 }) parts else null
+        }
+        if (validSeeds.isEmpty()) return emptyList()
+
+        // Include seeds first, then generate /24 siblings
+        validSeeds.forEach { p ->
+            if (result.size < count) result.add("${p[0]}.${p[1]}.${p[2]}.${p[3]}")
+        }
+        var attempts = 0
+        while (result.size < count && attempts < count * 5) {
+            val base = validSeeds[attempts % validSeeds.size]
+            val thirdOctet = if (attempts % 4 == 3) {
+                ((base[2] + rng.nextInt(-2, 3)).coerceIn(0, 255))
+            } else base[2]
+            val host = rng.nextInt(1, 255)
+            result.add("${base[0]}.${base[1]}.$thirdOctet.$host")
+            attempts++
+        }
+        return result.toList()
+    }
+
+    /**
+     * Smart Clean-IP Scout combining 60% `/24` neighborhood exploitation of [seedIps]
+     * and 40% fresh CIDR exploration, verified with optional TLS + SNI handshake.
+     */
+    fun scoutSmartEdgeIps(
+        seedIps: List<String>,
+        cidrs: List<String> = DEFAULT_EDGE_CIDRS,
+        totalBudget: Int = 36,
+        sniHost: String = "",
+        timeoutMs: Int = 1800
+    ): List<EndpointResult> {
+        val neighborBudget = if (seedIps.isNotEmpty()) (totalBudget * 6) / 10 else 0
+        val exploreBudget = (totalBudget - neighborBudget).coerceAtLeast(8)
+
+        val candidates = LinkedHashMap<String, String>()
+        sampleNeighborhoodIps(seedIps, neighborBudget).forEach { ip ->
+            candidates[ip] = "/24 Neighbor"
+        }
+        val perCidr = ((exploreBudget + cidrs.size - 1) / cidrs.size.coerceAtLeast(1)).coerceIn(1, 5)
+        for (cidr in cidrs) {
+            for (ip in sampleIpsFromCidr(cidr, perCidr)) {
+                if (candidates.size >= totalBudget) break
+                candidates.putIfAbsent(ip, "Edge ($cidr)")
+            }
+        }
+
+        val pool = Executors.newFixedThreadPool(8)
+        return try {
+            val tasks = candidates.entries.map { (ip, label) ->
+                Callable {
+                    val latency = if (sniHost.isNotBlank()) {
+                        probeTlsWithSni(ip, 443, sniHost, timeoutMs)
+                    } else {
+                        probeTcpLatency(ip, 443, timeoutMs)
+                    }
+                    EndpointResult(
+                        address = ip,
+                        label = label,
+                        latencyMs = latency,
+                        reachable = latency >= 0,
+                        kind = Kind.EDGE_IP
+                    )
+                }
+            }
+            pool.invokeAll(tasks, 12, TimeUnit.SECONDS)
+                .mapNotNull { runCatching { it.get() }.getOrNull() }
+                .filter { it.reachable }
+                .sortedBy { it.latencyMs }
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
     /** Scouts clean edge IPs across curated (or custom) CIDRs on TCP port 443. */
     fun scoutCleanEdgeIps(
         cidrs: List<String> = DEFAULT_EDGE_CIDRS,

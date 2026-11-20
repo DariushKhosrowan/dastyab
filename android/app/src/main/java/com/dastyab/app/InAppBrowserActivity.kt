@@ -351,51 +351,68 @@ class InAppBrowserActivity : DastyabActivity() {
             tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusWarning, R.color.colorStatusWarning))
         }
         thread(isDaemon = true, name = "dastyab-browser-autochain") {
-            val result = try {
-                GeoBypassEngine.discoverAndChainBestRoute(
-                    context = this,
-                    targetService = target,
-                    allowHarvest = true,
-                    maxCandidates = if (target == GeoBypassEngine.TargetService.GOOGLE_FLOW) 56 else 48,
-                    excludedEgressIps = excludedIpsSnapshot,
-                    excludeCurrentRoute = true,
-                    excludedChainSpecs = excludedSpecsSnapshot,
-                    maxRounds = 3
-                ) { step ->
-                    runOnUiThread {
-                        if (UiSafety.isActivityAlive(this) && this::tvRouteStatus.isInitialized) {
-                            tvRouteStatus.text = step
+            val isFlow = target == GeoBypassEngine.TargetService.GOOGLE_FLOW
+            var warriorReport: FlowWarriorEngine.WarriorReport? = null
+            var aiResult: GeoBypassEngine.ChainDiscoveryResult? = null
+            try {
+                if (isFlow) {
+                    warriorReport = FlowWarriorEngine.runFlowWarriorAutopilot(
+                        context = this,
+                        excludedEgressIps = excludedIpsSnapshot,
+                        excludedChainSpecs = excludedSpecsSnapshot,
+                        excludeCurrentRoute = true
+                    ) { step ->
+                        runOnUiThread {
+                            if (UiSafety.isActivityAlive(this) && this::tvRouteStatus.isInitialized) {
+                                tvRouteStatus.text = step
+                            }
+                        }
+                    }
+                } else {
+                    aiResult = GeoBypassEngine.discoverAndChainBestRoute(
+                        context = this,
+                        targetService = target,
+                        allowHarvest = true,
+                        maxCandidates = 48,
+                        excludedEgressIps = excludedIpsSnapshot,
+                        excludeCurrentRoute = true,
+                        excludedChainSpecs = excludedSpecsSnapshot,
+                        maxRounds = 3
+                    ) { step ->
+                        runOnUiThread {
+                            if (UiSafety.isActivityAlive(this) && this::tvRouteStatus.isInitialized) {
+                                tvRouteStatus.text = step
+                            }
                         }
                     }
                 }
             } finally {
                 autoChainInFlight.set(false)
             }
+            val ok = warriorReport?.conquered ?: aiResult?.success ?: false
+            val summaryText = warriorReport?.headline ?: aiResult?.summary ?: getString(R.string.browser_auto_chain_failed, target.displayName)
+            val probeReport = warriorReport?.probeReport ?: aiResult?.report
             runOnUiThread {
                 if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
                 if (this::btnAutoFix.isInitialized) btnAutoFix.isEnabled = true
                 Toast.makeText(
                     this,
-                    if (result.success) result.summary else getString(R.string.browser_auto_chain_failed, target.displayName),
+                    if (ok) summaryText else getString(R.string.browser_auto_chain_failed, target.displayName),
                     Toast.LENGTH_LONG
                 ).show()
-                if (result.success) {
+                if (ok) {
                     lastDomAlertKey = ""
                     clearServiceGeoCookiesAndCache(target)
-                    val reloadTargetUrl = if (target == GeoBypassEngine.TargetService.GOOGLE_FLOW) {
-                        CommandCompat.FLOW_URL
-                    } else {
-                        CommandCompat.AISTUDIO_URL
-                    }
+                    val reloadTargetUrl = if (isFlow) CommandCompat.FLOW_URL else CommandCompat.AISTUDIO_URL
                     applyProxyAndLoad(reloadTargetUrl, bypassCache = true)
                 } else {
-                    result.report.egress?.ip?.takeIf { it.isNotBlank() }?.let { failedEgressIps.add(it) }
+                    probeReport?.egress?.ip?.takeIf { it.isNotBlank() }?.let { failedEgressIps.add(it) }
                     probeBannerEgress(GeoBypassEngine.resolveCurrentRoute(this, targetService = target), currentOrInitialUrl())
                     UiSafety.safeShowDialog(
                         this,
                         android.app.AlertDialog.Builder(this)
                             .setTitle(getString(R.string.browser_auto_chain_failed_title))
-                            .setMessage("${result.summary}\n\n${result.report.recommendation}")
+                            .setMessage("$summaryText\n\n${probeReport?.recommendation.orEmpty()}")
                             .setPositiveButton(getString(R.string.browser_btn_retry_chain)) { _, _ ->
                                 autoChainCurrentService(target)
                             }

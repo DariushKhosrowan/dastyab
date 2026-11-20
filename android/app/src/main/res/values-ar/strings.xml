@@ -785,4 +785,26 @@
     <string name="layers_btn_build_shield">إنشاء درع VPN متعدد الطبقات تلقائياً</string>
     <string name="layers_shield_building">جارٍ بناء واختبار سرعة طبقات VPN متعددة البروتوكولات…</string>
     <string name="layers_shield_built_toast">تم بناء درع VPN مرن من %1$d طبقات!</string>
+
+    <!-- Autopilot Intent Presets, Live 3-Step Stepper, Brain Drawer & Smart Tile -->
+    <string name="intent_balanced_short">ويب متوازن</string>
+    <string name="intent_aistudio_short">AI Studio</string>
+    <string name="intent_flow_short">فلو ⚔</string>
+    <string name="intent_blackout_short">انقطاع شديد</string>
+    <string name="simple_step_sensing">الخطوة ١/٣ · استشعار الشبكة والمسارات النشطة…</string>
+    <string name="simple_step_racing">الخطوة ٢/٣ · سباق متعدد البروتوكولات و DoH…</string>
+    <string name="simple_step_verifying">الخطوة ٣/٣ · التحقق الجغرافي وحفظ المسار الاحتياطي…</string>
+    <string name="simple_brain_toggle_show">عقل الطيار الآلي والمسارات المتعلمة ▾</string>
+    <string name="simple_brain_toggle_hide">إخفاء عقل الطيار الآلي ▴</string>
+    <string name="simple_brain_empty">لا توجد إحصاءات متعلمة لهذه الشبكة بعد.</string>
+    <string name="simple_brain_summary_fmt">الشبكة: %1$s · النشط: %2$s\nالاحتياطي: %3$d · المعزول: %4$d · المراقبة: %5$d ث\nالأفضل: %6$s</string>
+    <string name="simple_brain_reset_btn">إعادة ضبط المسارات المتعلمة</string>
+    <string name="simple_brain_reset_done">تم مسح المسارات المتعلمة وقواطع الدائرة.</string>
+    <string name="tile_tap_standby_ready">انقر للاتصال (%1$d احتياطي)</string>
+    <string name="flow_warrior_card_title">محارب فلو ⚔</string>
+    <string name="flow_warrior_card_sub">محرك النسر الشرس المستقل لتجاوز حظر Google Flow القاسي</string>
+    <string name="flow_warrior_launch_btn">⚔ محارب Flow</string>
+    <string name="flow_warrior_running">⚔ محارب فلو يشغّل خوارزمية النسر الشرس…</string>
+    <string name="flow_warrior_conquered">⚔ محارب فلو نجح ✓ (%1$s · %2$dms)</string>
+    <string name="flow_warrior_retry_btn">⚔ إعادة التصعيد الشرس</string>
 </resources>

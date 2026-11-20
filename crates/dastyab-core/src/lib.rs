@@ -110,6 +110,7 @@ pub use ops::status;
 pub use ops::tor;
 pub use probe::auto_heal;
 pub use probe::autopilot;
+pub use probe::bandit;
 pub use probe::cleanip;
 pub use probe::cycle_guard;
 pub use probe::diagnose;

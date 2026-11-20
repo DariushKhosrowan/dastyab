@@ -785,4 +785,26 @@
     <string name="layers_btn_build_shield">Güçlü Çok Katmanlı VPN Kalkanı Kur</string>
     <string name="layers_shield_building">Çok protokollü VPN katmanları oluşturuluyor ve ölçülüyor…</string>
     <string name="layers_shield_built_toast">%1$d katmanlı dayanıklı VPN kalkanı kuruldu!</string>
+
+    <!-- Autopilot Intent Presets, Live 3-Step Stepper, Brain Drawer & Smart Tile -->
+    <string name="intent_balanced_short">Dengeli Web</string>
+    <string name="intent_aistudio_short">AI Studio</string>
+    <string name="intent_flow_short">Flow ⚔</string>
+    <string name="intent_blackout_short">Karartma</string>
+    <string name="simple_step_sensing">Adım 1/3 · Ağ bağlamı ve aktif yollar algılanıyor…</string>
+    <string name="simple_step_racing">Adım 2/3 · Çok protokollü rota ve DoH yarışı…</string>
+    <string name="simple_step_verifying">Adım 3/3 · Coğrafi erişim doğrulanıyor ve yedekleniyor…</string>
+    <string name="simple_brain_toggle_show">Otopilot Beyni &amp; Öğrenilen Rotalar ▾</string>
+    <string name="simple_brain_toggle_hide">Otopilot Beynini Gizle ▴</string>
+    <string name="simple_brain_empty">Bu ağ için henüz öğrenilmiş rota verisi yok.</string>
+    <string name="simple_brain_summary_fmt">Ağ: %1$s · Aktif: %2$s\nYedek: %3$d · Karantina: %4$d · Bekçi: %5$ds\nEn İyi: %6$s</string>
+    <string name="simple_brain_reset_btn">Öğrenilen Rotaları Sıfırla</string>
+    <string name="simple_brain_reset_done">Öğrenilen Otopilot rotaları temizlendi.</string>
+    <string name="tile_tap_standby_ready">Bağlanmak için dokun (%1$d yedek)</string>
+    <string name="flow_warrior_card_title">Flow Savaşçısı ⚔</string>
+    <string name="flow_warrior_card_sub">Sert Google Flow engeli için bağımsız Acımasız Kartal motoru</string>
+    <string name="flow_warrior_launch_btn">⚔ Flow Savaşçısı</string>
+    <string name="flow_warrior_running">⚔ Flow Savaşçısı Acımasız Kartal bypassını başlatıyor…</string>
+    <string name="flow_warrior_conquered">⚔ Flow Savaşçısı ✓ (%1$s · %2$dms)</string>
+    <string name="flow_warrior_retry_btn">⚔ Acımasız Yükseltmeyi Dene</string>
 </resources>

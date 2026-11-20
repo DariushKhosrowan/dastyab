@@ -785,4 +785,26 @@
     <string name="layers_btn_build_shield">Автосборка многослойного щита VPN</string>
     <string name="layers_shield_building">Сборка и тестирование многопротокольных слоёв VPN…</string>
     <string name="layers_shield_built_toast">Создан многослойный щит VPN (%1$d слоёв)!</string>
+
+    <!-- Autopilot Intent Presets, Live 3-Step Stepper, Brain Drawer & Smart Tile -->
+    <string name="intent_balanced_short">Обычный веб</string>
+    <string name="intent_aistudio_short">AI Studio</string>
+    <string name="intent_flow_short">Flow ⚔</string>
+    <string name="intent_blackout_short">Блэкаут</string>
+    <string name="simple_step_sensing">Шаг 1/3 · Анализ сети и активных маршрутов…</string>
+    <string name="simple_step_racing">Шаг 2/3 · Параллельная гонка протоколов и DoH…</string>
+    <string name="simple_step_verifying">Шаг 3/3 · Проверка гео-доступа и сохранение резерва…</string>
+    <string name="simple_brain_toggle_show">Мозг автопилота и маршруты ▾</string>
+    <string name="simple_brain_toggle_hide">Скрыть мозг автопилота ▴</string>
+    <string name="simple_brain_empty">Для этой сети ещё нет сохранённой статистики.</string>
+    <string name="simple_brain_summary_fmt">Сеть: %1$s · Активно: %2$s\nРезерв: %3$d · Карантин: %4$d · Страж: %5$dс\nТоп: %6$s</string>
+    <string name="simple_brain_reset_btn">Сбросить изученные маршруты</string>
+    <string name="simple_brain_reset_done">Изученные маршруты автопилота очищены.</string>
+    <string name="tile_tap_standby_ready">Нажмите для входа (%1$d резерв)</string>
+    <string name="flow_warrior_card_title">Воин Flow ⚔</string>
+    <string name="flow_warrior_card_sub">Независимый движок «Суровый Орёл» для жёсткого гео-блока Google Flow</string>
+    <string name="flow_warrior_launch_btn">⚔ Воин Flow</string>
+    <string name="flow_warrior_running">⚔ Воин Flow запускает штурм «Суровый Орёл»…</string>
+    <string name="flow_warrior_conquered">⚔ Воин Flow пробил ✓ (%1$s · %2$dms)</string>
+    <string name="flow_warrior_retry_btn">⚔ Повторить жёсткий штурм</string>
 </resources>

@@ -1020,7 +1020,13 @@ object GeoBypassEngine {
         if (probe.unsupportedRegion) score += 100_000L
         if (target == TargetService.GOOGLE_FLOW && !probe.appShellOk) score += 50_000L
         if (!report.accountsReachable) score += 20_000L
-        if (!notProxy) score += 5_000L
+        if (target == TargetService.GOOGLE_FLOW) {
+            val cc = report.egress?.countryCode?.uppercase().orEmpty()
+            if (!FlowWarriorEngine.WARRIOR_TIER1_COUNTRIES.contains(cc)) score += 2_500L
+            if (!notProxy) score += 15_000L
+        } else if (!notProxy) {
+            score += 5_000L
+        }
         score += latency.coerceAtMost(4_999L)
         return score
     }
@@ -1619,10 +1625,15 @@ object GeoBypassEngine {
             }
         }
 
-        // Prioritize preferred clean countries first, then shortest latency, then enforce /16 subnet spread
+        // Prioritize Tier-1 Warrior countries for Flow or preferred clean countries for AI Studio, then latency, then /16 spread
         val sortedClean = clean.sortedWith(
             compareBy<LocalProxyServer.HopTraceResult> {
-                if (PREFERRED_CLEAN_COUNTRIES.contains(it.countryCode)) 0 else 1
+                val tierMatch = if (targetService == TargetService.GOOGLE_FLOW) {
+                    FlowWarriorEngine.WARRIOR_TIER1_COUNTRIES.contains(it.countryCode)
+                } else {
+                    PREFERRED_CLEAN_COUNTRIES.contains(it.countryCode)
+                }
+                if (tierMatch) 0 else 1
             }.thenBy { it.latencyMs }
         ).map { it.hop }
         val diverseClean = UniversalConfig.selectDiverseProxyHops(sortedClean, limit = sortedClean.size.coerceAtLeast(1))

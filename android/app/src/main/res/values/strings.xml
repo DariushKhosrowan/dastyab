@@ -843,4 +843,26 @@
     <string name="main_connect_auto_chaining">Geo-block detected on %1$s (%2$s) — auto-chaining bypass layers…</string>
     <string name="main_connect_all_clear">Connected &amp; Geo-Clear ✓ (%1$s · AI Studio &amp; Flow Ready)</string>
     <string name="main_connect_partial_or_blocked">%1$s · %2$s · %3$s</string>
+
+    <!-- Autopilot Intent Presets, Live 3-Step Stepper, Brain Drawer & Smart Tile -->
+    <string name="intent_balanced_short">Balanced Web</string>
+    <string name="intent_aistudio_short">AI Studio</string>
+    <string name="intent_flow_short">Flow ⚔</string>
+    <string name="intent_blackout_short">Blackout</string>
+    <string name="simple_step_sensing">Step 1/3 · Sensing network context &amp; active paths…</string>
+    <string name="simple_step_racing">Step 2/3 · Staggered racing diverse routes &amp; DoH…</string>
+    <string name="simple_step_verifying">Step 3/3 · Verifying geo-clearance &amp; saving standby…</string>
+    <string name="simple_brain_toggle_show">Autopilot Brain &amp; Learned Routes ▾</string>
+    <string name="simple_brain_toggle_hide">Hide Autopilot Brain ▴</string>
+    <string name="simple_brain_empty">No learned bandit stats for this network yet.</string>
+    <string name="simple_brain_summary_fmt">Network: %1$s · Active: %2$s\nStandby: %3$d · Quarantined: %4$d · Watchdog: %5$ds\nTop Bandit: %6$s</string>
+    <string name="simple_brain_reset_btn">Reset Learned Routes</string>
+    <string name="simple_brain_reset_done">Cleared learned Autopilot routes and circuit breakers.</string>
+    <string name="tile_tap_standby_ready">Tap to connect (%1$d standby)</string>
+    <string name="flow_warrior_card_title">Flow Warrior ⚔</string>
+    <string name="flow_warrior_card_sub">Independent Brutal Eagle engine for strict Google Flow</string>
+    <string name="flow_warrior_launch_btn">⚔ Flow Warrior</string>
+    <string name="flow_warrior_running">⚔ Flow Warrior engaging Brutal Eagle bypass…</string>
+    <string name="flow_warrior_conquered">⚔ Flow Warrior ✓ (%1$s · %2$dms)</string>
+    <string name="flow_warrior_retry_btn">⚔ Retry Brutal Escalation</string>
 </resources>

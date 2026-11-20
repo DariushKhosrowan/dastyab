@@ -278,8 +278,83 @@
                     android:textSize="12.5sp"
                     android:lineSpacingExtra="2dp"
                     android:textColor="?attr/dastyabTextSecondary"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="14dp" />
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp" />
+
+                <!-- Intent Presets: Balanced Web / AI Studio / Google Flow / Blackout Survival -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none"
+                    android:fillViewport="true"
+                    android:paddingBottom="10dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnIntentBalanced"
+                            android:layout_width="wrap_content"
+                            android:layout_height="34dp"
+                            android:minWidth="0dp"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:layout_marginEnd="6dp"
+                            android:text="@string/intent_balanced_short"
+                            android:textSize="11.5sp"
+                            android:textAllCaps="false"
+                            android:background="@drawable/tab_active_bg" />
+
+                        <Button
+                            android:id="@+id/btnIntentAiStudio"
+                            android:layout_width="wrap_content"
+                            android:layout_height="34dp"
+                            android:minWidth="0dp"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:layout_marginEnd="6dp"
+                            android:text="@string/intent_aistudio_short"
+                            android:textSize="11.5sp"
+                            android:textAllCaps="false"
+                            android:background="@drawable/tab_inactive_bg" />
+
+                        <Button
+                            android:id="@+id/btnIntentFlow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="34dp"
+                            android:minWidth="0dp"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:layout_marginEnd="6dp"
+                            android:text="@string/intent_flow_short"
+                            android:textSize="11.5sp"
+                            android:textAllCaps="false"
+                            android:background="@drawable/tab_inactive_bg" />
+
+                        <Button
+                            android:id="@+id/btnIntentBlackout"
+                            android:layout_width="wrap_content"
+                            android:layout_height="34dp"
+                            android:minWidth="0dp"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:text="@string/intent_blackout_short"
+                            android:textSize="11.5sp"
+                            android:textAllCaps="false"
+                            android:background="@drawable/tab_inactive_bg" />
+                    </LinearLayout>
+                </HorizontalScrollView>
+
+                <TextView
+                    android:id="@+id/tvSimpleStepLine"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="11.5sp"
+                    android:textColor="?attr/dastyabAccent"
+                    android:paddingBottom="6dp"
+                    android:visibility="gone" />
 
                 <ProgressBar
                     android:id="@+id/simpleProgress"
@@ -299,6 +374,36 @@
                     android:minHeight="52dp"
                     android:text="@string/simple_btn_magic"
                     style="@style/DastyabButtonPrimary" />
+
+                <!-- Inline Zero-Dialog Connected Quick-Launch Bar -->
+                <LinearLayout
+                    android:id="@+id/simpleConnectedActions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp"
+                    android:visibility="gone">
+
+                    <Button
+                        android:id="@+id/btnSimpleLaunchAiStudio"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/autopilot_open_aistudio"
+                        style="@style/DastyabButton" />
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="0dp" />
+
+                    <Button
+                        android:id="@+id/btnSimpleLaunchFlow"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/flow_warrior_launch_btn"
+                        style="@style/DastyabButton" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -324,6 +429,50 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/simple_btn_speed_ip"
+                        style="@style/DastyabButton" />
+                </LinearLayout>
+
+                <!-- Expandable Autopilot Brain Drawer (zero clutter unless expanded) -->
+                <Button
+                    android:id="@+id/btnToggleBrainDrawer"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/simple_brain_toggle_show"
+                    android:textSize="11.5sp"
+                    android:textAllCaps="false"
+                    style="@style/DastyabButton" />
+
+                <LinearLayout
+                    android:id="@+id/simpleBrainDrawer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/chip_bg"
+                    android:padding="12dp"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvSimpleBrainDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="11.5sp"
+                        android:lineSpacingExtra="2dp"
+                        android:textColor="?attr/dastyabTextSecondary"
+                        android:text="@string/simple_brain_empty" />
+
+                    <Button
+                        android:id="@+id/btnResetBrain"
+                        android:layout_width="wrap_content"
+                        android:layout_height="34dp"
+                        android:layout_marginTop="8dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="@string/simple_brain_reset_btn"
+                        android:textSize="11sp"
+                        android:textAllCaps="false"
                         style="@style/DastyabButton" />
                 </LinearLayout>
             </LinearLayout>
@@ -473,14 +622,14 @@
                         <ImageView
                             android:layout_width="22dp"
                             android:layout_height="22dp"
-                            android:src="@drawable/ic_action_flow"
-                            android:contentDescription="@string/simple_card_flow" />
+                            android:src="@drawable/ic_flow_warrior"
+                            android:contentDescription="@string/flow_warrior_card_title" />
                     </LinearLayout>
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/simple_card_flow"
+                        android:text="@string/flow_warrior_card_title"
                         android:textSize="15sp"
                         android:textStyle="bold"
                         android:textColor="?attr/dastyabTextPrimary"
@@ -490,7 +639,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/simple_card_flow_sub"
+                        android:text="@string/flow_warrior_card_sub"
                         android:textSize="12sp"
                         android:textColor="?attr/dastyabTextSecondary" />
                 </LinearLayout>
@@ -1021,14 +1170,14 @@
                     <ImageView
                         android:layout_width="21dp"
                         android:layout_height="21dp"
-                        android:src="@drawable/ic_action_flow"
-                        android:contentDescription="@string/action_open_flow" />
+                        android:src="@drawable/ic_flow_warrior"
+                        android:contentDescription="@string/flow_warrior_card_title" />
                 </LinearLayout>
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/action_open_flow"
+                    android:text="@string/flow_warrior_card_title"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="?attr/dastyabTextPrimary"
@@ -1038,7 +1187,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/action_open_flow_subtitle"
+                    android:text="@string/flow_warrior_card_sub"
                     android:textSize="12sp"
                     android:textColor="?attr/dastyabTextSecondary" />
             </LinearLayout>

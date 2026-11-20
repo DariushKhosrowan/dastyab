@@ -68,10 +68,20 @@ class DastyabVpnTileService : TileService() {
             } else {
                 null
             }
+            val watchdog = FailoverWatchdog.getSnapshot()
+            val standbyCount = if (UiSafety.isUserUnlockedCompat(this)) {
+                runCatching { AutopilotBrain.loadStandbyUris(this).size }.getOrDefault(0)
+            } else {
+                0
+            }
             tile.label = localized.getString(R.string.tile_vpn_label)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = if (connected) {
-                    activeLayer?.mode?.localizedLabel(localized) ?: localized.getString(R.string.tile_connected)
+                    val modeLabel = activeLayer?.mode?.localizedLabel(localized) ?: localized.getString(R.string.tile_connected)
+                    val latencyTag = if (watchdog.lastLatencyMs > 0L) " · ${watchdog.lastLatencyMs}ms" else ""
+                    "$modeLabel$latencyTag"
+                } else if (standbyCount > 0) {
+                    localized.getString(R.string.tile_tap_standby_ready, standbyCount)
                 } else {
                     localized.getString(R.string.tile_tap_to_connect)
                 }

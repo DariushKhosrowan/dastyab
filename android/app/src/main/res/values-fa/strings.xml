@@ -797,4 +797,26 @@
     <string name="layers_btn_build_shield">ساخت خودکار سپر چندلایه قدرتمند VPN</string>
     <string name="layers_shield_building">در حال ساخت و تست سرعت لایه‌های چندپروتکلی VPN…</string>
     <string name="layers_shield_built_toast">سپر مقاوم %1$d لایه‌ای VPN ساخته شد!</string>
+
+    <!-- Autopilot Intent Presets, Live 3-Step Stepper, Brain Drawer & Smart Tile -->
+    <string name="intent_balanced_short">وب متعادل</string>
+    <string name="intent_aistudio_short">AI Studio</string>
+    <string name="intent_flow_short">فلو ⚔</string>
+    <string name="intent_blackout_short">قطعی کامل</string>
+    <string name="simple_step_sensing">مرحله ۱/۳ · سنجش وضعیت شبکه و مسیرهای فعال…</string>
+    <string name="simple_step_racing">مرحله ۲/۳ · مسابقه چندپروتکلی و تست DoH…</string>
+    <string name="simple_step_verifying">مرحله ۳/۳ · راستی‌آزمایی تحریم و ذخیره مسیر پشتیبان…</string>
+    <string name="simple_brain_toggle_show">مغز خودکار و مسیرهای آموخته‌شده ▾</string>
+    <string name="simple_brain_toggle_hide">بستن مغز خودکار ▴</string>
+    <string name="simple_brain_empty">هنوز آماری برای این شبکه یادگیری نشده است.</string>
+    <string name="simple_brain_summary_fmt">شبکه: %1$s · فعال: %2$s\nپشتیبان آماده: %3$d · قرنطینه: %4$d · پایش: %5$d ثانیه\nبرترین امتیاز: %6$s</string>
+    <string name="simple_brain_reset_btn">پاک‌سازی مسیرهای آموخته‌شده</string>
+    <string name="simple_brain_reset_done">حافظه مسیرها و قرنطینه‌های خلبان خودکار پاک شد.</string>
+    <string name="tile_tap_standby_ready">لمس برای اتصال (%1$d آماده)</string>
+    <string name="flow_warrior_card_title">جنگجوی فلو ⚔</string>
+    <string name="flow_warrior_card_sub">الگوریتم مستقل عقاب بی‌رحم برای عبور از تحریم سخت Google Flow</string>
+    <string name="flow_warrior_launch_btn">⚔ جنگجوی Flow</string>
+    <string name="flow_warrior_running">⚔ جنگجوی فلو در حال حمله و شکستن فیلتر Flow…</string>
+    <string name="flow_warrior_conquered">⚔ جنگجوی فلو فتح کرد ✓ (%1$s · %2$dms)</string>
+    <string name="flow_warrior_retry_btn">⚔ حمله مجدد و تشدید لایه‌ها</string>
 </resources>

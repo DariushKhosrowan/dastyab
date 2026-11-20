@@ -54,4 +54,41 @@ class FailoverWatchdogTest {
         assertTrue(snap.active)
         assertEquals("https://8.8.8.8/dns-query", snap.activeDohUrl)
     }
+
+    @Test
+    fun adaptiveCadenceTightensOnSuspectAndRelaxesWhenHealthy() {
+        assertEquals(
+            FailoverWatchdog.SUSPECT_INTERVAL_SECONDS,
+            FailoverWatchdog.recommendedDelaySeconds(healthyStreak = 5, suspect = true)
+        )
+        assertEquals(
+            FailoverWatchdog.WARMUP_INTERVAL_SECONDS,
+            FailoverWatchdog.recommendedDelaySeconds(healthyStreak = 1, suspect = false)
+        )
+        assertEquals(
+            FailoverWatchdog.HEALTHY_INTERVAL_SECONDS,
+            FailoverWatchdog.recommendedDelaySeconds(healthyStreak = 3, suspect = false)
+        )
+    }
+
+    @Test
+    fun passiveLivenessSentinelDetectsHalfOpenBlackholeOnlyAfterSustainedStall() {
+        val sentinel = FailoverWatchdog.PassiveLivenessSentinel(stallWindowMs = 4500L, minConsecutiveStalls = 2)
+        sentinel.recordInbound(512L, nowMs = 1_000L)
+        sentinel.recordOutbound(2048L, nowMs = 2_000L)
+
+        // Within window -> healthy
+        assertEquals(FailoverWatchdog.SentinelVerdict.HEALTHY, sentinel.evaluate(nowMs = 4_000L))
+
+        // First expired check -> still 1 consecutive, waits for 2nd confirmation
+        sentinel.recordOutbound(512L, nowMs = 6_000L)
+        assertEquals(FailoverWatchdog.SentinelVerdict.HEALTHY, sentinel.evaluate(nowMs = 6_500L))
+
+        // Second expired check -> triggers STALLED
+        assertEquals(FailoverWatchdog.SentinelVerdict.STALLED, sentinel.evaluate(nowMs = 7_500L))
+
+        // Any inbound byte resets stall counter cleanly
+        sentinel.recordInbound(128L, nowMs = 7_600L)
+        assertEquals(FailoverWatchdog.SentinelVerdict.HEALTHY, sentinel.evaluate(nowMs = 7_700L))
+    }
 }

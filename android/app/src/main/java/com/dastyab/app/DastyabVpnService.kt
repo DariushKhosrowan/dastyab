@@ -8,6 +8,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.ProxyInfo
 import android.net.VpnService
 import android.os.Build
@@ -47,6 +51,9 @@ class DastyabVpnService : VpnService() {
     private var dnsExecutor: ExecutorService? = null
     private var watchdogScheduler: ScheduledExecutorService? = null
     private val watchdogTickCount = AtomicInteger(0)
+    private val watchdogHealthyStreak = AtomicInteger(0)
+    private val lastNetworkTriggerMs = java.util.concurrent.atomic.AtomicLong(0L)
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     @Volatile private var activeDohUrl: String = TunnelConfig.DEFAULT_DOH_URL
     private val tunWriteLock = Any()
 
@@ -306,6 +313,7 @@ class DastyabVpnService : VpnService() {
                                     Thread.sleep(15)
                                     continue
                                 }
+                                FailoverWatchdog.passiveSentinel.recordOutbound(read.toLong())
                                 val req = DnsPacketCodec.parseIpv4UdpDnsQuery(buf, read)
                                 if (req != null) {
                                     val exec = dnsExecutor
@@ -319,6 +327,7 @@ class DastyabVpnService : VpnService() {
                                             )
                                             if (respBytes != null && running.get()) {
                                                 val ipPacket = DnsPacketCodec.buildIpv4UdpDnsResponse(req, respBytes)
+                                                FailoverWatchdog.passiveSentinel.recordInbound(ipPacket.size.toLong())
                                                 synchronized(tunWriteLock) {
                                                     try {
                                                         output.write(ipPacket)
@@ -405,6 +414,7 @@ class DastyabVpnService : VpnService() {
 
     private fun stopTunnelInternal() {
         running.set(false)
+        unregisterNetworkMonitor()
         watchdogScheduler?.shutdownNow()
         watchdogScheduler = null
         FailoverWatchdog.reset(active = false)
@@ -419,12 +429,15 @@ class DastyabVpnService : VpnService() {
     }
 
     /**
-     * Starts the 5-minute Smart Auto-Failover & Background Harvester watchdog while VPN is connected.
+     * Starts the Adaptive Self-Healing Watchdog (15s on stall/drop → 60s warmup → 240s healthy)
+     * plus 10s passive half-open sentinel observer & OS NetworkCallback listener.
      */
     private fun startWatchdogIfEnabled(settings: TunnelConfig.Settings) {
+        unregisterNetworkMonitor()
         watchdogScheduler?.shutdownNow()
         watchdogScheduler = null
         watchdogTickCount.set(0)
+        watchdogHealthyStreak.set(0)
         if (!settings.watchdogEnabled) {
             FailoverWatchdog.reset(active = false, dohUrl = activeDohUrl)
             return
@@ -434,53 +447,146 @@ class DastyabVpnService : VpnService() {
             Thread(r, "dastyab-watchdog").apply { isDaemon = true }
         }
         watchdogScheduler = sched
+        registerNetworkMonitor(sched)
+
+        // Lightweight passive stall observer every 10 seconds (zero network cost)
         sched.scheduleAtFixedRate(
             {
                 if (!running.get()) return@scheduleAtFixedRate
-                runWatchdogTick()
+                if (FailoverWatchdog.passiveSentinel.evaluate() == FailoverWatchdog.SentinelVerdict.STALLED) {
+                    DastyabLogger.w("Watchdog", "Passive Liveness Sentinel detected half-open stall — triggering early heal tick")
+                    sched.execute { if (running.get()) runWatchdogTick(sched, reschedule = false) }
+                }
             },
-            FailoverWatchdog.CHECK_INTERVAL_SECONDS,
-            FailoverWatchdog.CHECK_INTERVAL_SECONDS,
+            10L,
+            10L,
             TimeUnit.SECONDS
         )
+
+        scheduleNextWatchdogTick(sched, FailoverWatchdog.WARMUP_INTERVAL_SECONDS)
     }
 
-    private fun runWatchdogTick() {
+    private fun scheduleNextWatchdogTick(sched: ScheduledExecutorService, delaySeconds: Long) {
+        if (!running.get() || sched.isShutdown) return
+        runCatching {
+            sched.schedule(
+                {
+                    if (!running.get()) return@schedule
+                    runWatchdogTick(sched, reschedule = true)
+                },
+                delaySeconds.coerceIn(10L, 300L),
+                TimeUnit.SECONDS
+            )
+        }
+    }
+
+    private fun registerNetworkMonitor(sched: ScheduledExecutorService) {
+        runCatching {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+            val req = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    triggerDebouncedNetworkProbe(sched)
+                }
+
+                override fun onLost(network: Network) {
+                    triggerDebouncedNetworkProbe(sched)
+                }
+            }
+            cm.registerNetworkCallback(req, cb)
+            networkCallback = cb
+        }
+    }
+
+    private fun unregisterNetworkMonitor() {
+        val cb = networkCallback ?: return
+        networkCallback = null
+        runCatching {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+            cm.unregisterNetworkCallback(cb)
+        }
+    }
+
+    private fun triggerDebouncedNetworkProbe(sched: ScheduledExecutorService) {
+        val now = System.currentTimeMillis()
+        val prev = lastNetworkTriggerMs.get()
+        if (now - prev < 5000L || !lastNetworkTriggerMs.compareAndSet(prev, now)) return
+        if (!running.get() || sched.isShutdown) return
+        runCatching {
+            sched.schedule({ if (running.get()) runWatchdogTick(sched, reschedule = false) }, 2L, TimeUnit.SECONDS)
+        }
+    }
+
+    private fun runWatchdogTick(sched: ScheduledExecutorService, reschedule: Boolean = true) {
         val tick = watchdogTickCount.incrementAndGet()
         val prev = FailoverWatchdog.getSnapshot()
+        var nextDelay = FailoverWatchdog.WARMUP_INTERVAL_SECONDS
         try {
-            val check = ReachabilityVerifier.verifyAll(timeoutMs = 3000)
-            val action = FailoverWatchdog.evaluateAction(
-                internetOk = check.internet.isOk,
-                aiStudioOk = check.aiStudio.isOk,
-                flowOk = check.flow.isOk
-            )
+            val check = ReachabilityVerifier.verifyAll(timeoutMs = 2800)
+            val sentinelStalled = FailoverWatchdog.passiveSentinel.evaluate() == FailoverWatchdog.SentinelVerdict.STALLED
+            val action = if (sentinelStalled && !check.internet.isOk) {
+                FailoverWatchdog.Action.SWAP_DOH_OR_LAYER
+            } else {
+                FailoverWatchdog.evaluateAction(
+                    internetOk = check.internet.isOk,
+                    aiStudioOk = check.aiStudio.isOk,
+                    flowOk = check.flow.isOk
+                )
+            }
             var swaps = prev.swapCount
             var harvests = prev.backgroundHarvestCount
-            var summary: String
+            val netKey = runCatching { AutopilotBrain.detectNetworkContextKey(this) }.getOrDefault("default")
+            val activeLayer = runCatching { VpnLayerStore.getActiveLayer(this) }.getOrNull()
+            val summary: String
+
+            val geoMask = (if (check.internet.isOk) AutopilotBrain.GEO_CLEAR_WEB else 0) or
+                (if (check.aiStudio.isOk) AutopilotBrain.GEO_CLEAR_AISTUDIO else 0) or
+                (if (check.flow.isOk) AutopilotBrain.GEO_CLEAR_FLOW else 0)
+
+            val activeArmId = activeLayer?.configUri?.takeIf { it.isNotBlank() } ?: activeDohUrl
+            val activeProto = activeLayer?.configUri?.takeIf { it.isNotBlank() }?.let { UniversalConfig.protocolOf(it) } ?: "doh"
+            val rttSample = (check.aiStudio.latencyMs.takeIf { it >= 0 } ?: check.internet.latencyMs).toDouble()
 
             if (action == FailoverWatchdog.Action.SWAP_DOH_OR_LAYER) {
+                watchdogHealthyStreak.set(0)
+                runCatching {
+                    AutopilotBrain.ensureLoaded(this)
+                    AutopilotBrain.recordOutcome(netKey, activeArmId, activeProto, success = false, rttMs = null, persistContext = this)
+                }
                 val nextDoh = FailoverWatchdog.nextFallbackDoh(activeDohUrl)
                 activeDohUrl = nextDoh
                 dnsCache.clear()
                 TunnelConfig.saveDohAndDns(this, dohUrl = nextDoh, primaryDns = null)
                 swaps++
-                val currentLayerId = runCatching { VpnLayerStore.getActiveLayerId(this) }.getOrDefault("")
+                val currentLayerId = activeLayer?.id.orEmpty()
                 val backup = runCatching { VpnLayerStore.findFastestBackupLayer(this, currentLayerId, timeoutMs = 1500) }.getOrNull()
                 summary = if (backup != null && backup.layer.dohUrl != nextDoh) {
                     activeDohUrl = backup.layer.dohUrl
                     VpnLayerStore.activateLayer(this, backup.layer, restartIfConnected = false)
-                    "Auto-failover → ${backup.layer.name} (${backup.latencyMs}ms · check #$tick)"
+                    "Auto-healed → ${backup.layer.name} (${backup.latencyMs}ms · #$tick)"
                 } else {
-                    "Auto-swapped DoH → ${nextDoh.removePrefix("https://")} (check #$tick)"
+                    "Auto-swapped DoH → ${nextDoh.removePrefix("https://")} (#$tick)"
                 }
+                FailoverWatchdog.passiveSentinel.reset()
+                nextDelay = FailoverWatchdog.recommendedDelaySeconds(0, suspect = true)
                 DastyabLogger.w("Watchdog", "Health degraded — %s", summary)
             } else {
+                val streak = watchdogHealthyStreak.incrementAndGet()
+                runCatching {
+                    AutopilotBrain.ensureLoaded(this)
+                    AutopilotBrain.recordOutcome(
+                        netKey, activeArmId, activeProto, success = true,
+                        rttMs = rttSample.takeIf { it > 0 }, geoMaskObserved = geoMask, persistContext = this
+                    )
+                }
                 val ms = check.aiStudio.latencyMs.takeIf { it >= 0 } ?: check.internet.latencyMs
-                summary = "Healthy (${ms}ms) · Check #$tick"
+                summary = "Healthy (${ms}ms) · #$tick · next ${FailoverWatchdog.recommendedDelaySeconds(streak, false)}s"
+                nextDelay = FailoverWatchdog.recommendedDelaySeconds(streak, suspect = false)
             }
 
-            // Quiet background harvest if pool is empty or every 30 minutes (6 ticks)
+            // Quiet background harvest if pool is empty or every 6 ticks
             val poolSize = TunnelConfig.loadHarvestedConfigs(this).size
             if (FailoverWatchdog.shouldRunBackgroundHarvest(tick, poolSize)) {
                 try {
@@ -502,7 +608,10 @@ class DastyabVpnService : VpnService() {
                     swapCount = swaps,
                     backgroundHarvestCount = harvests,
                     activeDohUrl = activeDohUrl,
-                    lastSummary = summary
+                    lastSummary = summary,
+                    nextIntervalSeconds = nextDelay,
+                    healthyStreak = watchdogHealthyStreak.get(),
+                    suspectState = action == FailoverWatchdog.Action.SWAP_DOH_OR_LAYER
                 )
             )
             val intent = Intent(ACTION_STATE_CHANGED).setPackage(packageName)
@@ -510,6 +619,8 @@ class DastyabVpnService : VpnService() {
             DastyabWidgetProvider.updateAllWidgets(this)
         } catch (e: Exception) {
             DastyabLogger.w("Watchdog", "Watchdog tick error: %s", e.message ?: "unknown")
+        } finally {
+            if (reschedule) scheduleNextWatchdogTick(sched, nextDelay)
         }
     }
 

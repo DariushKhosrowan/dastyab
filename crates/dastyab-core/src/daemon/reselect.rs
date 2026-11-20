@@ -144,6 +144,89 @@ pub fn exec_reselection_wrapper(
     }
 }
 
+/// Rank carrier endpoints using the Contextual Discounted UCB1 Bandit +
+/// Happy Eyeballs protocol-diverse slate selector so the strongest, non-quarantined
+/// transport families lead staggered failover races.
+pub fn order_endpoints_with_bandit(
+    endpoints: &[CarrierEndpoint],
+    store: &crate::probe::bandit::ContextualBanditStore,
+    network_ctx: &str,
+    intent: crate::probe::bandit::AutopilotIntent,
+    now_unix: u64,
+) -> Vec<CarrierEndpoint> {
+    if endpoints.is_empty() {
+        return Vec::new();
+    }
+    let arms: Vec<crate::probe::bandit::CandidateArm> = endpoints
+        .iter()
+        .enumerate()
+        .map(|(i, ep)| crate::probe::bandit::CandidateArm {
+            arm_id: format!("{:?}:{}:{}", ep.kind, ep.host, ep.port),
+            protocol_family: format!("{:?}", ep.kind),
+            base_priority: (ep.weight as f64).clamp(0.0, 1.0)
+                + (1.0 / ((i + 2) as f64)) * 0.1,
+        })
+        .collect();
+    let slate = store.select_diverse_slate(network_ctx, &arms, intent, endpoints.len(), now_unix);
+    let mut ordered = Vec::with_capacity(endpoints.len());
+    for arm in slate {
+        if let Some(ep) = endpoints
+            .iter()
+            .find(|e| format!("{:?}:{}:{}", e.kind, e.host, e.port) == arm.arm_id)
+        {
+            ordered.push(ep.clone());
+        }
+    }
+    ordered
+}
+
+/// Happy Eyeballs v2 (RFC 8305 style) staggered hedged reselection:
+/// launches candidate `0` immediately, waits up to `stagger` for it to win,
+/// then staggers subsequent candidates without wasting sockets when candidate `0`
+/// is already fast and healthy. Returns the first tunnel that opens.
+pub fn execute_reselection_staggered(
+    endpoints: &[CarrierEndpoint],
+    opener: &dyn TunnelOpener,
+    stagger: std::time::Duration,
+) -> Option<OpenedTunnel> {
+    if endpoints.is_empty() {
+        return None;
+    }
+    let done = AtomicBool::new(false);
+    let (tx, rx) = mpsc::channel::<OpenedTunnel>();
+    std::thread::scope(|s| {
+        for (idx, ep) in endpoints.iter().enumerate() {
+            if idx > 0 {
+                match rx.recv_timeout(stagger) {
+                    Ok(win) => {
+                        done.store(true, Ordering::Relaxed);
+                        return Some(win);
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                }
+            }
+            if done.load(Ordering::Relaxed) {
+                break;
+            }
+            let tx = tx.clone();
+            let done = &done;
+            s.spawn(move || {
+                if done.load(Ordering::Relaxed) {
+                    return;
+                }
+                if let Ok(t) = opener.open(ep) {
+                    if !done.swap(true, Ordering::Relaxed) {
+                        let _ = tx.send(t);
+                    }
+                }
+            });
+        }
+        drop(tx);
+        rx.recv().ok()
+    })
+}
+
 /// The real opener: probes an endpoint's liveness. It is a *pure attempt* —
 /// it does NOT persist or bind the active tunnel (the caller does that after
 /// the winner is chosen). This is what makes it safe to run concurrently in
@@ -460,5 +543,44 @@ mod tests {
         let opener = ScriptOpener::new(vec![false, true, true]);
         let t = exec_reselection_wrapper(&eps, &opener, 3).unwrap();
         assert!(t.endpoint.host == "b" || t.endpoint.host == "c");
+    }
+
+    #[test]
+    fn staggered_reselection_does_not_touch_backup_when_primary_is_fast() {
+        let eps = vec![ep("primary"), ep("backup1"), ep("backup2")];
+        let opener = ScriptOpener::new(vec![true, true, true]);
+        let t = execute_reselection_staggered(
+            &eps,
+            &opener,
+            std::time::Duration::from_millis(80),
+        )
+        .unwrap();
+        assert_eq!(t.endpoint.host, "primary");
+        assert_eq!(opener.calls(), 1, "fast primary should prevent launching hedged backups");
+    }
+
+    #[test]
+    fn staggered_reselection_hedges_to_backup_when_primary_stalls() {
+        struct StallingOpener;
+        impl TunnelOpener for StallingOpener {
+            fn open(&self, ep: &CarrierEndpoint) -> Result<OpenedTunnel, OpenError> {
+                if ep.host == "slow-or-stalled" {
+                    std::thread::sleep(std::time::Duration::from_millis(120));
+                    return Err(OpenError::Timeout);
+                }
+                Ok(OpenedTunnel {
+                    endpoint: ep.clone(),
+                    opened_unix: 2,
+                })
+            }
+        }
+        let eps = vec![ep("slow-or-stalled"), ep("fast-backup")];
+        let t = execute_reselection_staggered(
+            &eps,
+            &StallingOpener,
+            std::time::Duration::from_millis(15),
+        )
+        .unwrap();
+        assert_eq!(t.endpoint.host, "fast-backup");
     }
 }
