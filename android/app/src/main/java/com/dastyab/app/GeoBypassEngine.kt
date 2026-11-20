@@ -558,6 +558,7 @@ object GeoBypassEngine {
                 connectTimeout = timeoutMs
                 readTimeout = timeoutMs
                 setRequestProperty("User-Agent", "DastYab/1.9")
+                BrutalAntiGeoblockEngine.applyBrutalHeaders(this)
             }
             try {
                 if (conn.responseCode == 200) {
@@ -584,6 +585,7 @@ object GeoBypassEngine {
                     connectTimeout = timeoutMs
                     readTimeout = timeoutMs
                     setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) DastYab/1.9")
+                    BrutalAntiGeoblockEngine.applyBrutalHeaders(this)
                 }
                 try {
                     if (conn.responseCode == 200) {
@@ -687,6 +689,7 @@ object GeoBypassEngine {
                         )
                         setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                         setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                        BrutalAntiGeoblockEngine.applyBrutalHeaders(this)
                     }
                     val code = conn.responseCode
                     val ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start).coerceAtLeast(1L)
@@ -844,6 +847,7 @@ object GeoBypassEngine {
                 connectTimeout = timeoutMs
                 readTimeout = timeoutMs
                 setRequestProperty("User-Agent", "DastYab/1.9")
+                BrutalAntiGeoblockEngine.applyBrutalHeaders(this)
             }
             try {
                 val code = conn.responseCode
@@ -884,6 +888,7 @@ object GeoBypassEngine {
                         "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
                     )
                     setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                    BrutalAntiGeoblockEngine.applyBrutalHeaders(this)
                 }
                 try {
                     val code = conn.responseCode

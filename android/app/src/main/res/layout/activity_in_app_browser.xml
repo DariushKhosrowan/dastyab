@@ -161,6 +161,33 @@
             android:text="@string/browser_btn_reload"
             android:textSize="11sp"
             style="@style/DastyabChip" />
+
+        <Button
+            android:id="@+id/btnBrowserRotate"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:text="@string/browser_btn_rotate"
+            android:textSize="11sp"
+            style="@style/DastyabChip" />
+
+        <Button
+            android:id="@+id/btnBrowserToggleDns"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:text="@string/browser_btn_dns"
+            android:textSize="11sp"
+            style="@style/DastyabChip" />
+
+        <Button
+            android:id="@+id/btnBrowserDesktop"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:text="@string/browser_btn_desktop"
+            android:textSize="11sp"
+            style="@style/DastyabChip" />
     </LinearLayout>
 
     <ProgressBar
