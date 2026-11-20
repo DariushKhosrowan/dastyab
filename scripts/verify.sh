@@ -16,12 +16,14 @@ step() {
   fi
 }
 
-step "fmt"        cargo fmt --all --check
-step "core-build" cargo build -p dastyab-core
-step "cli-build"  cargo build -p dastyab-cli
-step "core-clippy" cargo clippy -p dastyab-core --lib
-step "cli-clippy"  cargo clippy -p dastyab-cli
-step "core-tests"  timeout 600 cargo test -p dastyab-core --lib
+step "fmt"             cargo fmt --all -- --check
+step "workspace-clippy" cargo clippy --workspace -- -D warnings
+step "workspace-tests"  timeout 600 cargo test --workspace
+if python3 -m pytest --version >/dev/null 2>&1; then
+  step "python-tests"  python3 -m pytest tests/ -q
+else
+  echo "SKIP python-tests (pytest not installed)"
+fi
 
 echo "======== RESULT ========"
 echo "PASS=$PASS FAIL=$FAIL"
