@@ -545,7 +545,6 @@ pub async fn drill_all_tiers<P: Probe>(probe: P) -> Vec<(Tier, ProbeVerdict)> {
 
 #[cfg(test)]
 mod tests {
-
     // ── worker-mode tunnel probe tests ──
     // A worker-mode tunnel with no reachable worker resolves by exercising the
     // resolve worker tunnel live probe against a mock worker. These verify the

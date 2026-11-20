@@ -214,28 +214,17 @@ fn parse_napsternet(out: &mut ProxyUri, rest: &str) -> bool {
     let clean = rest.split(['?', '#']).next().unwrap_or(rest);
     if let Some(decoded) = b64_decode(clean) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&decoded) {
-            let host = v
-                .get("add")
-                .or_else(|| v.get("host"))
-                .or_else(|| v.get("server"))
-                .or_else(|| v.get("address"))
-                .and_then(|x| x.as_str())
-                .unwrap_or("");
-            let port_opt = v
-                .get("port")
-                .or_else(|| v.get("serverPort"))
-                .and_then(|x| {
+            let host = first_non_empty_str(&v, &["add", "host", "server", "address"]).unwrap_or("");
+            let port_opt = ["port", "serverPort"].iter().find_map(|k| {
+                v.get(*k).and_then(|x| {
                     x.as_str()
-                        .map(|s| s.to_string())
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
                         .or_else(|| x.as_u64().map(|n| n.to_string()))
-                });
-            let id = v
-                .get("id")
-                .or_else(|| v.get("uuid"))
-                .or_else(|| v.get("password"))
-                .or_else(|| v.get("username"))
-                .and_then(|x| x.as_str())
-                .filter(|s| !s.is_empty())
+                })
+            });
+            let id = first_non_empty_str(&v, &["id", "uuid", "password", "username"])
                 .unwrap_or("napsternetv");
             if let Some(port_str) = port_opt {
                 if let Ok(port) = port_str.parse::<u16>() {
@@ -243,15 +232,8 @@ fn parse_napsternet(out: &mut ProxyUri, rest: &str) -> bool {
                         out.host = host.to_string();
                         out.port = port;
                         out.id = id.to_string();
-                        if let Some(ps) = v
-                            .get("ps")
-                            .or_else(|| v.get("remarks"))
-                            .or_else(|| v.get("name"))
-                            .and_then(|x| x.as_str())
-                        {
-                            if !ps.is_empty() {
-                                out.alias = ps.to_string();
-                            }
+                        if let Some(ps) = first_non_empty_str(&v, &["ps", "remarks", "name"]) {
+                            out.alias = ps.to_string();
                         }
                         return true;
                     }
@@ -264,6 +246,12 @@ fn parse_napsternet(out: &mut ProxyUri, rest: &str) -> bool {
         return true;
     }
     false
+}
+
+/// Return the first non-empty string value among candidate JSON keys.
+fn first_non_empty_str<'a>(v: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
+    keys.iter()
+        .find_map(|k| v.get(*k).and_then(|x| x.as_str()).filter(|s| !s.is_empty()))
 }
 
 /// Telegram MTProto links (`tg://proxy?server=...&port=...&secret=...`
@@ -342,13 +330,7 @@ fn parse_ss(out: &mut ProxyUri, rest: &str) -> bool {
     }
     // Whole-link base64 form: `ss://BASE64(method:password@host:port)`.
     // Some clients also append `#frag` — strip the fragment before decoding.
-    let b64_candidate = rest
-        .split(['?'])
-        .next()
-        .unwrap_or(rest)
-        .split('#')
-        .next()
-        .unwrap_or(rest);
+    let b64_candidate = rest.split(['?', '#']).next().unwrap_or(rest);
     let decoded = match b64_decode(b64_candidate) {
         Some(d) => d,
         None => return false,
@@ -403,10 +385,8 @@ fn parse_vmess(out: &mut ProxyUri, rest: &str) -> bool {
     out.port = port;
     out.id = id.to_string();
     // `ps` is the friendly name — prefer it as the alias.
-    if let Some(ps) = v.get("ps").and_then(|x| x.as_str()) {
-        if !ps.is_empty() {
-            out.alias = ps.to_string();
-        }
+    if let Some(ps) = v.get("ps").and_then(|x| x.as_str()).filter(|s| !s.is_empty()) {
+        out.alias = ps.to_string();
     }
     true
 }
@@ -600,10 +580,7 @@ mod tests {
 
     #[test]
     fn parses_wireguard_napsternet_hy2_and_mtproto() {
-        let wg_link = concat!(
-            "wireguard://privKey==@162.159.192.1:2408",
-            "?publickey=pubKey==#WARP"
-        );
+        let wg_link = "wireguard://privKey==@162.159.192.1:2408?publickey=pubKey==#WARP";
         let wg = ProxyUri::parse(wg_link).unwrap();
         assert_eq!(wg.scheme, "wireguard");
         assert_eq!(wg.host, "162.159.192.1");
@@ -645,5 +622,19 @@ mod tests {
         assert_eq!(ovpn.host, "198.51.100.77");
         assert_eq!(ovpn.port, 1194);
         assert_eq!(ovpn.alias, "OpenVPN-TCP");
+    }
+
+    #[test]
+    fn napsternet_skips_empty_earlier_keys() {
+        let npv_json = concat!(
+            r#"{"add":"","server":"npv2.example.com","port":"","serverPort":8443,"#,
+            r#""id":"","uuid":"abc-123","ps":"","remarks":"NPV-Fallback"}"#
+        );
+        let npv_b64 = base64::engine::general_purpose::STANDARD.encode(npv_json);
+        let npv = ProxyUri::parse(&format!("npv4://{npv_b64}")).unwrap();
+        assert_eq!(npv.host, "npv2.example.com");
+        assert_eq!(npv.port, 8443);
+        assert_eq!(npv.id, "abc-123");
+        assert_eq!(npv.alias, "NPV-Fallback");
     }
 }
