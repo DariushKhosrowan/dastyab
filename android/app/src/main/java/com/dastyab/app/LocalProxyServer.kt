@@ -40,7 +40,8 @@ class LocalProxyServer(
     requestedPort: Int = 10850,
     val upstream: Upstream = Upstream.Direct,
     private val connectTimeoutMs: Int = 8000,
-    private val socketReadTimeoutMs: Int = 120_000
+    private val socketReadTimeoutMs: Int = 120_000,
+    private val enableDpiDesync: Boolean = true
 ) : Closeable {
 
     sealed class Upstream {
@@ -83,6 +84,13 @@ class LocalProxyServer(
                     "${flat.size}-Hop Chain (${flat.joinToString(" → ") { it.describe() }})"
                 }
             }
+        }
+
+        /** Ordered failover list of upstreams/chains; tries each route sequentially on dial failure. */
+        data class Fallback(val alternatives: List<Upstream>) : Upstream() {
+            override fun describe(): String =
+                if (alternatives.isEmpty()) Direct.describe()
+                else "Failover(${alternatives.size} routes: ${alternatives.first().describe()})"
         }
 
         abstract fun describe(): String
@@ -349,6 +357,18 @@ class LocalProxyServer(
 
     @Throws(IOException::class)
     private fun openUpstreamSocket(targetHost: String, targetPort: Int): Socket {
+        if (upstream is Upstream.Fallback) {
+            val candidates = upstream.alternatives.ifEmpty { listOf(Upstream.Direct) }
+            var lastErr: IOException? = null
+            for (alt in candidates) {
+                try {
+                    return openTunneledSocket(alt, targetHost, targetPort)
+                } catch (e: IOException) {
+                    lastErr = e
+                }
+            }
+            throw (lastErr ?: IOException("All fallback proxy routes failed"))
+        }
         return openTunneledSocket(upstream, targetHost, targetPort)
     }
 
@@ -357,6 +377,13 @@ class LocalProxyServer(
         val hops = when (selectedUpstream) {
             is Upstream.Direct -> emptyList()
             is Upstream.Chain -> selectedUpstream.flattenedHops()
+            is Upstream.Fallback -> selectedUpstream.alternatives.firstOrNull()?.let {
+                when (it) {
+                    is Upstream.Direct -> emptyList()
+                    is Upstream.Chain -> it.flattenedHops()
+                    else -> listOf(it)
+                }
+            } ?: emptyList()
             else -> listOf(selectedUpstream)
         }
         if (hops.isEmpty()) {
@@ -565,12 +592,35 @@ class LocalProxyServer(
         val remoteIn = remote.getInputStream()
         val remoteOut = remote.getOutputStream()
         val up = thread(isDaemon = true, name = "dastyab-pipe-up") {
-            copyStream(clientIn, remoteOut)
+            copyStreamWithOptionalDesync(clientIn, remoteOut)
             runCatching { remote.shutdownOutput() }
         }
         copyStream(remoteIn, clientOut)
         runCatching { clientOut.flush() }
         runCatching { up.join(1500) }
+    }
+
+    private fun copyStreamWithOptionalDesync(src: InputStream, dst: OutputStream) {
+        val buf = ByteArray(16 * 1024)
+        var isFirstWrite = true
+        try {
+            while (running.get()) {
+                val n = src.read(buf)
+                if (n < 0) break
+                if (n > 0) {
+                    if (isFirstWrite && enableDpiDesync && isTlsClientHello(buf, n)) {
+                        writeTlsClientHelloFragmented(dst, buf, n)
+                    } else {
+                        dst.write(buf, 0, n)
+                        dst.flush()
+                    }
+                    isFirstWrite = false
+                    bytesTransferred.addAndGet(n.toLong())
+                }
+            }
+        } catch (_: IOException) {
+            // Normal on stream close or socket reset.
+        }
     }
 
     private fun copyStream(src: InputStream, dst: OutputStream) {
@@ -643,13 +693,54 @@ class LocalProxyServer(
         val hop: TunnelConfig.ProxyHop,
         val latencyMs: Long,
         val exitIp: String,
-        val countryCode: String
+        val countryCode: String,
+        val warpStatus: String = "off"
     )
 
     companion object {
+        /** Returns true when [buf] starts with a genuine TLS ClientHello record (`0x16 0x03`, handshake type `0x01`). */
+        fun isTlsClientHello(buf: ByteArray, length: Int = buf.size): Boolean {
+            if (length < 43 || length > buf.size) return false
+            val b0 = buf[0].toInt() and 0xFF
+            val b1 = buf[1].toInt() and 0xFF
+            val hsType = buf[5].toInt() and 0xFF
+            return b0 == 0x16 && b1 == 0x03 && hsType == 0x01
+        }
+
+        /**
+         * Splits a TLS ClientHello length into micro-TCP segment `[start, end)` ranges that break
+         * the TLS record header and SNI hostname across distinct TCP flushes to defeat stateless SNI DPI.
+         */
+        fun splitTlsClientHelloSlices(length: Int): List<IntRange> {
+            if (length <= 0) return emptyList()
+            if (length <= 8) return listOf(0 until length)
+            val cuts = listOf(2, 6, 15, (length / 2).coerceAtLeast(24)).filter { it in 1 until length }.distinct().sorted()
+            val out = ArrayList<IntRange>(cuts.size + 1)
+            var prev = 0
+            for (c in cuts) {
+                if (c > prev) {
+                    out.add(prev until c)
+                    prev = c
+                }
+            }
+            if (prev < length) out.add(prev until length)
+            return out
+        }
+
+        private fun writeTlsClientHelloFragmented(dst: OutputStream, buf: ByteArray, len: Int) {
+            val slices = splitTlsClientHelloSlices(len)
+            for ((idx, range) in slices.withIndex()) {
+                dst.write(buf, range.first, range.last - range.first + 1)
+                dst.flush()
+                if (idx + 1 < slices.size) {
+                    try { Thread.sleep(2) } catch (_: InterruptedException) { break }
+                }
+            }
+        }
+
         /**
          * Verifies a candidate proxy hop by performing a real SOCKS5/HTTP CONNECT tunnel handshake
-         * and fetching `/cdn-cgi/trace` through it to measure real relay RTT and exit IP/country.
+         * and fetching `/cdn-cgi/trace` through it to measure real relay RTT and exit IP/country/WARP status.
          */
         fun probeHopTrace(
             hop: TunnelConfig.ProxyHop,
@@ -713,7 +804,7 @@ class LocalProxyServer(
                         val cc = trace.location.uppercase().takeIf { it.length == 2 && it != "XX" }.orEmpty()
                         if (ip.isEmpty()) return null
                         val ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start).coerceAtLeast(1L)
-                        HopTraceResult(hop, ms, ip, cc)
+                        HopTraceResult(hop, ms, ip, cc, trace.warp)
                     } finally {
                         if (streamSock !== rawSock) runCatching { streamSock.close() }
                     }

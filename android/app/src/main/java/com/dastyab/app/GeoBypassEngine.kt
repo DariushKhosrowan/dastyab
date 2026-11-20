@@ -128,7 +128,12 @@ object GeoBypassEngine {
         val countryCode: String,
         val countryName: String,
         val isProxyOrHosting: Boolean,
-        val source: String
+        val source: String,
+        val asnOrg: String = "",
+        val warpActive: Boolean = false,
+        val reputationTier: BrutalAntiGeoblockEngine.ExitReputationTier =
+            if (isProxyOrHosting) BrutalAntiGeoblockEngine.ExitReputationTier.HOSTING_HIGH_RISK
+            else BrutalAntiGeoblockEngine.ExitReputationTier.CLEAN_NON_DC
     )
 
     data class ServiceProbeResult(
@@ -550,15 +555,15 @@ object GeoBypassEngine {
      * using resilient HTTPS-only providers (`network_security_config.xml` blocks external `http://`).
      */
     fun fetchEgressGeo(proxy: Proxy = Proxy.NO_PROXY, timeoutMs: Int = 4000): EgressInfo? {
-        // 1. Fast Cloudflare TLS trace (never rate-limits shared VPN exits)
+        // 1. Fast Cloudflare TLS trace (never rate-limits shared VPN exits; exposes WARP active flag)
         var traceIp = ""
         var traceCc = ""
+        var traceWarp = "off"
         runCatching {
             val conn = (URL("https://1.1.1.1/cdn-cgi/trace").openConnection(proxy) as HttpURLConnection).apply {
                 connectTimeout = timeoutMs
                 readTimeout = timeoutMs
-                setRequestProperty("User-Agent", "DastYab/1.9")
-                BrutalAntiGeoblockEngine.applyBrutalHeaders(this)
+                BrutalAntiGeoblockEngine.applyCleanBrowserHeaders(this, mobile = true)
             }
             try {
                 if (conn.responseCode == 200) {
@@ -567,13 +572,15 @@ object GeoBypassEngine {
                     if (trace.ip != "unknown" && trace.ip.isNotBlank()) traceIp = trace.ip
                     val cc = trace.location.uppercase().takeIf { it.length == 2 && it != "XX" } ?: ""
                     if (cc.isNotEmpty()) traceCc = cc
+                    traceWarp = trace.warp
                 }
             } finally {
                 conn.disconnect()
             }
         }
+        val warpActive = traceWarp.equals("on", ignoreCase = true) || traceWarp.equals("plus", ignoreCase = true)
 
-        // 2. HTTPS JSON geo + hosting/proxy enrichment
+        // 2. HTTPS JSON geo + deep ASN / hosting / proxy enrichment
         val jsonProviders = listOf(
             "https://ipwho.is/",
             "https://ipapi.co/json/",
@@ -584,8 +591,7 @@ object GeoBypassEngine {
                 val conn = (URL(u).openConnection(proxy) as HttpURLConnection).apply {
                     connectTimeout = timeoutMs
                     readTimeout = timeoutMs
-                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) DastYab/1.9")
-                    BrutalAntiGeoblockEngine.applyBrutalHeaders(this)
+                    BrutalAntiGeoblockEngine.applyCleanBrowserHeaders(this, countryCode = traceCc.ifBlank { "US" }, mobile = true)
                 }
                 try {
                     if (conn.responseCode == 200) {
@@ -617,21 +623,34 @@ object GeoBypassEngine {
                                 .ifBlank { cc }
                         }
                         val sec = json.optJSONObject("security")
-                        val org = json.optString("org", "").lowercase()
-                        val orgHosting = listOf("datacenter", "hosting", "cloud", "amazon", "digitalocean", "hetzner", "ovh", "linode", "vultr", "cdn77", "m247", "leaseweb")
-                            .any { org.contains(it) }
-                        val hosting = (sec?.optBoolean("hosting", false) == true) ||
-                            (sec?.optBoolean("proxy", false) == true) ||
-                            (sec?.optBoolean("vpn", false) == true) ||
-                            (sec?.optBoolean("tor", false) == true) ||
-                            orgHosting
+                        val connObj = json.optJSONObject("connection")
+                        val orgField = listOf(
+                            json.optString("org", ""),
+                            connObj?.optString("org", "").orEmpty(),
+                            connObj?.optString("isp", "").orEmpty(),
+                            json.optString("isp", ""),
+                            json.optString("asn", "")
+                        ).firstOrNull { it.isNotBlank() }.orEmpty()
+                        val ispField = connObj?.optString("isp", "").orEmpty().ifBlank { json.optString("isp", "") }
+                        val tier = BrutalAntiGeoblockEngine.classifyExitReputation(
+                            org = orgField,
+                            isp = ispField,
+                            isHosting = sec?.optBoolean("hosting", false) == true,
+                            isProxy = sec?.optBoolean("proxy", false) == true,
+                            isVpn = sec?.optBoolean("vpn", false) == true,
+                            isTor = sec?.optBoolean("tor", false) == true,
+                            warpStatus = traceWarp
+                        )
                         if (ip.isNotBlank() && cc.length == 2) {
                             EgressInfo(
                                 ip = ip,
                                 countryCode = cc,
                                 countryName = cname,
-                                isProxyOrHosting = hosting,
-                                source = URL(u).host
+                                isProxyOrHosting = tier.isHighRisk,
+                                source = URL(u).host,
+                                asnOrg = orgField,
+                                warpActive = warpActive,
+                                reputationTier = tier
                             )
                         } else null
                     } else null
@@ -643,16 +662,23 @@ object GeoBypassEngine {
         }
 
         if (traceIp.isNotBlank() && traceCc.length == 2) {
+            val tier = if (warpActive) {
+                BrutalAntiGeoblockEngine.ExitReputationTier.WARP_OR_TOR
+            } else {
+                BrutalAntiGeoblockEngine.ExitReputationTier.CLEAN_NON_DC
+            }
             return EgressInfo(
                 ip = traceIp,
                 countryCode = traceCc,
                 countryName = traceCc,
-                isProxyOrHosting = false,
-                source = "cloudflare-trace"
+                isProxyOrHosting = warpActive,
+                source = "cloudflare-trace",
+                asnOrg = if (warpActive) "Cloudflare WARP" else "",
+                warpActive = warpActive,
+                reputationTier = tier
             )
         }
 
-        // 3. Last-resort ipify IP (no geo country — callers will see egress == null if country unknown)
         return null
     }
 
@@ -683,13 +709,7 @@ object GeoBypassEngine {
                         instanceFollowRedirects = false
                         connectTimeout = timeoutMs
                         readTimeout = timeoutMs
-                        setRequestProperty(
-                            "User-Agent",
-                            "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-                        )
-                        setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                        setRequestProperty("Accept-Language", "en-US,en;q=0.9")
-                        BrutalAntiGeoblockEngine.applyBrutalHeaders(this)
+                        BrutalAntiGeoblockEngine.applyCleanBrowserHeaders(this, mobile = true)
                     }
                     val code = conn.responseCode
                     val ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start).coerceAtLeast(1L)
@@ -1011,7 +1031,8 @@ object GeoBypassEngine {
         val ready = report.targetReady(target)
         val countryOk = if (target == TargetService.GOOGLE_FLOW) report.flowCountrySupported else report.aiStudioCountrySupported
         val probe = if (target == TargetService.GOOGLE_FLOW) report.flow else report.aiStudio
-        val notProxy = report.egress != null && !report.egress.isProxyOrHosting
+        val egress = report.egress
+        val notProxy = egress != null && !egress.isProxyOrHosting
         val latency = probe.latencyMs.takeIf { it > 0 } ?: 10_000L
 
         var score = 0L
@@ -1020,8 +1041,13 @@ object GeoBypassEngine {
         if (probe.unsupportedRegion) score += 100_000L
         if (target == TargetService.GOOGLE_FLOW && !probe.appShellOk) score += 50_000L
         if (!report.accountsReachable) score += 20_000L
+        if (egress?.reputationTier == BrutalAntiGeoblockEngine.ExitReputationTier.WARP_OR_TOR) {
+            score += if (target == TargetService.GOOGLE_FLOW) 35_000L else 12_000L
+        } else if (egress?.reputationTier == BrutalAntiGeoblockEngine.ExitReputationTier.RESIDENTIAL_ISP) {
+            score -= 400L
+        }
         if (target == TargetService.GOOGLE_FLOW) {
-            val cc = report.egress?.countryCode?.uppercase().orEmpty()
+            val cc = egress?.countryCode?.uppercase().orEmpty()
             if (!FlowWarriorEngine.WARRIOR_TIER1_COUNTRIES.contains(cc)) score += 2_500L
             if (!notProxy) score += 15_000L
         } else if (!notProxy) {
@@ -1537,7 +1563,7 @@ object GeoBypassEngine {
                         }
                     }
                 }
-                if (bestEligibleAttempt != null) {
+                if (bestEligibleAttempt != null && bestEligibleAttempt!!.report.egress?.isProxyOrHosting == false) {
                     foundCleanInRound = true
                     break
                 }
@@ -1613,12 +1639,14 @@ object GeoBypassEngine {
         for (t in traces) {
             val k = "${t.hop.scheme.name}:${t.hop.host}:${t.hop.port}"
             byKey[k] = t
+            val isWarp = t.warpStatus.equals("on", ignoreCase = true) ||
+                t.warpStatus.equals("plus", ignoreCase = true)
             val ccOk = if (targetService == TargetService.GOOGLE_FLOW) {
                 isFlowCountrySupported(t.countryCode)
             } else {
                 isAiStudioCountrySupported(t.countryCode)
             }
-            if (ccOk && !excludedEgressIps.contains(t.exitIp)) {
+            if (ccOk && !isWarp && !excludedEgressIps.contains(t.exitIp)) {
                 clean.add(t)
             } else {
                 relays.add(t)

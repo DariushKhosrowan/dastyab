@@ -1177,18 +1177,14 @@ class MainActivity : DastyabActivity() {
         simpleProgress.visibility = View.VISIBLE
         postStatus(getString(R.string.browser_auto_chain_running, serviceName))
         setStatusDot(DotState.ORANGE)
-        applyFormattedOutput("\n=== AUTO-CHAINING LAYERS FOR $serviceName ===\n")
+        applyFormattedOutput("\n=== 🦁 ${BrutalAntiGeoblockEngine.LION_TITLE} ($serviceName) ===\n")
 
         thread(isDaemon = true, name = "dastyab-auto-chain-service") {
-            val result = GeoBypassEngine.discoverAndChainBestRoute(
+            val result = BrutalAntiGeoblockEngine.unleashLionForAiStudio(
                 context = this,
-                targetService = targetService,
-                allowHarvest = true,
-                maxCandidates = 44,
                 excludedEgressIps = excludedIps,
                 excludeCurrentRoute = excludedIps.isNotEmpty() || excludedChainSpecs.isNotEmpty(),
-                excludedChainSpecs = excludedChainSpecs,
-                maxRounds = 3
+                excludedChainSpecs = excludedChainSpecs
             ) { step ->
                 postOutput("$step\n")
             }

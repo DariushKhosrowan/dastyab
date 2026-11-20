@@ -324,14 +324,26 @@ async fn probe_target(client: &reqwest::Client, target: &str, url: &str) -> Targ
     match client.get(url).send().await {
         Ok(resp) => {
             let status = resp.status().as_u16();
-            // Any HTTP response = the chain egress works to this host.
-            // Note: AI Studio may return 302 (redirect to auth) or 403/429
-            // for geo-blocked / bot-checked IPs — all still prove reachability.
+            let final_url = resp.url().as_str().to_lowercase();
+            let body = resp.text().await.unwrap_or_default();
+            let body_lower = body.to_lowercase();
+            let geo_blocked = status == 403
+                || status == 451
+                || final_url.contains("unsupported-country")
+                || final_url.contains("available-regions")
+                || final_url.contains("/sorry/")
+                || body_lower.contains("not available in your country")
+                || body_lower.contains("isn't available in your country")
+                || body_lower.contains("unsupported-country-title");
             TargetProbe {
                 target: target.to_string(),
-                reachable: true,
+                reachable: !geo_blocked && (200..400).contains(&status),
                 egress_ip: None,
-                note: format!("HTTP {status}"),
+                note: if geo_blocked {
+                    format!("HTTP {status} (geo-blocked)")
+                } else {
+                    format!("HTTP {status}")
+                },
             }
         }
         Err(e) => TargetProbe {

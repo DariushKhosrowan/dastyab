@@ -370,19 +370,15 @@ object NewbieAutopilot {
                 }
 
                 if (!aiProbe.readyForAiStudio && (intent == AutopilotBrain.AutopilotIntent.AI_STUDIO || intent == AutopilotBrain.AutopilotIntent.BALANCED_WEB)) {
-                    emit("  • Auto-chaining layers for AI Studio…")
-                    val aiChain = GeoBypassEngine.discoverAndChainBestRoute(
+                    emit("  • Unleashing Brutal Lion Engine (64-candidate anti-DPI multi-hop) for AI Studio…")
+                    val aiChain = BrutalAntiGeoblockEngine.unleashLionForAiStudio(
                         context = context,
-                        targetService = GeoBypassEngine.TargetService.AI_STUDIO,
-                        allowHarvest = true,
-                        maxCandidates = 44,
                         excludedEgressIps = setOfNotNull(aiProbe.egress?.ip),
-                        excludeCurrentRoute = true,
-                        maxRounds = 3
+                        excludeCurrentRoute = true
                     ) { emit("    $it") }
                     aiProbe = aiChain.report
                     aiProbe.egress?.ip?.let { if (aiProbe.readyForAiStudio) AutopilotBrain.recordCleanIpSeed(networkKey, it, context) }
-                    emit("  • AI Studio result: ${aiChain.summary}")
+                    emit("  • AI Studio Lion result: ${aiChain.summary}")
                 }
 
                 check = ReachabilityVerifier.FullVerification(
@@ -548,15 +544,11 @@ object NewbieAutopilot {
                 check.aiStudio.resolvedIp.takeIf { it.isNotBlank() && it != "-" && it != "via-proxy" }
             ).toSet()
 
-            val retryAi = GeoBypassEngine.discoverAndChainBestRoute(
+            val retryAi = BrutalAntiGeoblockEngine.unleashLionForAiStudio(
                 context = context,
-                targetService = GeoBypassEngine.TargetService.AI_STUDIO,
-                allowHarvest = true,
-                maxCandidates = 44,
                 excludedEgressIps = blockedAiIps,
-                excludeCurrentRoute = true,
-                maxRounds = 3
-            ) { emit("  [auto-chain AI Studio] $it") }
+                excludeCurrentRoute = true
+            ) { emit("  [lion-chain AI Studio] $it") }
             aiProbe = retryAi.report
             if (retryAi.success) anyChainUnlocked = true
 
@@ -727,18 +719,14 @@ object NewbieAutopilot {
             )
             aiProbe = GeoBypassEngine.runAccessProbe(aiRoute, timeoutMs = 4200)
             if (!aiProbe.readyForAiStudio) {
-                emit("  ✗ AI Studio blocked/georestricted via ${aiProbe.routeLabel} — auto-chaining layers for AI Studio…")
-                val discoveredAi = GeoBypassEngine.discoverAndChainBestRoute(
+                emit("  ✗ AI Studio blocked/georestricted via ${aiProbe.routeLabel} — unleashing Brutal Lion Engine for AI Studio…")
+                val discoveredAi = BrutalAntiGeoblockEngine.unleashLionForAiStudio(
                     context = context,
-                    targetService = GeoBypassEngine.TargetService.AI_STUDIO,
-                    allowHarvest = true,
-                    maxCandidates = 44,
                     excludedEgressIps = setOfNotNull(aiProbe.egress?.ip),
-                    excludeCurrentRoute = true,
-                    maxRounds = 3
+                    excludeCurrentRoute = true
                 ) { step -> emit("    $step") }
                 aiProbe = discoveredAi.report
-                emit("  → AI Studio: ${discoveredAi.summary}")
+                emit("  → AI Studio (Lion): ${discoveredAi.summary}")
             } else {
                 emit("  ✓ AI Studio verified via ${aiProbe.routeLabel} (${aiProbe.egress?.countryCode} ${aiProbe.egress?.ip})")
             }

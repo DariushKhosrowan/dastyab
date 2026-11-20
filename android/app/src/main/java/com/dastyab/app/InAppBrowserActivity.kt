@@ -65,6 +65,7 @@ class InAppBrowserActivity : DastyabActivity() {
     private val failedEgressIps = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
     private val failedChainSpecs = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
     @Volatile private var currentBannerEgressIp: String? = null
+    @Volatile private var currentBannerCountryCode: String = "US"
     @Volatile private var currentRouteChainSpec: String = ""
     private val autoChainInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
     private val mainExecutor = Executor { runnable -> runOnUiThread(runnable) }
@@ -129,17 +130,20 @@ class InAppBrowserActivity : DastyabActivity() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     if (!UiSafety.isActivityAlive(this@InAppBrowserActivity)) return
                     progress.visibility = View.VISIBLE
+                    injectAntiLeakShield()
                     checkUnsupportedRedirect(url)
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     if (!UiSafety.isActivityAlive(this@InAppBrowserActivity)) return
                     progress.visibility = View.GONE
+                    injectAntiLeakShield()
                     checkUnsupportedRedirect(url)
                     inspectWebViewDomGeo(url)
                     // Re-check once SPA hydration completes (e.g. AI Studio / Flow Angular shell)
                     webView.postDelayed({
                         if (UiSafety.isActivityAlive(this@InAppBrowserActivity)) {
+                            injectAntiLeakShield()
                             inspectWebViewDomGeo(webView.url ?: url)
                         }
                     }, 1500L)
@@ -192,10 +196,10 @@ class InAppBrowserActivity : DastyabActivity() {
                 val settings = webView.settings
                 val ua = settings.userAgentString ?: ""
                 if (ua.contains("Windows NT")) {
-                    settings.userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
+                    settings.userAgentString = BrutalAntiGeoblockEngine.CHROME_MOBILE_UA
                     Toast.makeText(this, "Switched to Mobile User-Agent", Toast.LENGTH_SHORT).show()
                 } else {
-                    settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                    settings.userAgentString = BrutalAntiGeoblockEngine.CHROME_DESKTOP_UA
                     Toast.makeText(this, "Switched to Desktop User-Agent", Toast.LENGTH_SHORT).show()
                 }
                 webView.reload()
@@ -253,6 +257,12 @@ class InAppBrowserActivity : DastyabActivity() {
             ).show()
             finish()
         }
+    }
+
+    private fun injectAntiLeakShield() {
+        if (!this::webView.isInitialized || !UiSafety.isActivityAlive(this)) return
+        val script = BrutalAntiGeoblockEngine.buildWebViewAntiLeakScript(currentBannerCountryCode)
+        runCatching { webView.evaluateJavascript(script, null) }
     }
 
     private fun currentOrInitialUrl(): String =
@@ -369,15 +379,11 @@ class InAppBrowserActivity : DastyabActivity() {
                         }
                     }
                 } else {
-                    aiResult = GeoBypassEngine.discoverAndChainBestRoute(
+                    aiResult = BrutalAntiGeoblockEngine.unleashLionForAiStudio(
                         context = this,
-                        targetService = target,
-                        allowHarvest = true,
-                        maxCandidates = 48,
                         excludedEgressIps = excludedIpsSnapshot,
                         excludeCurrentRoute = true,
-                        excludedChainSpecs = excludedSpecsSnapshot,
-                        maxRounds = 3
+                        excludedChainSpecs = excludedSpecsSnapshot
                     ) { step ->
                         runOnUiThread {
                             if (UiSafety.isActivityAlive(this) && this::tvRouteStatus.isInitialized) {
@@ -483,7 +489,7 @@ class InAppBrowserActivity : DastyabActivity() {
                         if (bypassCache) {
                             webView.loadUrl(
                                 urlToLoad,
-                                mapOf("Cache-Control" to "no-cache", "Pragma" to "no-cache")
+                                BrutalAntiGeoblockEngine.getBrutalHeadersMap(currentBannerCountryCode)
                             )
                         } else {
                             webView.loadUrl(urlToLoad)
@@ -525,12 +531,18 @@ class InAppBrowserActivity : DastyabActivity() {
             val target = route.targetService ?: GeoBypassEngine.TargetService.fromUrl(targetUrl)
             val ready = report.targetReady(target)
             currentRouteChainSpec = route.upstreamChainSpec
-            report.egress?.ip?.takeIf { it.isNotBlank() }?.let { ip ->
-                currentBannerEgressIp = ip
-                if (!ready) failedEgressIps.add(ip)
+            report.egress?.let { eg ->
+                if (eg.ip.isNotBlank()) {
+                    currentBannerEgressIp = eg.ip
+                    if (!ready) failedEgressIps.add(eg.ip)
+                }
+                if (eg.countryCode.length == 2) {
+                    currentBannerCountryCode = eg.countryCode
+                }
             }
             runOnUiThread {
                 if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
+                injectAntiLeakShield()
                 val egress = report.egress
                 if (egress == null) {
                     setBrowserHalo(StatusHaloView.HaloState.WARNING, R.drawable.status_dot_orange)

@@ -60,6 +60,25 @@ class DnsPacketCodecTest {
         assertNull(DnsPacketCodec.parseIpv4UdpDnsQuery(badProto))
     }
 
+    @Test
+    fun extractQueryTypeAndBuildEmptyNoDataResponse_suppressesAaaaCleanly() {
+        val aQuery = CleanEndpointScout.buildMinimalDnsQuery()
+        assertEquals(DnsPacketCodec.QTYPE_A, DnsPacketCodec.extractQueryType(aQuery))
+
+        // Patch trailing QTYPE from A (1) -> AAAA (28)
+        val aaaaQuery = aQuery.copyOf().apply {
+            this[size - 4] = 0x00
+            this[size - 3] = DnsPacketCodec.QTYPE_AAAA.toByte()
+        }
+        assertEquals(DnsPacketCodec.QTYPE_AAAA, DnsPacketCodec.extractQueryType(aaaaQuery))
+        val noData = DnsPacketCodec.buildEmptyNoDataResponse(aaaaQuery)
+        assertNotNull(noData)
+        // QR = 1, ANCOUNT = 0, NSCOUNT = 0, ARCOUNT = 0
+        assertEquals(0x80, noData!![2].toInt() and 0x80)
+        assertEquals(0, ((noData[6].toInt() and 0xFF) shl 8) or (noData[7].toInt() and 0xFF))
+        assertEquals(0, ((noData[8].toInt() and 0xFF) shl 8) or (noData[9].toInt() and 0xFF))
+    }
+
     private fun buildClientQueryPacket(req: DnsPacketCodec.DnsRequest): ByteArray {
         val udpLen = 8 + req.dnsPayload.size
         val totalLen = 20 + udpLen

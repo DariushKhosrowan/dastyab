@@ -75,6 +75,44 @@ class FlowWarriorEngineTest {
     }
 
     @Test
+    fun isWarriorConfirmed_rejectsUnconfirmedWarpExitsEvenIfCountryIsUs() {
+        val warpEgress = GeoBypassEngine.EgressInfo(
+            ip = "104.28.1.50",
+            countryCode = "US",
+            countryName = "United States",
+            isProxyOrHosting = true,
+            source = "cloudflare-trace",
+            asnOrg = "Cloudflare WARP",
+            warpActive = true,
+            reputationTier = BrutalAntiGeoblockEngine.ExitReputationTier.WARP_OR_TOR
+        )
+        val base = report(cc = "US", ip = "104.28.1.50", isHosting = true).copy(egress = warpEgress)
+        assertFalse(
+            "Unconfirmed WARP exit must be rejected by Flow Warrior",
+            FlowWarriorEngine.isWarriorConfirmed(base, doubleConfirmedClean = false)
+        )
+        assertTrue(
+            "Double-confirmed workspace pass may allow fallback",
+            FlowWarriorEngine.isWarriorConfirmed(base, doubleConfirmedClean = true)
+        )
+        val resScore = FlowWarriorEngine.scoreWarriorCandidate(
+            report(cc = "US", ip = "203.0.113.5", isHosting = false).copy(
+                egress = GeoBypassEngine.EgressInfo(
+                    ip = "203.0.113.5",
+                    countryCode = "US",
+                    countryName = "United States",
+                    isProxyOrHosting = false,
+                    source = "ipwho.is",
+                    asnOrg = "Comcast Cable",
+                    warpActive = false,
+                    reputationTier = BrutalAntiGeoblockEngine.ExitReputationTier.RESIDENTIAL_ISP
+                )
+            )
+        )
+        assertTrue("Residential ISP must vastly outscore WARP", resScore > FlowWarriorEngine.scoreWarriorCandidate(base))
+    }
+
+    @Test
     fun warriorNamespace_isCompletelyIsolatedFromDefaultNetworkContext() {
         val wKey = FlowWarriorEngine.warriorContextKey("cell:43211")
         assertTrue(wKey.startsWith("flow_warrior:"))

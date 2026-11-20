@@ -324,6 +324,20 @@ object VpnLayerStore {
             )
         }
 
+        // Dedicated Anti-ECS Privacy DoH Shield (Quad9 + Mullvad rotation)
+        built.add(
+            VpnLayer(
+                id = "shield-lion-noecs",
+                name = "Layer · Lion No-ECS Privacy Shield (Quad9 DoH)",
+                mode = TunnelConfig.Mode.DNS_BLACKOUT,
+                dnsPrimary = "9.9.9.9",
+                dnsSecondary = "1.1.1.1",
+                dohUrl = "https://dns.quad9.net/dns-query",
+                roleLabel = "LION_NO_ECS",
+                notes = "Eliminates EDNS-Client-Subnet geo-leaks when bypassing regional censorship"
+            )
+        )
+
         // Ensure core resilient defaults remain in stack
         val builtIds = built.map { it.id }.toSet()
         for (def in defaultLayers()) {

@@ -4,6 +4,9 @@ package com.dastyab.app
  * DnsPacketCodec — pure-Kotlin IPv4/UDP DNS packet parser and response builder
  * used by [DastyabVpnService] in DNS Blackout (WhiteDNS / DoH) mode.
  *
+ * Includes IPv6 AAAA suppression helper (RFC 4074 NODATA) to eliminate carrier IPv6
+ * bypass leaks when IPv4 proxy chains are active.
+ *
  * Zero Android dependencies so every checksum and packet boundary is unit-testable on the JVM.
  */
 object DnsPacketCodec {
@@ -12,6 +15,8 @@ object DnsPacketCodec {
     private const val DNS_PORT = 53
     private const val MIN_IPV4_HEADER = 20
     private const val UDP_HEADER_LEN = 8
+    const val QTYPE_A = 1
+    const val QTYPE_AAAA = 28
 
     data class DnsRequest(
         val srcIp: ByteArray,
@@ -135,6 +140,66 @@ object DnsPacketCodec {
             guard++
         }
         return sb.toString()
+    }
+
+    /** Parses the exact QTYPE of question 1 in a raw DNS query (`1` = A, `28` = AAAA). */
+    fun extractQueryType(dnsPayload: ByteArray): Int {
+        if (dnsPayload.size < 17) return 0
+        var pos = 12
+        var guard = 0
+        while (pos < dnsPayload.size && guard < 64) {
+            val labelLen = dnsPayload[pos].toInt() and 0xFF
+            if (labelLen == 0) {
+                pos++
+                break
+            }
+            if ((labelLen and 0xC0) != 0) {
+                pos += 2
+                break
+            }
+            pos += 1 + labelLen
+            guard++
+        }
+        if (pos + 4 > dnsPayload.size) return 0
+        return readUInt16(dnsPayload, pos)
+    }
+
+    /**
+     * Builds an RFC 4074 NOERROR / NODATA empty DNS reply for suppressing IPv6 (`AAAA`) queries
+     * cleanly when an IPv4-only proxy bridge is active so apps never leak out over carrier IPv6.
+     */
+    fun buildEmptyNoDataResponse(dnsQuery: ByteArray): ByteArray? {
+        if (dnsQuery.size < 17) return null
+        val qdCount = readUInt16(dnsQuery, 4)
+        if (qdCount != 1) return null
+        var qEnd = 12
+        var guard = 0
+        while (qEnd < dnsQuery.size && guard < 64) {
+            val labelLen = dnsQuery[qEnd].toInt() and 0xFF
+            if (labelLen == 0) {
+                qEnd++
+                break
+            }
+            if ((labelLen and 0xC0) != 0) {
+                qEnd += 2
+                break
+            }
+            qEnd += 1 + labelLen
+            guard++
+        }
+        val questionEnd = qEnd + 4 // QTYPE + QCLASS
+        if (questionEnd > dnsQuery.size) return null
+
+        val out = ByteArray(questionEnd)
+        System.arraycopy(dnsQuery, 0, out, 0, questionEnd)
+        val rdFlag = dnsQuery[2].toInt() and 0x01
+        out[2] = (0x80 or rdFlag).toByte() // QR=1 (response), preserve RD
+        out[3] = 0x80.toByte()            // RA=1, RCODE=0 (NOERROR)
+        writeUInt16(out, 4, 1)             // QDCOUNT = 1
+        writeUInt16(out, 6, 0)             // ANCOUNT = 0
+        writeUInt16(out, 8, 0)             // NSCOUNT = 0
+        writeUInt16(out, 10, 0)            // ARCOUNT = 0
+        return out
     }
 
     private fun readUInt16(buf: ByteArray, offset: Int): Int {

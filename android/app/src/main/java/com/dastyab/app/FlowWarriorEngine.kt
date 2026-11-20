@@ -1,6 +1,8 @@
 package com.dastyab.app
 
 import android.content.Context
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.Proxy
 import java.net.URL
@@ -9,15 +11,17 @@ import java.net.URL
  * FlowWarriorEngine — Independent "Brutal Eagle" Anti-Geoblock Algorithm exclusively for Google Flow.
  *
  * Completely decoupled from Google AI Studio (`aiStudio` proxy chains, bandit context, and probes),
- * because `flow.google.com` enforces far stricter ASN/datacenter reputation, 151-country allowlists,
- * `labs.google` geo-cookies, and Angular app-shell gates.
+ * because `flow.google.com` enforces far stricter ASN/datacenter reputation, WARP/Tor rejections,
+ * 151-country allowlists, `labs.google` geo-cookies, and Angular app-shell gates.
  *
- * Warrior Architecture:
+ * Heavy Warrior v2 Architecture:
  *  1. Isolated Namespace (`flow_warrior:<netKey>`) + persistent blocked-egress IP blacklist.
- *  2. Tier-1 Clean Residential Exit Priority (heavy bonus for clean residential US/CA/GB/DE/NL/CH/JP/SG/AU/IE).
- *  3. Zero-Mercy Double-Confirm Gate (country allowlist + accounts + Angular shell + secondary host check).
- *  4. Brutal 4-Round Progressive Multi-Hop Escalation (up to 72 candidates, 1..4-hop cascades pairing
- *     censorship-punching entry relays with strict Tier-1 non-datacenter exits).
+ *  2. Deep ASN & WARP/Tor Reputation Shield (heavily penalizes WARP & datacenter ASNs; favors
+ *     genuine Tier-1 Residential/ISP exits in US/CA/GB/DE/NL/CH/JP/SG/AU/IE/etc.).
+ *  3. True GET Zero-Mercy Double-Confirm Gate (`flow.google.com/about/` + `labs.google/fx/tools/flow`
+ *     with coherent Chrome 131 headers & body marker inspection).
+ *  4. Brutal 5-Round Progressive Multi-Hop Escalation (up to 96 candidates, 1..4-hop cascades pairing
+ *     censorship-punching entry relays / WARP / Orbot / v2rayNG with clean Tier-1 residential exits).
  */
 object FlowWarriorEngine {
 
@@ -63,6 +67,9 @@ object FlowWarriorEngine {
         if (!GeoBypassEngine.isFlowCountrySupported(egress.countryCode)) return false
         if (!report.flowCountrySupported || !report.accountsReachable) return false
         if (!report.flow.reachable || report.flow.unsupportedRegion || !report.flow.appShellOk) return false
+        if (egress.warpActive || egress.reputationTier == BrutalAntiGeoblockEngine.ExitReputationTier.WARP_OR_TOR) {
+            if (!doubleConfirmedClean) return false
+        }
         if (requireNonHostingOrDoubleConfirmed && egress.isProxyOrHosting && !doubleConfirmedClean) {
             return false
         }
@@ -71,8 +78,8 @@ object FlowWarriorEngine {
 
     /**
      * Pure-Kotlin Brutal Eagle scoring (higher = stronger Warrior candidate).
-     * Rewards Tier-1 countries & clean residential ASNs; harshly penalizes datacenter flags,
-     * geo-errors, missing Angular shell, and blacklisted IPs.
+     * Rewards Tier-1 countries & clean residential ISPs; harshly penalizes WARP, Tor,
+     * datacenter ASNs, geo-errors, missing Angular shell, and blacklisted IPs.
      */
     fun scoreWarriorCandidate(
         report: GeoBypassEngine.AccessProbeReport,
@@ -85,12 +92,18 @@ object FlowWarriorEngine {
         var score = 0L
         val cc = egress.countryCode.trim().uppercase()
         score += when {
-            WARRIOR_TIER1_COUNTRIES.contains(cc) -> 350L
+            WARRIOR_TIER1_COUNTRIES.contains(cc) -> 450L
             GeoBypassEngine.isFlowCountrySupported(cc) -> 120L
             else -> -800_000L
         }
-        score += if (!egress.isProxyOrHosting) 450L else -180L
-        score += if (report.flow.reachable && !report.flow.unsupportedRegion && report.flow.appShellOk) 500L else -500_000L
+        score += when {
+            egress.warpActive || egress.reputationTier == BrutalAntiGeoblockEngine.ExitReputationTier.WARP_OR_TOR -> -2_500L
+            egress.reputationTier == BrutalAntiGeoblockEngine.ExitReputationTier.RESIDENTIAL_ISP -> 900L
+            !egress.isProxyOrHosting -> 500L
+            egress.reputationTier == BrutalAntiGeoblockEngine.ExitReputationTier.DATACENTER_LOW_RISK -> -220L
+            else -> -600L
+        }
+        score += if (report.flow.reachable && !report.flow.unsupportedRegion && report.flow.appShellOk) 550L else -500_000L
         score += if (report.accountsReachable) 150L else -100_000L
         val lat = report.flow.latencyMs.takeIf { it > 0 } ?: 5_000L
         score -= (lat / 25L).coerceAtMost(200L)
@@ -119,10 +132,11 @@ object FlowWarriorEngine {
     }
 
     /**
-     * Secondary zero-mercy check on `flow.google.com/create` & `labs.google` to ensure
-     * datacenter-flagged exits don't pass home page only to block inside Flow Workspace.
+     * Secondary zero-mercy GET verification on `flow.google.com/about/` & `labs.google/fx/tools/flow`
+     * with authentic Chrome headers and body inspection so flagged datacenter/WARP exits don't pass
+     * the home shell only to geo-lock inside Flow Workspace.
      */
-    fun doubleConfirmFlowWorkspace(proxy: Proxy, timeoutMs: Int = 3500): Boolean {
+    fun doubleConfirmFlowWorkspace(proxy: Proxy, countryCode: String? = "US", timeoutMs: Int = 3800): Boolean {
         val targets = listOf(
             "https://flow.google.com/about/",
             "https://labs.google/fx/tools/flow"
@@ -130,16 +144,29 @@ object FlowWarriorEngine {
         for (target in targets) {
             val ok = runCatching {
                 val conn = (URL(target).openConnection(proxy) as HttpURLConnection).apply {
-                    requestMethod = "HEAD"
+                    requestMethod = "GET"
                     instanceFollowRedirects = false
                     connectTimeout = timeoutMs
                     readTimeout = timeoutMs
-                    BrutalAntiGeoblockEngine.applyBrutalHeaders(this)
+                    BrutalAntiGeoblockEngine.applyCleanBrowserHeaders(this, countryCode = countryCode, mobile = false)
                 }
                 try {
                     val code = conn.responseCode
                     val loc = conn.getHeaderField("Location").orEmpty()
-                    !GeoBypassEngine.isFlowUnsupportedResponse(code, loc, null) && code in 200..399
+                    if (code in listOf(403, 429, 451)) return@runCatching false
+                    if (loc.contains("/sorry/", ignoreCase = true)) return@runCatching false
+                    val body = if (code in 200..299) {
+                        runCatching {
+                            BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
+                                val buf = CharArray(16384)
+                                val n = reader.read(buf)
+                                if (n > 0) String(buf, 0, n) else ""
+                            }
+                        }.getOrDefault("")
+                    } else {
+                        ""
+                    }
+                    !GeoBypassEngine.isFlowUnsupportedResponse(code, loc.ifBlank { target }, body) && code in 200..399
                 } finally {
                     conn.disconnect()
                 }
@@ -178,7 +205,7 @@ object FlowWarriorEngine {
                 intent = AutopilotBrain.AutopilotIntent.GOOGLE_FLOW,
                 networkContextKey = warriorNetKey,
                 stepIndex = 2,
-                stepHeadline = "$WARRIOR_BADGE_PREFIX · Engaging Brutal Eagle bypass for Google Flow…"
+                stepHeadline = "$WARRIOR_BADGE_PREFIX · Engaging Heavy Brutal Eagle bypass for Google Flow…"
             )
         }
 
@@ -203,16 +230,18 @@ object FlowWarriorEngine {
             targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW
         )
         val initialProbe = GeoBypassEngine.runAccessProbe(freshRoute, timeoutMs = 4500)
-        val initialDoubleConfirmed = if (initialProbe.readyForFlow && initialProbe.egress?.isProxyOrHosting == true) {
-            doubleConfirmFlowWorkspace(freshRoute.javaNetProxy, 3200)
+        val initialHighRisk = initialProbe.egress?.isProxyOrHosting == true ||
+            initialProbe.egress?.warpActive == true
+        val initialDoubleConfirmed = if (initialProbe.readyForFlow && initialHighRisk) {
+            doubleConfirmFlowWorkspace(freshRoute.javaNetProxy, initialProbe.egress?.countryCode, 3800)
         } else {
-            false
+            !initialHighRisk
         }
 
         if (!excludeCurrentRoute && isWarriorConfirmed(
                 initialProbe,
                 blacklistedIps = combinedExcludedIps,
-                requireNonHostingOrDoubleConfirmed = false,
+                requireNonHostingOrDoubleConfirmed = true,
                 doubleConfirmedClean = initialDoubleConfirmed
             )
         ) {
@@ -227,7 +256,7 @@ object FlowWarriorEngine {
                 geoMaskObserved = AutopilotBrain.GEO_CLEAR_FLOW,
                 persistContext = context
             )
-            emit("⚔ [$WARRIOR_BADGE_PREFIX] Flow Conquered on current route! ${eg.countryCode} (${eg.ip}) · ${initialProbe.flow.latencyMs}ms")
+            emit("⚔ [$WARRIOR_BADGE_PREFIX] Flow Conquered (${eg.reputationTier.label})! ${eg.countryCode} (${eg.ip}) · ${initialProbe.flow.latencyMs}ms")
             AutopilotBrain.updateSession {
                 it.copy(
                     phase = AutopilotBrain.SessionPhase.CONNECTED,
@@ -242,7 +271,7 @@ object FlowWarriorEngine {
                 routeLabel = label,
                 exitIp = eg.ip,
                 exitCountry = eg.countryCode,
-                isResidentialClean = !eg.isProxyOrHosting,
+                isResidentialClean = !eg.isProxyOrHosting && !eg.warpActive,
                 latencyMs = initialProbe.flow.latencyMs,
                 attemptsCount = 1,
                 chainSpec = freshRoute.upstreamChainSpec,
@@ -253,7 +282,7 @@ object FlowWarriorEngine {
             )
         }
 
-        // Current route failed Flow's harsh gate — quarantine its IP in Flow Warrior memory ONLY
+        // Current route failed Flow's harsh gate or failed high-risk double-confirm — quarantine in Flow Warrior memory ONLY
         initialProbe.egress?.ip?.takeIf { it.isNotBlank() }?.let { badIp ->
             combinedExcludedIps.add(badIp)
             blacklistFlowIp(context, badIp)
@@ -265,38 +294,42 @@ object FlowWarriorEngine {
                 rttMs = null,
                 persistContext = context
             )
-            emit("  ✗ Blocked/Poisoned Flow Exit [$badIp] (${initialProbe.egress.countryCode}) quarantined in Warrior blacklist.")
+            val reasonTag = if (initialProbe.egress.warpActive) "WARP" else initialProbe.egress.reputationTier.label
+            emit("  ✗ Rejected Flow Exit [$badIp] (${initialProbe.egress.countryCode} · $reasonTag) — quarantined & laundering through residential cascade.")
         }
 
-        // Stage 2: Ensure TunnelConfig preserves external VPN chaining & run Brutal 4-Round 72-Candidate Cascade
-        emit("⚔ [$WARRIOR_BADGE_PREFIX] Escalating 4-Round Brutal Eagle Cascade (up to 72 multi-hop candidates)…")
+        // Stage 2: Heavy 5-Round 96-Candidate Entry-Laundering + Residential Cascade
+        emit("⚔ [$WARRIOR_BADGE_PREFIX] Escalating 5-Round Heavy Brutal Eagle Cascade (up to 96 multi-hop candidates)…")
         val chainResult = GeoBypassEngine.discoverAndChainBestRoute(
             context = context,
             targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
             allowHarvest = true,
-            maxCandidates = 72,
+            maxCandidates = 96,
             excludedEgressIps = combinedExcludedIps,
             excludeCurrentRoute = true,
             excludedChainSpecs = excludedChainSpecs,
-            maxRounds = 4
+            maxRounds = 5
         ) { step -> emit("  [Warrior] $step") }
 
         val finalProbe = chainResult.report
         val winnerEgress = finalProbe.egress
-        val isClean = winnerEgress != null && !winnerEgress.isProxyOrHosting
-        var conquered = chainResult.success && isWarriorConfirmed(
-            finalProbe,
-            blacklistedIps = emptySet(),
-            requireNonHostingOrDoubleConfirmed = false
-        )
-        if (conquered && !isClean) {
+        val isClean = winnerEgress != null && !winnerEgress.isProxyOrHosting && !winnerEgress.warpActive
+        var doubleConfirmed = isClean
+        if (chainResult.success && winnerEgress != null && !isClean) {
             val resolvedAfter = GeoBypassEngine.resolveCurrentRoute(
                 context = context,
                 targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW
             )
-            val confirmed = doubleConfirmFlowWorkspace(resolvedAfter.javaNetProxy, 3000)
-            emit("  • Secondary workspace probe on datacenter exit: ${if (confirmed) "PASSED ✓" else "blocked (kept as fallback)"}")
+            doubleConfirmed = doubleConfirmFlowWorkspace(resolvedAfter.javaNetProxy, winnerEgress.countryCode, 3800)
+            emit("  • Zero-Mercy Workspace GET gate (${winnerEgress.reputationTier.label}): ${if (doubleConfirmed) "PASSED ✓" else "BLOCKED ✗"}")
         }
+
+        val conquered = chainResult.success && isWarriorConfirmed(
+            finalProbe,
+            blacklistedIps = emptySet(),
+            requireNonHostingOrDoubleConfirmed = false,
+            doubleConfirmedClean = doubleConfirmed
+        )
 
         val latency = finalProbe.flow.latencyMs.takeIf { it > 0 } ?: 0L
         val chainSpec = TunnelConfig.formatProxyChain(chainResult.bestHops)
@@ -312,7 +345,7 @@ object FlowWarriorEngine {
             )
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().putString(KEY_LAST_CLEAN_CHAIN, chainSpec).apply()
-            emit("⚔ [$WARRIOR_BADGE_PREFIX VICTORY] Flow Conquered via ${chainResult.bestChainLabel} (${winnerEgress.countryCode} · ${winnerEgress.ip})")
+            emit("⚔ [$WARRIOR_BADGE_PREFIX VICTORY] Flow Conquered via ${chainResult.bestChainLabel} (${winnerEgress.countryCode} · ${winnerEgress.ip} · ${winnerEgress.reputationTier.label})")
         } else {
             winnerEgress?.ip?.let { blacklistFlowIp(context, it) }
             emit("⚔ [$WARRIOR_BADGE_PREFIX] Guard Held: ${chainResult.summary}")
@@ -329,7 +362,7 @@ object FlowWarriorEngine {
         }
 
         val headline = if (conquered) {
-            "$WARRIOR_BADGE_PREFIX Conquered Google Flow (${winnerEgress?.countryCode ?: "?"} · ${if (isClean) "Clean Exit" else "Verified"})"
+            "$WARRIOR_BADGE_PREFIX Conquered Google Flow (${winnerEgress?.countryCode ?: "?"} · ${if (isClean) "Clean Residential" else "Workspace Verified"})"
         } else {
             "$WARRIOR_BADGE_PREFIX: Harsh Flow Firewall Blocked Tested Exits"
         }

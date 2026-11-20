@@ -23,6 +23,8 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.HttpURLConnection
 import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
@@ -55,6 +57,7 @@ class DastyabVpnService : VpnService() {
     private val lastNetworkTriggerMs = java.util.concurrent.atomic.AtomicLong(0L)
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     @Volatile private var activeDohUrl: String = TunnelConfig.DEFAULT_DOH_URL
+    @Volatile private var activeHttpProxyPort: Int? = null
     private val tunWriteLock = Any()
 
     private data class CachedDnsReply(val response: ByteArray, val expiresAtMs: Long)
@@ -296,6 +299,7 @@ class DastyabVpnService : VpnService() {
             )
 
             activeDohUrl = settings.dohUrl
+            activeHttpProxyPort = localHttpProxyPort
             dnsExecutor = Executors.newFixedThreadPool(6)
             startWatchdogIfEnabled(settings)
 
@@ -422,6 +426,7 @@ class DastyabVpnService : VpnService() {
         readerThread = null
         dnsExecutor?.shutdownNow()
         dnsExecutor = null
+        activeHttpProxyPort = null
         try {
             vpnInterface?.close()
         } catch (_: IOException) {}
@@ -659,9 +664,7 @@ class DastyabVpnService : VpnService() {
         secondaryDns: String
     ): ByteArray? {
         val domain = DnsPacketCodec.extractQueryDomain(query).lowercase()
-        val qtype = if (query.size >= 4) {
-            ((query[query.size - 4].toInt() and 0xFF) shl 8) or (query[query.size - 3].toInt() and 0xFF)
-        } else 0
+        val qtype = DnsPacketCodec.extractQueryType(query)
         val cacheKey = "$domain:$qtype"
         val now = System.currentTimeMillis()
         if (domain.isNotEmpty()) {
@@ -681,7 +684,15 @@ class DastyabVpnService : VpnService() {
         } else {
             DomainDnsRules.Rules()
         }
-        val fresh = if (DomainDnsRules.shouldBypassToLocalDns(domain, rules)) {
+        val bypassLocal = DomainDnsRules.shouldBypassToLocalDns(domain, rules)
+
+        // Prevent carrier IPv6 from bypassing IPv4-only SOCKS5/HTTP proxy chains:
+        // return clean RFC 4074 NODATA for non-bypassed AAAA queries while a proxy bridge is active.
+        if (!bypassLocal && qtype == DnsPacketCodec.QTYPE_AAAA && activeHttpProxyPort != null) {
+            DnsPacketCodec.buildEmptyNoDataResponse(query)?.let { return it }
+        }
+
+        val fresh = if (bypassLocal) {
             // Iranian (.ir / banking / local) or custom bypass domain: resolve via fast protected UDP DNS first
             resolveDnsBypassLocalFirst(query, dohUrl, primaryDns, secondaryDns)
         } else {
@@ -717,16 +728,11 @@ class DastyabVpnService : VpnService() {
         primaryDns: String,
         secondaryDns: String
     ): ByteArray? {
-        val dohChain = listOf(
-            dohUrl,
-            "https://1.1.1.1/dns-query",
-            "https://8.8.8.8/dns-query",
-            "https://9.9.9.9/dns-query"
-        ).distinct()
+        val dohChain = (listOf(dohUrl) + BrutalAntiGeoblockEngine.NO_ECS_DOH_URLS).distinct()
         for (url in dohChain) {
             queryDoh(url, query)?.let { return it }
         }
-        val udpChain = listOf(primaryDns, secondaryDns, "1.1.1.1", "8.8.8.8").distinct()
+        val udpChain = listOf(primaryDns, secondaryDns, "1.1.1.1", "9.9.9.9", "8.8.8.8").distinct()
         for (ip in udpChain) {
             queryProtectedUdpDns(ip, query)?.let { return it }
         }
@@ -734,27 +740,37 @@ class DastyabVpnService : VpnService() {
     }
 
     private fun queryDoh(dohUrl: String, query: ByteArray): ByteArray? {
-        var conn: HttpURLConnection? = null
-        return try {
-            conn = (URL(dohUrl).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                connectTimeout = 2800
-                readTimeout = 2800
-                setRequestProperty("Content-Type", "application/dns-message")
-                setRequestProperty("Accept", "application/dns-message")
-            }
-            conn.outputStream.use { it.write(query) }
-            if (conn.responseCode == 200) {
-                conn.inputStream.use { it.readBytes() }.takeIf { it.size >= 12 }
-            } else {
-                null
-            }
-        } catch (_: Exception) {
-            null
-        } finally {
-            conn?.disconnect()
+        val proxyPort = activeHttpProxyPort ?: LocalProxyService.activePort()
+        val proxyAttempts = if (proxyPort != null) {
+            listOf(Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", proxyPort)), Proxy.NO_PROXY)
+        } else {
+            listOf(Proxy.NO_PROXY)
         }
+        for (proxy in proxyAttempts) {
+            var conn: HttpURLConnection? = null
+            val res = try {
+                conn = (URL(dohUrl).openConnection(proxy) as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    connectTimeout = 2600
+                    readTimeout = 2600
+                    setRequestProperty("Content-Type", "application/dns-message")
+                    setRequestProperty("Accept", "application/dns-message")
+                }
+                conn.outputStream.use { it.write(query) }
+                if (conn.responseCode == 200) {
+                    conn.inputStream.use { it.readBytes() }.takeIf { it.size >= 12 }
+                } else {
+                    null
+                }
+            } catch (_: Exception) {
+                null
+            } finally {
+                conn?.disconnect()
+            }
+            if (res != null) return res
+        }
+        return null
     }
 
     private fun queryProtectedUdpDns(dnsIp: String, query: ByteArray): ByteArray? {
