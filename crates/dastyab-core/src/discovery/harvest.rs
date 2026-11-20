@@ -303,11 +303,7 @@ pub fn extract_config_file_urls(body: &str) -> Vec<String> {
 /// Extract inline OpenVPN (`.ovpn` / `.openvpn`) profile directives posted as text
 /// (`remote <host> <port>` paired with `client` / `dev tun` / `proto tcp|udp`).
 fn extract_openvpn_links(body: &str) -> Vec<String> {
-    let text = body
-        .replace("<br/>", "\n")
-        .replace("<br />", "\n")
-        .replace("<br>", "\n")
-        .replace("&amp;", "&");
+    let text = normalize_html_block_text(body);
     if !text.contains("remote ") {
         return Vec::new();
     }
@@ -371,11 +367,7 @@ fn extract_openvpn_links(body: &str) -> Vec<String> {
 /// Extract raw WireGuard `.conf` INI blocks (`[Interface] ... [Peer]`) into canonical
 /// `wireguard://PrivateKey@Endpoint?publickey=...` share links.
 fn extract_wireguard_ini_links(body: &str) -> Vec<String> {
-    let text = body
-        .replace("<br/>", "\n")
-        .replace("<br />", "\n")
-        .replace("<br>", "\n")
-        .replace("&amp;", "&");
+    let text = normalize_html_block_text(body);
     if !text.contains("[Interface]") || !text.contains("[Peer]") {
         return Vec::new();
     }
@@ -447,6 +439,42 @@ fn extract_wireguard_ini_links(body: &str) -> Vec<String> {
         out.push(format!("wireguard://{user}@{endpoint}{query}#WireGuard"));
     }
     out
+}
+
+/// Convert Telegram preview line-break and wrapper HTML tags into newlines and decode `&amp;`
+/// while keeping OpenVPN inline PEM markers such as `<ca>` and `<tls-auth>` intact.
+fn normalize_html_block_text(body: &str) -> String {
+    let mut text = body
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
+        .replace("<br>", "\n")
+        .replace("&amp;", "&");
+    for tag in ["div", "p", "pre", "code", "span"] {
+        text = text.replace(&format!("</{tag}>"), "\n");
+        let open_prefix = format!("<{tag}");
+        let mut rebuilt = String::with_capacity(text.len());
+        let mut rest = text.as_str();
+        while let Some(start) = rest.find(&open_prefix) {
+            let after_name = rest[start + open_prefix.len()..].chars().next();
+            if !matches!(after_name, Some('>' | ' ' | '\t' | '\n')) {
+                rebuilt.push_str(&rest[..start + open_prefix.len()]);
+                rest = &rest[start + open_prefix.len()..];
+                continue;
+            }
+            rebuilt.push_str(&rest[..start]);
+            if let Some(gt) = rest[start..].find('>') {
+                rebuilt.push('\n');
+                rest = &rest[start + gt + 1..];
+            } else {
+                rebuilt.push_str(&rest[start..]);
+                rest = "";
+                break;
+            }
+        }
+        rebuilt.push_str(rest);
+        text = rebuilt;
+    }
+    text
 }
 
 /// Backwards-compatible shim: only VLESS links.
@@ -1162,9 +1190,12 @@ mod tests {
             "</div>"
         );
         let links = extract_proxy_links(html);
-        assert!(links.iter().any(|l| l.starts_with("wireguard://privABC==@162.159.192.1:2408")));
-        assert!(links.iter().any(|l| l.starts_with("npv4://user@npv.example.com:443")));
-        assert!(links.iter().any(|l| l == "tg://proxy?server=9.9.9.9&port=443&secret=ee001122"));
+        let wg = "wireguard://privABC==@162.159.192.1:2408";
+        let npv = "npv4://user@npv.example.com:443";
+        let mt = "tg://proxy?server=9.9.9.9&port=443&secret=ee001122";
+        assert!(links.iter().any(|l| l.starts_with(wg)));
+        assert!(links.iter().any(|l| l.starts_with(npv)));
+        assert!(links.iter().any(|l| l == mt));
     }
 
     #[test]
@@ -1180,7 +1211,8 @@ mod tests {
             "</div>"
         );
         let links = extract_proxy_links(html);
-        assert!(links.iter().any(|l| l.starts_with("openvpn://45.12.34.56:443")));
+        let ovpn = "openvpn://45.12.34.56:443";
+        assert!(links.iter().any(|l| l.starts_with(ovpn)));
 
         let file_urls = extract_config_file_urls(html);
         assert_eq!(file_urls.len(), 4);
