@@ -514,7 +514,11 @@ class LocalProxyServer(
             0x04 -> readExact(ins, 16 + 2)
             0x03 -> {
                 val dLen = ins.read()
-                if (dLen > 0) readExact(ins, dLen + 2) else readExact(ins, 2)
+                when {
+                    dLen < 0 -> null
+                    dLen > 0 -> readExact(ins, dLen + 2)
+                    else -> readExact(ins, 2)
+                }
             }
             else -> throw IOException("Upstream SOCKS5 unknown address type")
         } ?: throw IOException("Upstream SOCKS5 truncated bind address")

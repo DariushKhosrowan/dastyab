@@ -247,14 +247,46 @@ class GeoBypassAndProxyTest {
         }
     }
 
-    @Test
-    fun localProxyServer_threeHopChainWithHttpAndSocks5AuthOnLoopback() {
+    private fun relayTestSockets(client: Socket, upstream: Socket) {
+        client.soTimeout = 5000
+        upstream.soTimeout = 5000
+        client.tcpNoDelay = true
+        upstream.tcpNoDelay = true
+        val ci = client.getInputStream()
+        val co = client.getOutputStream()
+        val ui = upstream.getInputStream()
+        val uo = upstream.getOutputStream()
+        fun pump(src: java.io.InputStream, dst: java.io.OutputStream) {
+            val buf = ByteArray(4096)
+            while (true) {
+                val n = try { src.read(buf) } catch (_: Exception) { -1 }
+                if (n <= 0) break
+                dst.write(buf, 0, n)
+                dst.flush()
+            }
+        }
+        val t = thread(isDaemon = true) {
+            runCatching {
+                pump(ci, uo)
+                upstream.shutdownOutput()
+            }
+        }
+        runCatching {
+            pump(ui, co)
+            co.flush()
+        }
+        t.join(2000)
+    }
+
+    private fun startLoopbackEchoServer(): Pair<ServerSocket, Thread> {
         val echoServer = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
         val echoThread = thread(isDaemon = true) {
             while (!echoServer.isClosed) {
                 val s = try { echoServer.accept() } catch (_: Exception) { break }
                 thread(isDaemon = true) {
                     s.use { sock ->
+                        sock.soTimeout = 5000
+                        sock.tcpNoDelay = true
                         val ins = sock.getInputStream()
                         val out = sock.getOutputStream()
                         val buf = ByteArray(1024)
@@ -268,73 +300,20 @@ class GeoBypassAndProxyTest {
                 }
             }
         }
+        return echoServer to echoThread
+    }
 
-        // Hop 3 (Exit): LocalProxyServer Direct
-        val exitProxy = LocalProxyServer(requestedPort = 0, upstream = LocalProxyServer.Upstream.Direct)
-        val exitPort = exitProxy.start()
-
-        // Hop 2 (Middle): Minimal SOCKS5 server requiring RFC 1929 user/pass ("u2":"p2") forwarding to exitPort
-        val socksAuthServer = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
-        val socksAuthThread = thread(isDaemon = true) {
-            while (!socksAuthServer.isClosed) {
-                val c = try { socksAuthServer.accept() } catch (_: Exception) { break }
+    private fun startLoopbackHttpAuthProxy(expectedUser: String, expectedPass: String): Pair<ServerSocket, Thread> {
+        val expectedToken = java.util.Base64.getEncoder()
+            .encodeToString("$expectedUser:$expectedPass".toByteArray(StandardCharsets.UTF_8))
+        val srv = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
+        val t = thread(isDaemon = true) {
+            while (!srv.isClosed) {
+                val c = try { srv.accept() } catch (_: Exception) { break }
                 thread(isDaemon = true) {
                     c.use { sock ->
-                        val ins = DataInputStream(sock.getInputStream())
-                        val out = sock.getOutputStream()
-                        val ver = ins.readUnsignedByte()
-                        val nm = ins.readUnsignedByte()
-                        if (ver != 5 || nm <= 0) return@use
-                        val methods = ByteArray(nm); ins.readFully(methods)
-                        if (!methods.contains(0x02.toByte())) {
-                            out.write(byteArrayOf(0x05, 0xFF.toByte())); return@use
-                        }
-                        out.write(byteArrayOf(0x05, 0x02)); out.flush()
-                        val aver = ins.readUnsignedByte()
-                        val ulen = ins.readUnsignedByte(); val ub = ByteArray(ulen); ins.readFully(ub)
-                        val plen = ins.readUnsignedByte(); val pb = ByteArray(plen); ins.readFully(pb)
-                        if (aver != 1 || String(ub, StandardCharsets.UTF_8) != "u2" || String(pb, StandardCharsets.UTF_8) != "p2") {
-                            out.write(byteArrayOf(0x01, 0x01)); out.flush(); return@use
-                        }
-                        out.write(byteArrayOf(0x01, 0x00)); out.flush()
-                        val hdr = ByteArray(4); ins.readFully(hdr)
-                        val atyp = hdr[3].toInt() and 0xFF
-                        val host = if (atyp == 3) {
-                            val hl = ins.readUnsignedByte(); val hb = ByteArray(hl); ins.readFully(hb); String(hb, StandardCharsets.US_ASCII)
-                        } else {
-                            val ab = ByteArray(4); ins.readFully(ab); InetAddress.getByAddress(ab).hostAddress
-                        }
-                        val portB = ByteArray(2); ins.readFully(portB)
-                        val tPort = ((portB[0].toInt() and 0xFF) shl 8) or (portB[1].toInt() and 0xFF)
-                        Socket("127.0.0.1", exitPort).use { up ->
-                            val uo = up.getOutputStream(); val ui = DataInputStream(up.getInputStream())
-                            uo.write(byteArrayOf(0x05, 0x01, 0x00)); uo.flush()
-                            val gr = ByteArray(2); ui.readFully(gr)
-                            val hb = host.toByteArray(StandardCharsets.US_ASCII)
-                            val cr = ByteArray(7 + hb.size)
-                            cr[0] = 5; cr[1] = 1; cr[2] = 0; cr[3] = 3; cr[4] = hb.size.toByte()
-                            System.arraycopy(hb, 0, cr, 5, hb.size)
-                            cr[5 + hb.size] = ((tPort shr 8) and 0xFF).toByte()
-                            cr[6 + hb.size] = (tPort and 0xFF).toByte()
-                            uo.write(cr); uo.flush()
-                            val rep = ByteArray(10); ui.readFully(rep)
-                            out.write(byteArrayOf(5, 0, 0, 1, 0, 0, 0, 0, 0, 0)); out.flush()
-                            val t = thread(isDaemon = true) { runCatching { ins.copyTo(uo); up.shutdownOutput() } }
-                            runCatching { ui.copyTo(out); out.flush() }
-                            t.join(1000)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Hop 1 (Entry): Minimal HTTP CONNECT server requiring Basic auth ("u1:p1") forwarding TCP to socksAuthServer
-        val httpAuthServer = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
-        val httpAuthThread = thread(isDaemon = true) {
-            while (!httpAuthServer.isClosed) {
-                val c = try { httpAuthServer.accept() } catch (_: Exception) { break }
-                thread(isDaemon = true) {
-                    c.use { sock ->
+                        sock.soTimeout = 5000
+                        sock.tcpNoDelay = true
                         val ins = sock.getInputStream()
                         val out = sock.getOutputStream()
                         val buf = ByteArrayOutputStream()
@@ -349,7 +328,7 @@ class GeoBypassAndProxyTest {
                         val hdrText = String(buf.toByteArray(), StandardCharsets.US_ASCII)
                         val authOk = hdrText.lines().any {
                             it.startsWith("Proxy-Authorization: Basic ", ignoreCase = true) &&
-                                it.contains("dTE6cDE=") // base64("u1:p1")
+                                it.contains(expectedToken)
                         }
                         if (!authOk) {
                             out.write("HTTP/1.1 407 Proxy Auth Required\r\n\r\n".toByteArray(StandardCharsets.US_ASCII))
@@ -358,18 +337,132 @@ class GeoBypassAndProxyTest {
                         }
                         val targetAuth = hdrText.lines().first().split(' ')[1]
                         val (tHost, tPort) = LocalProxyServer.parseHostPort(targetAuth, 443)!!
-                        Socket(tHost, tPort).use { up ->
+                        Socket().use { up ->
+                            up.connect(InetSocketAddress(tHost, tPort), 3000)
                             out.write("HTTP/1.1 200 Connection Established\r\n\r\n".toByteArray(StandardCharsets.US_ASCII))
                             out.flush()
-                            val uo = up.getOutputStream(); val ui = up.getInputStream()
-                            val t = thread(isDaemon = true) { runCatching { ins.copyTo(uo); up.shutdownOutput() } }
-                            runCatching { ui.copyTo(out); out.flush() }
-                            t.join(1000)
+                            relayTestSockets(sock, up)
                         }
                     }
                 }
             }
         }
+        return srv to t
+    }
+
+    private fun startLoopbackSocks5AuthProxy(expectedUser: String, expectedPass: String): Pair<ServerSocket, Thread> {
+        val srv = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
+        val t = thread(isDaemon = true) {
+            while (!srv.isClosed) {
+                val c = try { srv.accept() } catch (_: Exception) { break }
+                thread(isDaemon = true) {
+                    c.use { sock ->
+                        sock.soTimeout = 5000
+                        sock.tcpNoDelay = true
+                        val ins = DataInputStream(sock.getInputStream())
+                        val out = sock.getOutputStream()
+                        val ver = ins.readUnsignedByte()
+                        val nm = ins.readUnsignedByte()
+                        if (ver != 5 || nm <= 0) return@use
+                        val methods = ByteArray(nm); ins.readFully(methods)
+                        if (!methods.contains(0x02.toByte())) {
+                            out.write(byteArrayOf(0x05, 0xFF.toByte()))
+                            out.flush()
+                            return@use
+                        }
+                        out.write(byteArrayOf(0x05, 0x02)); out.flush()
+                        val aver = ins.readUnsignedByte()
+                        val ulen = ins.readUnsignedByte(); val ub = ByteArray(ulen); ins.readFully(ub)
+                        val plen = ins.readUnsignedByte(); val pb = ByteArray(plen); ins.readFully(pb)
+                        if (aver != 1 || String(ub, StandardCharsets.UTF_8) != expectedUser || String(pb, StandardCharsets.UTF_8) != expectedPass) {
+                            out.write(byteArrayOf(0x01, 0x01)); out.flush(); return@use
+                        }
+                        out.write(byteArrayOf(0x01, 0x00)); out.flush()
+                        val hdr = ByteArray(4); ins.readFully(hdr)
+                        val atyp = hdr[3].toInt() and 0xFF
+                        val host = when (atyp) {
+                            3 -> {
+                                val hl = ins.readUnsignedByte(); val hb = ByteArray(hl); ins.readFully(hb)
+                                String(hb, StandardCharsets.US_ASCII)
+                            }
+                            1 -> {
+                                val ab = ByteArray(4); ins.readFully(ab)
+                                InetAddress.getByAddress(ab).hostAddress
+                            }
+                            else -> {
+                                out.write(byteArrayOf(5, 8, 0, 1, 0, 0, 0, 0, 0, 0)); out.flush()
+                                return@use
+                            }
+                        }
+                        val portB = ByteArray(2); ins.readFully(portB)
+                        val tPort = ((portB[0].toInt() and 0xFF) shl 8) or (portB[1].toInt() and 0xFF)
+                        Socket().use { up ->
+                            up.connect(InetSocketAddress(host, tPort), 3000)
+                            out.write(byteArrayOf(5, 0, 0, 1, 0, 0, 0, 0, 0, 0)); out.flush()
+                            relayTestSockets(sock, up)
+                        }
+                    }
+                }
+            }
+        }
+        return srv to t
+    }
+
+    @Test
+    fun localProxyServer_chainsThroughHttpBasicAuthProxyOnLoopback() {
+        val (echoServer, echoThread) = startLoopbackEchoServer()
+        val (httpAuthServer, httpAuthThread) = startLoopbackHttpAuthProxy("u1", "p1")
+        val proxy = LocalProxyServer(
+            requestedPort = 0,
+            upstream = LocalProxyServer.Upstream.Http("127.0.0.1", httpAuthServer.localPort, "u1", "p1")
+        )
+        val port = proxy.start()
+        try {
+            val echoed = sendViaHttpConnect("127.0.0.1", port, "127.0.0.1", echoServer.localPort, "http-auth-ok")
+            assertEquals("http-auth hop failed (err=${proxy.stats().lastError})", "http-auth-ok", echoed)
+        } finally {
+            proxy.close()
+            httpAuthServer.close()
+            echoServer.close()
+            httpAuthThread.interrupt()
+            echoThread.interrupt()
+        }
+    }
+
+    @Test
+    fun localProxyServer_chainsThroughSocks5UserPassAuthProxyOnLoopback() {
+        val (echoServer, echoThread) = startLoopbackEchoServer()
+        val (socksAuthServer, socksAuthThread) = startLoopbackSocks5AuthProxy("u2", "p2")
+        val proxy = LocalProxyServer(
+            requestedPort = 0,
+            upstream = LocalProxyServer.Upstream.Socks5("127.0.0.1", socksAuthServer.localPort, "u2", "p2")
+        )
+        val port = proxy.start()
+        try {
+            val echoed = sendViaSocks5("127.0.0.1", port, "127.0.0.1", echoServer.localPort, "socks5-auth-ok")
+            assertEquals("socks5-auth hop failed (err=${proxy.stats().lastError})", "socks5-auth-ok", echoed)
+        } finally {
+            proxy.close()
+            socksAuthServer.close()
+            echoServer.close()
+            socksAuthThread.interrupt()
+            echoThread.interrupt()
+        }
+    }
+
+    @Test
+    fun localProxyServer_threeHopChainWithHttpAndSocks5AuthOnLoopback() {
+        val (echoServer, echoThread) = startLoopbackEchoServer()
+
+        // Hop 3 (Exit): LocalProxyServer Direct
+        val exitProxy = LocalProxyServer(requestedPort = 0, upstream = LocalProxyServer.Upstream.Direct)
+        val exitPort = exitProxy.start()
+
+        // Hop 2 (Middle): RFC 1929 SOCKS5 proxy ("u2":"p2") that connects directly to the requested next hop (exitPort)
+        val (socksAuthServer, socksAuthThread) = startLoopbackSocks5AuthProxy("u2", "p2")
+
+        // Hop 1 (Entry): HTTP CONNECT Basic-auth proxy ("u1":"p1") that connects directly to the requested next hop (socksAuthServer)
+        val (httpAuthServer, httpAuthThread) = startLoopbackHttpAuthProxy("u1", "p1")
 
         val entryChainProxy = LocalProxyServer(
             requestedPort = 0,
@@ -385,7 +478,11 @@ class GeoBypassAndProxyTest {
 
         try {
             val echoed = sendViaHttpConnect("127.0.0.1", entryPort, "127.0.0.1", echoServer.localPort, "three-hop-ok")
-            assertEquals("three-hop-ok", echoed)
+            assertEquals(
+                "three-hop proxy did not relay the payload (entryErr=${entryChainProxy.stats().lastError}, exitErr=${exitProxy.stats().lastError})",
+                "three-hop-ok",
+                echoed
+            )
         } finally {
             entryChainProxy.close()
             httpAuthServer.close()
