@@ -667,19 +667,27 @@ object UniversalConfig {
         for (pair in query.split('&')) {
             if (pair.isEmpty()) continue
             val idx = pair.indexOf('=')
-            if (idx <= 0) continue
+            if (idx <= 0) return null
             val key = pair.substring(0, idx).trim().lowercase()
             val value = decodePercent(pair.substring(idx + 1).trim()).trim()
             when (key) {
                 "server", "host" -> {
-                    if (server != null || value.isEmpty() || value.any { it.isWhitespace() } || value.contains('/')) {
+                    if (server != null ||
+                        value.isEmpty() ||
+                        value.any { it.isWhitespace() } ||
+                        value.contains('/') ||
+                        value.contains('#') ||
+                        value.contains('?')
+                    ) {
                         return null
                     }
                     server = value
                 }
                 "port" -> {
+                    if (port != null || value.isEmpty() || !value.all { it in '0'..'9' }) {
+                        return null
+                    }
                     val p = value.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
-                    if (port != null) return null
                     port = p
                 }
                 "secret" -> {
@@ -688,6 +696,7 @@ object UniversalConfig {
                     }
                     secret = value
                 }
+                else -> return null
             }
         }
 

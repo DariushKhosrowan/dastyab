@@ -239,7 +239,12 @@ class UniversalConfigTest {
             "tg://proxy?server=1.2.3.4&server=5.6.7.8&port=443&secret=abc",
             "tg://proxy?server=1.2.3.4&host=5.6.7.8&port=443&secret=abc",
             "tg://proxy?server=1.2.3.4&port=443&port=8443&secret=abc",
-            "tg://proxy?server=1.2.3.4&port=443&secret=abc&secret=def"
+            "tg://proxy?server=1.2.3.4&port=443&secret=abc&secret=def",
+            "tg://proxy?server=1.2.3.4&port=443&secret=abc&extra=1",
+            "tg://proxy?server=1.2.3.4&port=443&secret=abc&dangling",
+            "tg://proxy?server=1.2.3.4&port=+443&secret=abc",
+            "tg://proxy?server=1.2.3.4%23bad&port=443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=443&secret=ab%20cd"
         )
         for (bad in malformedLinks) {
             assertNull("Expected null for $bad", UniversalConfig.parse(bad))

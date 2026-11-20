@@ -306,6 +306,56 @@ pub fn extract_mtproto_links(body: &str) -> Vec<String> {
     out
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MtprotoKey {
+    Server,
+    Port,
+    Secret,
+}
+
+impl MtprotoKey {
+    fn parse(key: &str) -> Option<Self> {
+        match key.trim().to_ascii_lowercase().as_str() {
+            "server" | "host" => Some(Self::Server),
+            "port" => Some(Self::Port),
+            "secret" => Some(Self::Secret),
+            _ => None,
+        }
+    }
+}
+
+fn validate_mtproto_server(raw: &str) -> Option<String> {
+    let decoded = crate::artifact::vless::decode_query(raw.trim());
+    let val = decoded.trim();
+    if val.is_empty()
+        || val.chars().any(char::is_whitespace)
+        || val.contains('/')
+        || val.contains('#')
+        || val.contains('?')
+    {
+        return None;
+    }
+    Some(val.to_string())
+}
+
+fn validate_mtproto_port(raw: &str) -> Option<u16> {
+    let decoded = crate::artifact::vless::decode_query(raw.trim());
+    let val = decoded.trim();
+    if val.is_empty() || !val.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    val.parse::<u16>().ok().filter(|&p| p > 0)
+}
+
+fn validate_mtproto_secret(raw: &str) -> Option<String> {
+    let decoded = crate::artifact::vless::decode_query(raw.trim());
+    let val = decoded.trim();
+    if val.is_empty() || val.chars().any(char::is_whitespace) {
+        return None;
+    }
+    Some(val.to_string())
+}
+
 /// Telegram MTProto links (`tg://proxy?server=...&port=...&secret=...`,
 /// `https://t.me/proxy?...`, or `https://telegram.me/proxy?...`).
 fn parse_mtproto(raw: &str) -> Option<ProxyUri> {
@@ -321,36 +371,26 @@ fn parse_mtproto(raw: &str) -> Option<ProxyUri> {
         if pair.is_empty() {
             continue;
         }
-        let Some((key, value)) = pair.split_once('=') else {
-            continue;
-        };
-        let decoded = crate::artifact::vless::decode_query(value.trim());
-        let val = decoded.trim();
-        match key.trim().to_ascii_lowercase().as_str() {
-            "server" | "host" => {
-                if server.is_some()
-                    || val.is_empty()
-                    || val.chars().any(char::is_whitespace)
-                    || val.contains('/')
-                {
+        let (key, value) = pair.split_once('=')?;
+        match MtprotoKey::parse(key)? {
+            MtprotoKey::Server => {
+                if server.is_some() {
                     return None;
                 }
-                server = Some(val.to_string());
+                server = Some(validate_mtproto_server(value)?);
             }
-            "port" => {
-                let parsed = val.parse::<u16>().ok().filter(|&p| p > 0)?;
+            MtprotoKey::Port => {
                 if port.is_some() {
                     return None;
                 }
-                port = Some(parsed);
+                port = Some(validate_mtproto_port(value)?);
             }
-            "secret" => {
-                if secret.is_some() || val.is_empty() || val.chars().any(char::is_whitespace) {
+            MtprotoKey::Secret => {
+                if secret.is_some() {
                     return None;
                 }
-                secret = Some(val.to_string());
+                secret = Some(validate_mtproto_secret(value)?);
             }
-            _ => {}
         }
     }
     let host = server?;
@@ -748,17 +788,32 @@ mod tests {
             "tg://proxy?server=1.2.3.4&host=5.6.7.8&port=443&secret=abc",
             "tg://proxy?server=1.2.3.4&port=443&port=8443&secret=abc",
             "tg://proxy?server=1.2.3.4&port=443&secret=abc&secret=def",
+            "tg://proxy?server=1.2.3.4&port=443&secret=abc&extra=1",
+            "tg://proxy?server=1.2.3.4&port=443&secret=abc&dangling",
+            "tg://proxy?server=1.2.3.4&port=+443&secret=abc",
+            "tg://proxy?server=1.2.3.4%23bad&port=443&secret=abc",
+            "tg://proxy?server=1.2.3.4&port=443&secret=ab%20cd",
             "https://t.me/some_channel",
-            "vless://uuid@1.2.3.4:443#v",
         ] {
             assert!(ProxyUri::parse(bad).is_none(), "expected None for {bad}");
         }
+        for non_mt in [
+            "https://t.me/some_channel",
+            "vless://uuid@1.2.3.4:443#v",
+            "ss://chacha20-ietf-poly1305:key@1.2.3.4:8388#ss1",
+        ] {
+            assert!(!is_mtproto_link(non_mt), "not mtproto: {non_mt}");
+            assert!(parse_mtproto(non_mt).is_none(), "not mtproto: {non_mt}");
+        }
+        let vless = ProxyUri::parse("vless://uuid@1.2.3.4:443#v").expect("valid vless");
+        assert_eq!(vless.scheme, "vless");
+
         let html = concat!(
             r#"<a href="HTTPS://T.ME/PROXY?server=1.2.3.4&amp;port=443&amp;secret=abc">p</a> "#,
             r#"<span>(tg://proxy?server=5.6.7.8&amp;port=8443&amp;secret=def),</span> "#,
             r#"<a href="https://evil.example/t.me/proxy?"#,
             r#"server=9.9.9.9&amp;port=443&amp;secret=bad">x</a> "#,
-            r#"<span>tg://proxy?server=7.7.7.7&amp;port=443</span>"#,
+            r#"<span>tg://proxy?server=7.7.7.7&amp;port=443</span>"#
         );
         let extracted = extract_mtproto_links(html);
         assert_eq!(
@@ -768,5 +823,24 @@ mod tests {
                 "tg://proxy?server=5.6.7.8&port=8443&secret=def",
             ]
         );
+    }
+
+    #[test]
+    fn parse_never_panics_on_fuzz_inputs() {
+        let fuzz = [
+            "",
+            "://",
+            "tg://proxy?",
+            "tg://proxy?====&&&&####",
+            "tg://proxy?server=%ZZ&port=%FF&secret=%E2%28%A1",
+            "https://t.me/proxy?server=🔒&port=443&secret=کلید",
+            "vless://[[[[::::@@@@",
+            "vmess:///////",
+            "npv4://%%%%",
+        ];
+        for s in fuzz {
+            let _ = ProxyUri::parse(s);
+            let _ = extract_mtproto_links(s);
+        }
     }
 }
