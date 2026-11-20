@@ -526,7 +526,7 @@ mod tests {
         let s = r.to_string();
         assert!(s.contains("✓ Setup complete"), "got: {s}");
         // Success path never surfaces a failure message.
-        assert!(!s.contains("✗"));
+        assert!(!s.contains('✗'));
         assert!(s.contains("1.2s"));
     }
 

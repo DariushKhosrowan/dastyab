@@ -307,7 +307,7 @@ mod tests {
             {
                 saw_decoy = true;
                 // Must look like sub.<ref-domain>.
-                assert!(domain.contains("."), "decoy should be a FQDN: {domain}");
+                assert!(domain.contains('.'), "decoy should be a FQDN: {domain}");
             }
         }
         assert!(

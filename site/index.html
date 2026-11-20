@@ -1418,13 +1418,15 @@ dastyab export v2rayn  --output xray.json</code></pre>
         renderPlatform();
 
         if (pushQuery && window.history && window.history.replaceState) {
-          const url = new URL(window.location.href);
-          if (currentLang === "fa") {
-            url.searchParams.set("lang", "fa");
-          } else {
-            url.searchParams.delete("lang");
-          }
-          window.history.replaceState({}, "", url.toString());
+          try {
+            const url = new URL(window.location.href);
+            if (currentLang === "fa") {
+              url.searchParams.set("lang", "fa");
+            } else {
+              url.searchParams.delete("lang");
+            }
+            window.history.replaceState({}, "", url.toString());
+          } catch (_) {}
         }
       }
 

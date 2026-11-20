@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn human_size_uses_human_bytes() {
-        assert!(human_size(0).contains("B"));
+        assert!(human_size(0).contains('B'));
     }
 
     #[test]

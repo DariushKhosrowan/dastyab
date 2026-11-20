@@ -102,8 +102,8 @@ mod tests {
             note: "monitor: 2 alive".into(),
         };
         let line = simplify_status(&s);
-        assert!(line.contains("✓"));
-        assert!(line.contains("2"));
+        assert!(line.contains('✓'));
+        assert!(line.contains('2'));
         assert!(!line.contains("endpoint"));
         assert!(!line.contains("sni"));
         assert!(!line.contains("port"));

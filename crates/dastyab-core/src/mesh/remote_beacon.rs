@@ -751,8 +751,8 @@ mod tests {
             },
             crate::probe::diagnose::Locale::En,
         );
-        assert!(msg.contains("a"));
-        assert!(msg.contains("b"));
+        assert!(msg.contains('a'));
+        assert!(msg.contains('b'));
     }
 
     #[test]

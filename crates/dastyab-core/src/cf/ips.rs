@@ -625,7 +625,7 @@ pub fn parse_seeds(raw: &str) -> (usize, Vec<String>) {
             continue;
         }
         // Strip trailing comment.
-        let bare = match line.find("#") {
+        let bare = match line.find('#') {
             Some(i) => line[..i].trim(),
             None => line,
         };
