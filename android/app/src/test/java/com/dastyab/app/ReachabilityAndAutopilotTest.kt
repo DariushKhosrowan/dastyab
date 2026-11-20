@@ -107,4 +107,75 @@ class ReachabilityAndAutopilotTest {
             )
         )
     }
+
+    @Test
+    fun endpointCheckFromAccessProbe_neverReportsReachableWhenGeoRestricted() {
+        val okAi = GeoBypassEngine.ServiceProbeResult(true, 200, 80, false, "https://aistudio.google.com/", "ok", appShellOk = true)
+        val okFlow = GeoBypassEngine.ServiceProbeResult(true, 200, 95, false, "https://flow.google.com/", "ok", appShellOk = true)
+        val deEgress = GeoBypassEngine.EgressInfo("185.10.10.10", "DE", "Germany", false, "ipwho.is")
+        val irEgress = GeoBypassEngine.EgressInfo("5.5.5.5", "IR", "Iran", false, "ipwho.is")
+
+        // 1. Unknown/null egress with HTTP 200 -> GEO_RESTRICTED
+        val nullEgressReport = GeoBypassEngine.AccessProbeReport(
+            routeLabel = "Direct",
+            egress = null,
+            flowCountrySupported = false,
+            aiStudio = okAi,
+            flow = okFlow,
+            headline = "Unknown",
+            recommendation = "",
+            accountsReachable = true
+        )
+        assertEquals(
+            ReachabilityVerifier.Status.GEO_RESTRICTED,
+            ReachabilityVerifier.endpointCheckFromAccessProbe("AI Studio", ReachabilityVerifier.URL_AISTUDIO, nullEgressReport, GeoBypassEngine.TargetService.AI_STUDIO).status
+        )
+        assertEquals(
+            ReachabilityVerifier.Status.GEO_RESTRICTED,
+            ReachabilityVerifier.endpointCheckFromAccessProbe("Google Flow", ReachabilityVerifier.URL_FLOW, nullEgressReport, GeoBypassEngine.TargetService.GOOGLE_FLOW).status
+        )
+
+        // 2. Blocked country (IR) even when HTTP 200 -> GEO_RESTRICTED
+        val irReport = nullEgressReport.copy(
+            egress = irEgress,
+            aiStudioCountrySupported = false,
+            flowCountrySupported = false
+        )
+        val irAiCheck = ReachabilityVerifier.endpointCheckFromAccessProbe(
+            "AI Studio", ReachabilityVerifier.URL_AISTUDIO, irReport, GeoBypassEngine.TargetService.AI_STUDIO
+        )
+        assertEquals(ReachabilityVerifier.Status.GEO_RESTRICTED, irAiCheck.status)
+        assertFalse(irAiCheck.isOk)
+
+        // 3. Flow missing Angular shell -> GEO_RESTRICTED
+        val noShellReport = GeoBypassEngine.AccessProbeReport(
+            routeLabel = "Proxy",
+            egress = deEgress,
+            flowCountrySupported = true,
+            aiStudio = okAi,
+            flow = okFlow.copy(appShellOk = false),
+            headline = "Missing shell",
+            recommendation = "",
+            accountsReachable = true
+        )
+        assertEquals(
+            ReachabilityVerifier.Status.GEO_RESTRICTED,
+            ReachabilityVerifier.endpointCheckFromAccessProbe("Google Flow", ReachabilityVerifier.URL_FLOW, noShellReport, GeoBypassEngine.TargetService.GOOGLE_FLOW).status
+        )
+
+        // 4. accounts.google.com blocked -> HTTP_RESTRICTED
+        val noAccounts = noShellReport.copy(flow = okFlow, accountsReachable = false)
+        assertEquals(
+            ReachabilityVerifier.Status.HTTP_RESTRICTED,
+            ReachabilityVerifier.endpointCheckFromAccessProbe("AI Studio", ReachabilityVerifier.URL_AISTUDIO, noAccounts, GeoBypassEngine.TargetService.AI_STUDIO).status
+        )
+
+        // 5. Full clean clearance -> REACHABLE
+        val clean = noAccounts.copy(accountsReachable = true)
+        val aiOkCheck = ReachabilityVerifier.endpointCheckFromAccessProbe("AI Studio", ReachabilityVerifier.URL_AISTUDIO, clean, GeoBypassEngine.TargetService.AI_STUDIO)
+        val flowOkCheck = ReachabilityVerifier.endpointCheckFromAccessProbe("Google Flow", ReachabilityVerifier.URL_FLOW, clean, GeoBypassEngine.TargetService.GOOGLE_FLOW)
+        assertEquals(ReachabilityVerifier.Status.REACHABLE, aiOkCheck.status)
+        assertEquals(ReachabilityVerifier.Status.REACHABLE, flowOkCheck.status)
+        assertTrue(aiOkCheck.isOk && flowOkCheck.isOk)
+    }
 }

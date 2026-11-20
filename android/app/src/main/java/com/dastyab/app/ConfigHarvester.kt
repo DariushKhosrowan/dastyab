@@ -29,7 +29,8 @@ object ConfigHarvester {
         val name: String,
         val primaryUrl: String,
         val mirrorUrl: String? = null,
-        val kind: SourceKind
+        val kind: SourceKind,
+        val defaultScheme: TunnelConfig.ProxyScheme = TunnelConfig.ProxyScheme.SOCKS5
     )
 
     enum class SourceKind { GITHUB, TELEGRAM }
@@ -105,6 +106,91 @@ object ConfigHarvester {
             mirrorUrl = "https://cdn.jsdelivr.net/gh/Epodonios/v2ray-configs@main/All_Configs_Sub.txt",
             kind = SourceKind.GITHUB
         )
+    )
+
+    /** Dedicated chainable SOCKS5 / HTTP CONNECT proxy-list feeds (with jsDelivr CDN mirrors). */
+    val DEFAULT_PROXY_CHAIN_FEEDS = listOf(
+        FeedSource(
+            name = "TheSpeedX SOCKS5",
+            primaryUrl = "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/TheSpeedX/PROXY-List@master/socks5.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.SOCKS5
+        ),
+        FeedSource(
+            name = "TheSpeedX HTTP",
+            primaryUrl = "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/TheSpeedX/PROXY-List@master/http.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.HTTP
+        ),
+        FeedSource(
+            name = "Monosans SOCKS5",
+            primaryUrl = "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/monosans/proxy-list@main/proxies/socks5.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.SOCKS5
+        ),
+        FeedSource(
+            name = "Monosans HTTP",
+            primaryUrl = "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/monosans/proxy-list@main/proxies/http.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.HTTP
+        ),
+        FeedSource(
+            name = "Proxifly SOCKS5",
+            primaryUrl = "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks5/data.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.SOCKS5
+        ),
+        FeedSource(
+            name = "Proxifly HTTP",
+            primaryUrl = "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/http/data.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.HTTP
+        ),
+        FeedSource(
+            name = "Hookzof SOCKS5",
+            primaryUrl = "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/hookzof/socks5_list@master/proxy.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.SOCKS5
+        ),
+        FeedSource(
+            name = "Vakhov SOCKS5",
+            primaryUrl = "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/vakhov/fresh-proxy-list@master/socks5.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.SOCKS5
+        ),
+        FeedSource(
+            name = "Vakhov HTTP",
+            primaryUrl = "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/http.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/vakhov/fresh-proxy-list@master/http.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.HTTP
+        ),
+        FeedSource(
+            name = "KangProxy SOCKS5",
+            primaryUrl = "https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/socks5/socks5.txt",
+            mirrorUrl = "https://cdn.jsdelivr.net/gh/officialputuid/KangProxy@KangProxy/socks5/socks5.txt",
+            kind = SourceKind.GITHUB,
+            defaultScheme = TunnelConfig.ProxyScheme.SOCKS5
+        )
+    )
+
+    val DEFAULT_PROXY_TELEGRAM_CHANNELS = listOf(
+        "proxymtprotoir",
+        "myseaproxy",
+        "ShadowProxy66",
+        "ConfigX2ray",
+        "whitedns",
+        "letsproxys1",
+        "PrivateVPNs",
+        "DirectVPN"
     )
 
     /** Public Telegram channels parsed via `https://t.me/s/<channel>`. */
@@ -476,6 +562,14 @@ object ConfigHarvester {
 
         val finalList = UniversalConfig.mergeBalanced(allConfigs, limit = 250)
 
+        // Also harvest/preserve chainable SOCKS5/HTTP hops separately so VLESS lists never crowd them out
+        val chainHopsFromMain = UniversalConfig.extractChainableProxyHops(allConfigs)
+        if (chainHopsFromMain.isNotEmpty()) {
+            val mergedPool = (chainHopsFromMain + TunnelConfig.loadHarvestedProxyHops(context))
+                .distinctBy { "${it.scheme.name}:${it.host}:${it.port}" }
+            TunnelConfig.saveHarvestedProxyHops(context, mergedPool)
+        }
+
         if (finalList.isNotEmpty() || downloadedFilesCount > 0) {
             if (finalList.isNotEmpty()) {
                 TunnelConfig.saveHarvestedConfigs(context, finalList)
@@ -564,6 +658,106 @@ object ConfigHarvester {
                 )
             }
         }
+    }
+
+    /**
+     * Concurrently harvests diverse chainable SOCKS5 / HTTP CONNECT hops across GitHub proxy-list
+     * repos, jsDelivr CDN mirrors, custom user sources, and Telegram channels, preserving
+     * per-`/16` subnet spread and saving the updated pool offline in [TunnelConfig].
+     */
+    fun harvestProxyChainPool(
+        context: Context,
+        maxHops: Int = 240,
+        excludedHosts: Set<String> = emptySet(),
+        excludedSubnets16: Set<String> = emptySet(),
+        onProgress: (String) -> Unit = {}
+    ): List<TunnelConfig.ProxyHop> {
+        val collected = LinkedHashMap<String, TunnelConfig.ProxyHop>()
+        val customGithub = HarvestSourceStore.getCustomGithubUrls(context)
+            .mapNotNull { HarvestSourceStore.normalizeGithubUrl(it) }
+            .mapIndexed { idx, url ->
+                val defaultScheme = if (url.contains("http", ignoreCase = true) && !url.contains("socks", ignoreCase = true)) {
+                    TunnelConfig.ProxyScheme.HTTP
+                } else {
+                    TunnelConfig.ProxyScheme.SOCKS5
+                }
+                FeedSource("Custom Proxy #${idx + 1}", url, toJsDelivrMirror(url), SourceKind.GITHUB, defaultScheme)
+            }
+
+        val feeds = customGithub + DEFAULT_PROXY_CHAIN_FEEDS
+        onProgress("Fetching fresh SOCKS5/HTTP proxy pools (${feeds.size} feeds + ${DEFAULT_PROXY_TELEGRAM_CHANNELS.size} Telegram)…")
+
+        val pool = Executors.newFixedThreadPool(6)
+        try {
+            val feedTasks = feeds.map { feed ->
+                Callable {
+                    var body = httpGet(feed.primaryUrl, timeoutMs = 4200)
+                    var hops = if (body != null) {
+                        UniversalConfig.extractProxyListHops(body, feed.defaultScheme, maxHops = 60)
+                    } else {
+                        emptyList()
+                    }
+                    if (hops.isEmpty() && feed.mirrorUrl != null) {
+                        body = httpGet(feed.mirrorUrl, timeoutMs = 4200)
+                        if (body != null) {
+                            hops = UniversalConfig.extractProxyListHops(body, feed.defaultScheme, maxHops = 60)
+                        }
+                    }
+                    feed.name to hops
+                }
+            }
+            val tgChannels = (HarvestSourceStore.getCustomTelegramChannels(context) + DEFAULT_PROXY_TELEGRAM_CHANNELS)
+                .mapNotNull { HarvestSourceStore.normalizeTelegramChannel(it) }
+                .distinctBy { it.lowercase() }
+                .take(12)
+            val tgTasks = tgChannels.map { channel ->
+                Callable {
+                    val body = httpGet("https://t.me/s/$channel", timeoutMs = 3800)
+                    val hops = if (body != null) {
+                        UniversalConfig.extractProxyListHops(body, TunnelConfig.ProxyScheme.DIRECT, maxHops = 40)
+                    } else {
+                        emptyList()
+                    }
+                    "@$channel" to hops
+                }
+            }
+
+            val allFutures = pool.invokeAll(feedTasks + tgTasks, 15, TimeUnit.SECONDS)
+            for (future in allFutures) {
+                val (label, hops) = runCatching { future.get() }.getOrNull() ?: continue
+                if (hops.isNotEmpty()) {
+                    var added = 0
+                    for (h in hops) {
+                        val key = "${h.scheme.name}:${h.host}:${h.port}"
+                        if (collected.putIfAbsent(key, h) == null) added++
+                    }
+                    if (added > 0) {
+                        onProgress("  ✓ Proxy feed [$label]: +$added hops")
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        } finally {
+            pool.shutdownNow()
+        }
+
+        // Fallback/supplement with existing stored pool & harvested URIs
+        val existingPool = TunnelConfig.loadChainableProxyPool(context)
+        val combined = LinkedHashMap<String, TunnelConfig.ProxyHop>(collected)
+        for (h in existingPool) {
+            combined.putIfAbsent("${h.scheme.name}:${h.host}:${h.port}", h)
+        }
+
+        val diverse = UniversalConfig.selectDiverseProxyHops(
+            hops = combined.values.toList(),
+            limit = maxHops.coerceAtLeast(16),
+            excludedHosts = excludedHosts,
+            excludedSubnets16 = excludedSubnets16
+        )
+        if (diverse.isNotEmpty()) {
+            TunnelConfig.saveHarvestedProxyHops(context, diverse)
+        }
+        return diverse
     }
 
     private fun httpGet(urlStr: String, timeoutMs: Int): String? {

@@ -61,7 +61,62 @@ object ReachabilityVerifier {
         else -> Status.HTTP_RESTRICTED
     }
 
-    /** Verifies real DNS + TLS + HTTP + geo-gate reachability for a single HTTPS URL (optionally through [proxy]). */
+    /**
+     * Pure-Kotlin converter mapping a full [GeoBypassEngine.AccessProbeReport] into an [EndpointCheck].
+     * Strictly requires [GeoBypassEngine.AccessProbeReport.targetReady] to return [Status.REACHABLE];
+     * raw HTTP 200 responses from blocked/unverified countries or missing shells become [Status.GEO_RESTRICTED].
+     */
+    fun endpointCheckFromAccessProbe(
+        name: String,
+        urlStr: String,
+        report: GeoBypassEngine.AccessProbeReport,
+        target: GeoBypassEngine.TargetService,
+        resolvedIpOverride: String = ""
+    ): EndpointCheck {
+        val ready = report.targetReady(target)
+        val probe = if (target == GeoBypassEngine.TargetService.GOOGLE_FLOW) report.flow else report.aiStudio
+        val ccOk = if (target == GeoBypassEngine.TargetService.GOOGLE_FLOW) {
+            report.flowCountrySupported
+        } else {
+            report.aiStudioCountrySupported
+        }
+        val resolved = report.egress?.ip?.takeIf { it.isNotBlank() } ?: resolvedIpOverride
+        val status = when {
+            ready -> Status.REACHABLE
+            probe.unsupportedRegion ||
+                report.egress == null ||
+                !ccOk ||
+                (target == GeoBypassEngine.TargetService.GOOGLE_FLOW && probe.reachable && !probe.appShellOk) ->
+                Status.GEO_RESTRICTED
+            !report.accountsReachable && probe.reachable -> Status.HTTP_RESTRICTED
+            probe.httpCode > 0 -> classifyHttpCode(probe.httpCode)
+            else -> Status.TLS_OR_IP_BLOCKED
+        }
+        val detail = when {
+            ready -> "Geo-clear (${report.egress?.countryCode ?: "?"} · ${probe.latencyMs}ms)"
+            report.egress == null && probe.httpCode > 0 ->
+                "Geo-unverified (HTTP ${probe.httpCode}; public exit country unknown)"
+            report.egress != null && !ccOk ->
+                "Geo-restricted in ${report.egress.countryCode} (${report.egress.ip})"
+            probe.unsupportedRegion -> probe.detail
+            target == GeoBypassEngine.TargetService.GOOGLE_FLOW && probe.reachable && !probe.appShellOk ->
+                "Geo/App shell unverified (AiSandboxAngularFrontend missing · HTTP ${probe.httpCode})"
+            !report.accountsReachable && probe.reachable ->
+                "accounts.google.com blocked (sign-in unavailable)"
+            else -> probe.detail
+        }
+        return EndpointCheck(
+            name = name,
+            url = urlStr,
+            status = status,
+            httpCode = probe.httpCode,
+            latencyMs = probe.latencyMs,
+            resolvedIp = resolved,
+            detail = detail
+        )
+    }
+
+    /** Verifies real DNS + TLS + HTTP + true non-geoblock clearance for a single HTTPS URL (optionally through [proxy]). */
     fun verifyHttpsEndpoint(
         name: String,
         urlStr: String,
@@ -100,21 +155,23 @@ object ReachabilityVerifier {
         val isAiStudio = host.contains("aistudio.google.com", ignoreCase = true)
         val isFlow = host.contains("flow.google.com", ignoreCase = true)
         if (isAiStudio || isFlow) {
-            val probe = GeoBypassEngine.probeGoogleEndpoint(
-                urlStr = urlStr,
-                proxy = proxy,
-                timeoutMs = timeoutMs,
-                inspectFlowGate = isFlow,
-                inspectAiStudioGate = isAiStudio
+            val route = GeoBypassEngine.RouteResolution(
+                shouldStartDastyabVpn = false,
+                shouldStartLocalBridge = false,
+                webViewHttpProxyPort = null,
+                javaNetProxy = proxy,
+                routeLabel = if (proxy == Proxy.NO_PROXY) "Direct" else "Proxy",
+                externalVpnActive = false,
+                targetService = if (isFlow) GeoBypassEngine.TargetService.GOOGLE_FLOW else GeoBypassEngine.TargetService.AI_STUDIO
             )
-            val status = when {
-                probe.unsupportedRegion -> Status.GEO_RESTRICTED
-                isFlow && probe.reachable && !probe.appShellOk -> Status.GEO_RESTRICTED
-                probe.reachable -> Status.REACHABLE
-                probe.httpCode > 0 -> classifyHttpCode(probe.httpCode)
-                else -> Status.TLS_OR_IP_BLOCKED
-            }
-            return EndpointCheck(name, urlStr, status, probe.httpCode, probe.latencyMs, resolvedIp, probe.detail)
+            val report = GeoBypassEngine.runAccessProbe(route, timeoutMs)
+            return endpointCheckFromAccessProbe(
+                name = name,
+                urlStr = urlStr,
+                report = report,
+                target = if (isFlow) GeoBypassEngine.TargetService.GOOGLE_FLOW else GeoBypassEngine.TargetService.AI_STUDIO,
+                resolvedIpOverride = resolvedIp
+            )
         }
 
         // 2. Real HTTPS GET/HEAD check for generic endpoints (e.g. generate_204)
@@ -152,18 +209,35 @@ object ReachabilityVerifier {
         }
     }
 
-    /** Verifies general internet + Google AI Studio + Google Flow in parallel. */
+    /** Verifies general internet + strict non-geoblocked Google AI Studio + Google Flow in parallel. */
     fun verifyAll(timeoutMs: Int = 3500, proxy: Proxy = Proxy.NO_PROXY): FullVerification {
-        val pool = Executors.newFixedThreadPool(3)
+        val pool = Executors.newFixedThreadPool(2)
         return try {
             val fInternet = pool.submit(Callable { verifyHttpsEndpoint("Internet", URL_INTERNET_CHECK, timeoutMs, proxy) })
-            val fAi = pool.submit(Callable { verifyHttpsEndpoint("AI Studio", URL_AISTUDIO, timeoutMs, proxy) })
-            val fFlow = pool.submit(Callable { verifyHttpsEndpoint("Google Flow", URL_FLOW, timeoutMs, proxy) })
-            FullVerification(
-                internet = fInternet.get(timeoutMs + 2500L, TimeUnit.MILLISECONDS),
-                aiStudio = fAi.get(timeoutMs + 2500L, TimeUnit.MILLISECONDS),
-                flow = fFlow.get(timeoutMs + 2500L, TimeUnit.MILLISECONDS)
+            val syntheticRoute = GeoBypassEngine.RouteResolution(
+                shouldStartDastyabVpn = false,
+                shouldStartLocalBridge = false,
+                webViewHttpProxyPort = null,
+                javaNetProxy = proxy,
+                routeLabel = if (proxy == Proxy.NO_PROXY) "Direct" else "Proxy",
+                externalVpnActive = false
             )
+            val fGeoProbe = pool.submit(Callable { GeoBypassEngine.runAccessProbe(syntheticRoute, timeoutMs) })
+
+            val internet = runCatching { fInternet.get(timeoutMs + 2500L, TimeUnit.MILLISECONDS) }.getOrElse {
+                EndpointCheck("Internet", URL_INTERNET_CHECK, Status.TLS_OR_IP_BLOCKED, -1, -1, "", "Verification timed out")
+            }
+            val report = runCatching { fGeoProbe.get(timeoutMs + 4500L, TimeUnit.MILLISECONDS) }.getOrNull()
+            if (report == null) {
+                val fail = EndpointCheck("Check", "", Status.GEO_RESTRICTED, -1, -1, "", "Geo verification timed out")
+                FullVerification(internet, fail.copy(name = "AI Studio", url = URL_AISTUDIO), fail.copy(name = "Google Flow", url = URL_FLOW))
+            } else {
+                FullVerification(
+                    internet = internet,
+                    aiStudio = endpointCheckFromAccessProbe("AI Studio", URL_AISTUDIO, report, GeoBypassEngine.TargetService.AI_STUDIO),
+                    flow = endpointCheckFromAccessProbe("Google Flow", URL_FLOW, report, GeoBypassEngine.TargetService.GOOGLE_FLOW)
+                )
+            }
         } catch (_: Exception) {
             val fail = EndpointCheck("Check", "", Status.TLS_OR_IP_BLOCKED, -1, -1, "", "Verification timed out")
             FullVerification(fail.copy(name = "Internet"), fail.copy(name = "AI Studio"), fail.copy(name = "Google Flow"))

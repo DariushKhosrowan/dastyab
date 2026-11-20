@@ -288,4 +288,40 @@ class UniversalConfigTest {
         }
         return out.toString()
     }
+
+    @Test
+    fun extractProxyListHops_parsesMixedFormatsFiltersLoopbackAndSpreadsSubnets() {
+        val raw = """
+            127.0.0.1:8080
+            0.0.0.0:1080
+            198.51.100.1:1080
+            198.51.100.2:1080
+            203.0.113.5:3128
+            http://u1:p1@192.0.2.10:8080
+            tg://socks?server=185.10.20.30&port=443&user=tg&pass=ok
+        """.trimIndent()
+
+        val hops = UniversalConfig.extractProxyListHops(raw, defaultScheme = TunnelConfig.ProxyScheme.SOCKS5, maxHops = 20)
+        assertEquals(5, hops.size)
+        assertTrue(hops.none { it.host == "127.0.0.1" || it.host == "0.0.0.0" })
+        assertTrue(hops.any { it.scheme == TunnelConfig.ProxyScheme.HTTP && it.host == "192.0.2.10" && it.username == "u1" })
+        assertTrue(hops.any { it.scheme == TunnelConfig.ProxyScheme.SOCKS5 && it.host == "185.10.20.30" && it.password == "ok" })
+
+        // First 4 picked hops must come from distinct /16 subnets
+        val firstFourSubnets = hops.take(4).map { UniversalConfig.subnet16Of(it.host) }.toSet()
+        assertEquals(4, firstFourSubnets.size)
+
+        // Respect excludedHosts & deprioritize excludedSubnets16
+        val filtered = UniversalConfig.selectDiverseProxyHops(
+            hops = hops,
+            limit = 4,
+            excludedHosts = setOf("203.0.113.5"),
+            excludedSubnets16 = setOf("198.51")
+        )
+        assertTrue(filtered.none { it.host == "203.0.113.5" })
+        assertTrue(
+            "Fresh subnets must come before excluded /16 subnet 198.51",
+            UniversalConfig.subnet16Of(filtered.first().host) != "198.51"
+        )
+    }
 }

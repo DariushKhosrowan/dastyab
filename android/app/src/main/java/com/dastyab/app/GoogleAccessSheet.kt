@@ -438,7 +438,10 @@ object GoogleAccessSheet {
     fun runAutoChainDialog(
         activity: Activity,
         targetService: GeoBypassEngine.TargetService,
-        onConfigChanged: () -> Unit = {}
+        onConfigChanged: () -> Unit = {},
+        excludedEgressIps: Set<String> = emptySet(),
+        excludeCurrentRoute: Boolean = false,
+        excludedChainSpecs: Set<String> = emptySet()
     ) {
         if (!UiSafety.isActivityAlive(activity)) return
         val statusTv = TextView(activity).apply {
@@ -460,7 +463,11 @@ object GoogleAccessSheet {
                 context = activity,
                 targetService = targetService,
                 allowHarvest = true,
-                maxCandidates = if (targetService == GeoBypassEngine.TargetService.GOOGLE_FLOW) 44 else 36
+                maxCandidates = if (targetService == GeoBypassEngine.TargetService.GOOGLE_FLOW) 52 else 44,
+                excludedEgressIps = excludedEgressIps,
+                excludeCurrentRoute = excludeCurrentRoute,
+                excludedChainSpecs = excludedChainSpecs,
+                maxRounds = 3
             ) { line ->
                 steps.add(line)
                 activity.runOnUiThread {
@@ -522,6 +529,10 @@ object GoogleAccessSheet {
                 }
                 val primaryTarget = targetUrl?.let { GeoBypassEngine.TargetService.fromUrl(it) }
                     ?: if (!flowReport.readyForFlow) GeoBypassEngine.TargetService.GOOGLE_FLOW else GeoBypassEngine.TargetService.AI_STUDIO
+                val activeReport = if (primaryTarget == GeoBypassEngine.TargetService.GOOGLE_FLOW) flowReport else aiReport
+                val activeRoute = if (primaryTarget == GeoBypassEngine.TargetService.GOOGLE_FLOW) flowRoute else aiRoute
+                val blockedIps = setOfNotNull(activeReport.egress?.ip?.takeIf { !activeReport.targetReady(primaryTarget) })
+                val blockedSpecs = setOfNotNull(activeRoute.upstreamChainSpec.takeIf { it.isNotBlank() && !activeReport.targetReady(primaryTarget) })
 
                 val dualBody = activity.getString(
                     R.string.access_sheet_geocheck_dual,
@@ -547,7 +558,13 @@ object GoogleAccessSheet {
                             show(activity, targetUrl = targetUrl)
                         }
                         .setNeutralButton(activity.getString(R.string.browser_btn_auto_chain)) { _, _ ->
-                            runAutoChainDialog(activity, primaryTarget)
+                            runAutoChainDialog(
+                                activity = activity,
+                                targetService = primaryTarget,
+                                excludedEgressIps = blockedIps,
+                                excludeCurrentRoute = true,
+                                excludedChainSpecs = blockedSpecs
+                            )
                         }
                         .setNegativeButton(android.R.string.ok, null)
                 )

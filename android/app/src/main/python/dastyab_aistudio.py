@@ -24,7 +24,7 @@ import dastyab_android_shim as _shim
 SOCK = int(os.environ.get("DASTYAB_AISTUDIO_SOCKS", "10850"))
 AISTUDIO_URL = "https://aistudio.google.com/"
 ACCOUNTS_URL = "https://accounts.google.com/"
-AISTUDIO_BLOCKED_COUNTRIES = frozenset({"IR", "CN", "RU", "KP", "BY", "SY", "CU", "SD", "AF"})
+AISTUDIO_BLOCKED_COUNTRIES = frozenset({"IR", "CN", "RU", "KP", "BY", "SY", "CU", "SD", "AF", "HK", "MO", "MM", "SS", "XX"})
 AISTUDIO_GATE_MARKERS = (
     "your region may not be supported",
     "not available in your country",
@@ -246,25 +246,30 @@ def fetch_egress_geo(timeout=10):
         if j.get("status") == "fail" or j.get("success") is False:
             continue
         ip = (j.get("ip") or j.get("query") or trace_ip or "").strip()
-        cc = (
+        json_cc = (
             j.get("countryCode")
             or j.get("country_code")
             or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) == 2 else "")
             or trace_cc
         ).strip().upper()
-        cname = (
-            j.get("country_name")
-            or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) > 2 else "")
-            or cc
-        )
+        if len(trace_cc) == 2 and trace_cc != json_cc and trace_cc in AISTUDIO_BLOCKED_COUNTRIES:
+            cc = trace_cc
+            cname = trace_cc
+        else:
+            cc = json_cc
+            cname = (
+                j.get("country_name")
+                or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) > 2 else "")
+                or cc
+            )
         sec = j.get("security") if isinstance(j.get("security"), dict) else {}
         org = str(j.get("org") or "").lower()
         org_hosting = any(
             k in org
             for k in ("datacenter", "hosting", "cloud", "amazon", "digitalocean", "hetzner", "ovh", "linode", "vultr", "cdn77", "m247", "leaseweb")
         )
-        hosting = bool(j.get("hosting") or sec.get("hosting") or org_hosting)
-        proxy_flag = bool(j.get("proxy") or sec.get("proxy"))
+        hosting = bool(j.get("hosting") or sec.get("hosting") or sec.get("vpn") or sec.get("tor") or org_hosting)
+        proxy_flag = bool(j.get("proxy") or sec.get("proxy") or sec.get("vpn") or sec.get("tor"))
         if ip and len(cc) == 2:
             return {
                 "ip": ip,
@@ -368,6 +373,48 @@ def probe_aistudio_gates(want_country=None, timeout=12):
         res["latency_ms"] = int((time.monotonic() - t0) * 1000)
         res["reason"] = f"aistudio.google.com unreachable (HTTP {code})"
         return res
+
+    # Secondary gate: verify generativelanguage API doesn't report location unsupported
+    # and gemini.google.com doesn't redirect to /unsupported
+    api_url = "https://generativelanguage.googleapis.com/v1beta/models"
+    r_api = _curl([api_url], timeout=min(timeout, 8))
+    api_body = (r_api.stdout or "").lower() if r_api else ""
+    api_markers = (
+        "location is not supported",
+        "not available in your country",
+        "not available in your region",
+        "region is not supported",
+        "country is not supported",
+        "user location",
+    )
+    if any(m in api_body for m in api_markers):
+        res["unsupported_region"] = True
+        res["latency_ms"] = int((time.monotonic() - t0) * 1000)
+        res["reason"] = f"REGION-GATE: generativelanguage API rejected location on {cc} ({geo['ip']})"
+        return res
+
+    gemini_url = "https://gemini.google.com/"
+    r_gem = _curl(["-L", gemini_url], timeout=min(timeout, 8))
+    gem_body = (r_gem.stdout or "") if r_gem else ""
+    if using_shim:
+        gem_code = int(_shim._LAST_HTTP_META.get("code") or 0)
+        gem_final = (_shim.get_last_final_url() or gemini_url).lower()
+    else:
+        gem_code = 0
+        gem_final = gemini_url
+    gem_low = gem_body.lower()
+    if (
+        gem_code in (403, 451)
+        or "/unsupported" in gem_final
+        or "available-regions" in gem_final
+        or "/sorry/" in gem_final
+        or any(m in gem_low for m in AISTUDIO_GATE_MARKERS)
+    ):
+        res["unsupported_region"] = True
+        res["latency_ms"] = int((time.monotonic() - t0) * 1000)
+        res["reason"] = f"REGION-GATE: gemini.google.com geo-restricted on {cc} ({geo['ip']}, HTTP {gem_code})"
+        return res
+
     res["aistudio_ok"] = True
 
     r_acc = _curl(["-o", "/dev/null", "-w", "%{http_code}", ACCOUNTS_URL], timeout=min(timeout, 10))

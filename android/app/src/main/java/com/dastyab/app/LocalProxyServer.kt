@@ -14,9 +14,12 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.SSLSocketFactory
 import kotlin.concurrent.thread
 
 /**
@@ -438,8 +441,8 @@ class LocalProxyServer(
 
         val respLines = readHttpHeaders(sock.getInputStream())
             ?: throw IOException("Empty response from upstream HTTP proxy")
-        val statusLine = respLines.firstOrNull().orEmpty()
-        val code = statusLine.split(' ').getOrNull(1)?.toIntOrNull() ?: 0
+        val statusLine = respLines.firstOrNull().orEmpty().trim()
+        val code = statusLine.split(Regex("\\s+")).getOrNull(1)?.toIntOrNull() ?: 0
         if (code !in 200..299) {
             throw IOException("Upstream HTTP proxy rejected CONNECT: $statusLine")
         }
@@ -490,17 +493,34 @@ class LocalProxyServer(
         }
 
         val cleanHost = targetHost.trim().removePrefix("[").removeSuffix("]")
-        val hostBytes = cleanHost.toByteArray(StandardCharsets.US_ASCII)
-        if (hostBytes.size > 255) throw IOException("Target host too long for SOCKS5")
-        val req = ByteArray(7 + hostBytes.size)
-        req[0] = 0x05
-        req[1] = 0x01 // CONNECT
-        req[2] = 0x00 // RSV
-        req[3] = 0x03 // DOMAINNAME (remote DNS resolution on upstream proxy)
-        req[4] = hostBytes.size.toByte()
-        System.arraycopy(hostBytes, 0, req, 5, hostBytes.size)
-        req[5 + hostBytes.size] = ((targetPort shr 8) and 0xFF).toByte()
-        req[6 + hostBytes.size] = (targetPort and 0xFF).toByte()
+        val req = if (TunnelConfig.isValidIpv4(cleanHost)) {
+            val ipParts = cleanHost.split('.')
+            byteArrayOf(
+                0x05,
+                0x01,
+                0x00,
+                0x01, // IPV4
+                ipParts[0].toInt().toByte(),
+                ipParts[1].toInt().toByte(),
+                ipParts[2].toInt().toByte(),
+                ipParts[3].toInt().toByte(),
+                ((targetPort shr 8) and 0xFF).toByte(),
+                (targetPort and 0xFF).toByte()
+            )
+        } else {
+            val hostBytes = cleanHost.toByteArray(StandardCharsets.US_ASCII)
+            if (hostBytes.size > 255) throw IOException("Target host too long for SOCKS5")
+            ByteArray(7 + hostBytes.size).apply {
+                this[0] = 0x05
+                this[1] = 0x01 // CONNECT
+                this[2] = 0x00 // RSV
+                this[3] = 0x03 // DOMAINNAME (remote DNS resolution on upstream proxy)
+                this[4] = hostBytes.size.toByte()
+                System.arraycopy(hostBytes, 0, this, 5, hostBytes.size)
+                this[5 + hostBytes.size] = ((targetPort shr 8) and 0xFF).toByte()
+                this[6 + hostBytes.size] = (targetPort and 0xFF).toByte()
+            }
+        }
         out.write(req)
         out.flush()
 
@@ -619,7 +639,136 @@ class LocalProxyServer(
         return buf
     }
 
+    data class HopTraceResult(
+        val hop: TunnelConfig.ProxyHop,
+        val latencyMs: Long,
+        val exitIp: String,
+        val countryCode: String
+    )
+
     companion object {
+        /**
+         * Verifies a candidate proxy hop by performing a real SOCKS5/HTTP CONNECT tunnel handshake
+         * and fetching `/cdn-cgi/trace` through it to measure real relay RTT and exit IP/country.
+         */
+        fun probeHopTrace(
+            hop: TunnelConfig.ProxyHop,
+            timeoutMs: Int = 1800,
+            traceHost: String = "1.1.1.1",
+            tracePort: Int = 443,
+            useTls: Boolean = true
+        ): HopTraceResult? {
+            if (hop.scheme == TunnelConfig.ProxyScheme.DIRECT || hop.host.isBlank() || hop.port !in 1..65535) {
+                return null
+            }
+            val start = System.nanoTime()
+            val bridge = LocalProxyServer(
+                requestedPort = 0,
+                upstream = TunnelConfig.toLocalProxyUpstream(listOf(hop)),
+                connectTimeoutMs = timeoutMs,
+                socketReadTimeoutMs = timeoutMs
+            )
+            return try {
+                val localPort = bridge.start()
+                val rawSock = Socket()
+                try {
+                    rawSock.soTimeout = timeoutMs
+                    rawSock.tcpNoDelay = true
+                    rawSock.connect(InetSocketAddress("127.0.0.1", localPort), timeoutMs)
+                    val out = rawSock.getOutputStream()
+                    val ins = rawSock.getInputStream()
+                    out.write(
+                        "CONNECT $traceHost:$tracePort HTTP/1.1\r\nHost: $traceHost:$tracePort\r\n\r\n"
+                            .toByteArray(StandardCharsets.US_ASCII)
+                    )
+                    out.flush()
+                    val status = readStatusLineBounded(ins) ?: return null
+                    val code = status.split(Regex("\\s+")).getOrNull(1)?.toIntOrNull() ?: 0
+                    if (code !in 200..299) return null
+                    // Drain remaining HTTP response headers from CONNECT
+                    drainBlankLine(ins)
+
+                    val streamSock: Socket = if (useTls) {
+                        val tls = (SSLSocketFactory.getDefault() as SSLSocketFactory)
+                            .createSocket(rawSock, traceHost, tracePort, true) as SSLSocket
+                        tls.soTimeout = timeoutMs
+                        tls.startHandshake()
+                        tls
+                    } else {
+                        rawSock
+                    }
+                    try {
+                        val sOut = streamSock.getOutputStream()
+                        val sIn = streamSock.getInputStream()
+                        sOut.write(
+                            "GET /cdn-cgi/trace HTTP/1.1\r\nHost: $traceHost\r\nConnection: close\r\nUser-Agent: DastYab/1.9\r\n\r\n"
+                                .toByteArray(StandardCharsets.US_ASCII)
+                        )
+                        sOut.flush()
+                        val rawResp = readTextBounded(sIn, 8192)
+                        val body = rawResp.substringAfter("\r\n\r\n", rawResp.substringAfter("\n\n", ""))
+                        if (body.isBlank()) return null
+                        val trace = NetworkTools.parseCloudflareTrace(body)
+                        val ip = trace.ip.takeIf { it.isNotBlank() && it != "unknown" }.orEmpty()
+                        val cc = trace.location.uppercase().takeIf { it.length == 2 && it != "XX" }.orEmpty()
+                        if (ip.isEmpty()) return null
+                        val ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start).coerceAtLeast(1L)
+                        HopTraceResult(hop, ms, ip, cc)
+                    } finally {
+                        if (streamSock !== rawSock) runCatching { streamSock.close() }
+                    }
+                } finally {
+                    runCatching { rawSock.close() }
+                }
+            } catch (_: Exception) {
+                null
+            } finally {
+                runCatching { bridge.close() }
+            }
+        }
+
+        private fun readStatusLineBounded(ins: InputStream): String? {
+            val buf = ByteArrayOutputStream(64)
+            var count = 0
+            while (count < 512) {
+                val b = ins.read()
+                if (b < 0) return null
+                count++
+                if (b == '\n'.code) break
+                if (b != '\r'.code) buf.write(b)
+            }
+            return buf.toString(StandardCharsets.US_ASCII.name())
+        }
+
+        private fun drainBlankLine(ins: InputStream) {
+            val line = ByteArrayOutputStream(64)
+            var guard = 0
+            while (guard < 4096) {
+                val b = ins.read()
+                if (b < 0) break
+                guard++
+                if (b == '\n'.code) {
+                    if (line.size() == 0) break
+                    line.reset()
+                } else if (b != '\r'.code) {
+                    line.write(b)
+                }
+            }
+        }
+
+        private fun readTextBounded(ins: InputStream, maxBytes: Int): String {
+            val out = ByteArrayOutputStream(maxBytes.coerceAtMost(2048))
+            val buf = ByteArray(1024)
+            var total = 0
+            while (total < maxBytes) {
+                val n = try { ins.read(buf, 0, (maxBytes - total).coerceAtMost(buf.size)) } catch (_: Exception) { -1 }
+                if (n <= 0) break
+                out.write(buf, 0, n)
+                total += n
+            }
+            return String(out.toByteArray(), StandardCharsets.UTF_8)
+        }
+
         fun parseHostPort(authority: String, defaultPort: Int): Pair<String, Int>? {
             val trimmed = authority.trim()
             if (trimmed.isEmpty()) return null

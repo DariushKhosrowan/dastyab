@@ -39,13 +39,17 @@ object GeoBypassEngine {
 
     /** Countries/territories where Google AI Studio is blocked/embargoed. */
     val AISTUDIO_BLOCKED_COUNTRIES: Set<String> = setOf(
-        "IR", "CN", "RU", "KP", "BY", "SY", "CU", "SD", "AF"
+        "IR", "CN", "RU", "KP", "BY", "SY", "CU", "SD", "AF", "HK", "MO", "MM", "SS", "XX"
     )
 
     val AISTUDIO_GATE_MARKERS: List<String> = listOf(
         "your region may not be supported",
         "not available in your country",
         "isn't available in your country",
+        "not available in your region",
+        "service is not available in your country",
+        "user location is not supported",
+        "location is not supported",
         "available-regions",
         "unsupported-country",
         "/unsupported",
@@ -53,10 +57,17 @@ object GeoBypassEngine {
         "region is not supported"
     )
 
+    val PREFERRED_CLEAN_COUNTRIES: Set<String> = setOf(
+        "US", "CA", "GB", "DE", "NL", "CH", "JP", "SG", "FR", "SE", "FI", "AU", "IE", "IT", "ES", "NO", "DK", "BE", "AT", "PL"
+    )
+
     val FLOW_GATE_MARKERS: List<String> = listOf(
         "unsupported-country",
         "unsupported-country-title",
         "not available in your country yet",
+        "not available in your country",
+        "isn't available in your country",
+        "unsupported_country",
         "flow is not available in your country",
         "country is not supported",
         "region is not supported"
@@ -267,16 +278,25 @@ object GeoBypassEngine {
         val effectiveHops = TunnelConfig.effectiveUpstreamHops(settings, targetService?.key, preferredBridgePort)
         val chainSpec = TunnelConfig.formatProxyChain(effectiveHops)
         val hasChain = effectiveHops.isNotEmpty()
-        val isMultiOrAuth = effectiveHops.size >= 2 ||
-            effectiveHops.any { it.username.isNotEmpty() || it.password.isNotEmpty() }
         val firstHop = effectiveHops.firstOrNull()
+        val isSingleLoopbackHttp = effectiveHops.size == 1 &&
+            firstHop != null &&
+            firstHop.scheme == TunnelConfig.ProxyScheme.HTTP &&
+            firstHop.username.isEmpty() &&
+            firstHop.password.isEmpty() &&
+            TunnelConfig.isLoopbackHost(firstHop.host)
+        val isMultiOrAuth = effectiveHops.isNotEmpty() && !isSingleLoopbackHttp
         val servicePrefix = targetService?.let { "[${it.displayName}] " }.orEmpty()
         val bridgeChainMismatch = runningBridgePort == null || LocalProxyService.activeChainSpec() != chainSpec
 
         fun singleOrMultiQuad(defaultLabelPrefix: String): Quad {
             return when {
                 isMultiOrAuth -> {
-                    val label = "${servicePrefix}${effectiveHops.size}-Hop Chain (${effectiveHops.joinToString(" → ") { it.displayLabel() }})"
+                    val label = if (effectiveHops.size == 1 && firstHop != null) {
+                        "$servicePrefix$defaultLabelPrefix ${firstHop.displayLabel()} (Bridge :$preferredBridgePort)"
+                    } else {
+                        "${servicePrefix}${effectiveHops.size}-Hop Chain (${effectiveHops.joinToString(" → ") { it.displayLabel() }})"
+                    }
                     Quad(
                         wvPort = preferredBridgePort,
                         needsBridge = bridgeChainMismatch,
@@ -284,20 +304,12 @@ object GeoBypassEngine {
                         label = label
                     )
                 }
-                firstHop != null && firstHop.scheme == TunnelConfig.ProxyScheme.HTTP -> {
+                isSingleLoopbackHttp && firstHop != null -> {
                     Quad(
                         wvPort = firstHop.port,
                         needsBridge = false,
                         proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress(firstHop.host, firstHop.port)),
                         label = "$servicePrefix$defaultLabelPrefix HTTP ${firstHop.host}:${firstHop.port}"
-                    )
-                }
-                firstHop != null && firstHop.scheme == TunnelConfig.ProxyScheme.SOCKS5 -> {
-                    Quad(
-                        wvPort = preferredBridgePort,
-                        needsBridge = bridgeChainMismatch,
-                        proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(firstHop.host, firstHop.port)),
-                        label = "$servicePrefix$defaultLabelPrefix SOCKS5 ${firstHop.host}:${firstHop.port} (Bridge :$preferredBridgePort)"
                     )
                 }
                 else -> {
@@ -354,10 +366,8 @@ object GeoBypassEngine {
             TunnelConfig.GoogleAccessMode.LOCAL_BRIDGE -> {
                 val javaProxy = when {
                     isMultiOrAuth -> Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", preferredBridgePort))
-                    firstHop?.scheme == TunnelConfig.ProxyScheme.HTTP ->
+                    isSingleLoopbackHttp && firstHop != null ->
                         Proxy(Proxy.Type.HTTP, InetSocketAddress(firstHop.host, firstHop.port))
-                    firstHop?.scheme == TunnelConfig.ProxyScheme.SOCKS5 ->
-                        Proxy(Proxy.Type.SOCKS, InetSocketAddress(firstHop.host, firstHop.port))
                     else -> Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", preferredBridgePort))
                 }
                 RouteResolution(
@@ -378,18 +388,15 @@ object GeoBypassEngine {
             TunnelConfig.GoogleAccessMode.VPN_CHAIN_PROXY -> {
                 val httpPort = when {
                     isMultiOrAuth -> preferredBridgePort
-                    firstHop?.scheme == TunnelConfig.ProxyScheme.HTTP -> firstHop.port
-                    firstHop?.scheme == TunnelConfig.ProxyScheme.SOCKS5 -> preferredBridgePort
+                    isSingleLoopbackHttp && firstHop != null -> firstHop.port
                     runningBridgePort != null -> runningBridgePort
                     else -> detectedListeningHttpPort
                 }
-                val needsBridge = (isMultiOrAuth || firstHop?.scheme == TunnelConfig.ProxyScheme.SOCKS5) && bridgeChainMismatch
+                val needsBridge = isMultiOrAuth && bridgeChainMismatch
                 val javaProxy = when {
                     isMultiOrAuth -> Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", preferredBridgePort))
-                    firstHop?.scheme == TunnelConfig.ProxyScheme.HTTP ->
+                    isSingleLoopbackHttp && firstHop != null ->
                         Proxy(Proxy.Type.HTTP, InetSocketAddress(firstHop.host, firstHop.port))
-                    firstHop?.scheme == TunnelConfig.ProxyScheme.SOCKS5 ->
-                        Proxy(Proxy.Type.SOCKS, InetSocketAddress(firstHop.host, firstHop.port))
                     httpPort != null -> Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", httpPort))
                     else -> Proxy.NO_PROXY
                 }
@@ -570,19 +577,37 @@ object GeoBypassEngine {
                         val json = JSONObject(raw)
                         if (json.has("success") && !json.optBoolean("success", true)) return@runCatching null
                         val ip = json.optString("ip", "").ifBlank { traceIp }
-                        val cc = json.optString("country_code", "")
+                        val jsonCc = json.optString("country_code", "")
                             .ifBlank { json.optString("country", "").takeIf { it.length == 2 }.orEmpty() }
                             .uppercase()
                             .ifBlank { traceCc }
-                        val cname = json.optString("country_name", "")
-                            .ifBlank { json.optString("country", "").takeIf { it.length > 2 }.orEmpty() }
-                            .ifBlank { cc }
+                        val cc = if (
+                            traceCc.length == 2 &&
+                            traceCc != jsonCc &&
+                            (
+                                (!isAiStudioCountrySupported(traceCc) && isAiStudioCountrySupported(jsonCc)) ||
+                                    (!isFlowCountrySupported(traceCc) && isFlowCountrySupported(jsonCc))
+                                )
+                        ) {
+                            traceCc
+                        } else {
+                            jsonCc
+                        }
+                        val cname = if (cc != jsonCc && traceCc == cc) {
+                            cc
+                        } else {
+                            json.optString("country_name", "")
+                                .ifBlank { json.optString("country", "").takeIf { it.length > 2 }.orEmpty() }
+                                .ifBlank { cc }
+                        }
                         val sec = json.optJSONObject("security")
                         val org = json.optString("org", "").lowercase()
                         val orgHosting = listOf("datacenter", "hosting", "cloud", "amazon", "digitalocean", "hetzner", "ovh", "linode", "vultr", "cdn77", "m247", "leaseweb")
                             .any { org.contains(it) }
                         val hosting = (sec?.optBoolean("hosting", false) == true) ||
                             (sec?.optBoolean("proxy", false) == true) ||
+                            (sec?.optBoolean("vpn", false) == true) ||
+                            (sec?.optBoolean("tor", false) == true) ||
                             orgHosting
                         if (ip.isNotBlank() && cc.length == 2) {
                             EgressInfo(
@@ -778,9 +803,122 @@ object GeoBypassEngine {
         }.getOrDefault("")
     }
 
+    /**
+     * Secondary server-side AI Studio geo-gate detector: checks Gemini API location error text
+     * and `gemini.google.com` region redirects so CDN-served Angular SPA shells never hide a geo-block.
+     * Never fails on expected 403 `"unregistered callers"` from `generativelanguage`.
+     */
+    fun probeAiStudioApiAndGeminiGate(
+        proxy: Proxy = Proxy.NO_PROXY,
+        timeoutMs: Int = 3500
+    ): ServiceProbeResult? {
+        val apiMarkers = listOf(
+            "location is not supported",
+            "not available in your country",
+            "not available in your region",
+            "region is not supported",
+            "country is not supported",
+            "user location"
+        )
+        // 1. generativelanguage API location check
+        val apiBlocked = runCatching {
+            val url = "https://generativelanguage.googleapis.com/v1beta/models"
+            val start = System.nanoTime()
+            val conn = (URL(url).openConnection(proxy) as HttpURLConnection).apply {
+                requestMethod = "GET"
+                instanceFollowRedirects = false
+                connectTimeout = timeoutMs
+                readTimeout = timeoutMs
+                setRequestProperty("User-Agent", "DastYab/1.9")
+            }
+            try {
+                val code = conn.responseCode
+                val ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start).coerceAtLeast(1L)
+                val body = readSnippetBounded(conn, 16384).lowercase()
+                if (code == 451 || apiMarkers.any { body.contains(it) }) {
+                    ServiceProbeResult(
+                        reachable = false,
+                        httpCode = code,
+                        latencyMs = ms,
+                        unsupportedRegion = true,
+                        finalLocation = url,
+                        detail = "Geo-blocked by Gemini API (generativelanguage HTTP $code)",
+                        appShellOk = false
+                    )
+                } else {
+                    null
+                }
+            } finally {
+                conn.disconnect()
+            }
+        }.getOrNull()
+        if (apiBlocked != null) return apiBlocked
+
+        // 2. gemini.google.com redirect/body region check
+        return runCatching {
+            val start = System.nanoTime()
+            var cur = "https://gemini.google.com/"
+            for (hop in 0 until 4) {
+                val baseUrl = URL(cur)
+                val conn = (baseUrl.openConnection(proxy) as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    instanceFollowRedirects = false
+                    connectTimeout = timeoutMs
+                    readTimeout = timeoutMs
+                    setRequestProperty(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+                    )
+                    setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                }
+                try {
+                    val code = conn.responseCode
+                    val ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start).coerceAtLeast(1L)
+                    val loc = conn.getHeaderField("Location").orEmpty()
+                    if (code in 300..399 && loc.isNotBlank()) {
+                        val nextUrl = runCatching { URL(baseUrl, loc).toString() }.getOrDefault(loc)
+                        if (isAiStudioUnsupportedResponse(code, nextUrl, loc, "") ||
+                            nextUrl.contains("/sorry/", ignoreCase = true)
+                        ) {
+                            return@runCatching ServiceProbeResult(
+                                reachable = false,
+                                httpCode = code,
+                                latencyMs = ms,
+                                unsupportedRegion = true,
+                                finalLocation = nextUrl,
+                                detail = "Geo-blocked on gemini.google.com (redirect → $nextUrl · HTTP $code)",
+                                appShellOk = false,
+                                redirectHops = hop
+                            )
+                        }
+                        cur = nextUrl
+                        continue
+                    }
+                    val body = if (code in 200..499) readSnippetBounded(conn, 65536) else ""
+                    if (isAiStudioUnsupportedResponse(code, cur, loc, body)) {
+                        return@runCatching ServiceProbeResult(
+                            reachable = false,
+                            httpCode = code,
+                            latencyMs = ms,
+                            unsupportedRegion = true,
+                            finalLocation = cur,
+                            detail = "Geo-blocked on gemini.google.com (HTTP $code)",
+                            appShellOk = false,
+                            redirectHops = hop
+                        )
+                    }
+                    return@runCatching null
+                } finally {
+                    conn.disconnect()
+                }
+            }
+            null
+        }.getOrNull()
+    }
+
     /** Executes full L3/L4/L5 geo + reachability probe inspired by `dastyab-flow.py`. */
     fun runAccessProbe(route: RouteResolution, timeoutMs: Int = 4500): AccessProbeReport {
-        val pool = Executors.newFixedThreadPool(4)
+        val pool = Executors.newFixedThreadPool(5)
         return try {
             val fGeo = pool.submit(Callable { fetchEgressGeo(route.javaNetProxy, timeoutMs) })
             val fAi = pool.submit(Callable {
@@ -791,6 +929,9 @@ object GeoBypassEngine {
                     inspectFlowGate = false,
                     inspectAiStudioGate = true
                 )
+            })
+            val fAiSecondary = pool.submit(Callable {
+                probeAiStudioApiAndGeminiGate(route.javaNetProxy, timeoutMs.coerceAtMost(3500))
             })
             val fFlow = pool.submit(Callable {
                 probeGoogleEndpoint(
@@ -806,8 +947,19 @@ object GeoBypassEngine {
             })
 
             val egress = runCatching { fGeo.get(timeoutMs + 2500L, TimeUnit.MILLISECONDS) }.getOrNull()
-            val ai = runCatching { fAi.get(timeoutMs + 3000L, TimeUnit.MILLISECONDS) }.getOrElse {
+            val aiRaw = runCatching { fAi.get(timeoutMs + 3000L, TimeUnit.MILLISECONDS) }.getOrElse {
                 ServiceProbeResult(false, -1, -1, false, "", "Timed out", appShellOk = false)
+            }
+            val aiSecondary = runCatching { fAiSecondary.get(timeoutMs + 2000L, TimeUnit.MILLISECONDS) }.getOrNull()
+            val ai = if (aiSecondary != null && aiSecondary.unsupportedRegion && !aiRaw.unsupportedRegion) {
+                aiRaw.copy(
+                    reachable = false,
+                    unsupportedRegion = true,
+                    finalLocation = aiSecondary.finalLocation.ifBlank { aiRaw.finalLocation },
+                    detail = aiSecondary.detail
+                )
+            } else {
+                aiRaw
             }
             val flow = runCatching { fFlow.get(timeoutMs + 3000L, TimeUnit.MILLISECONDS) }.getOrElse {
                 ServiceProbeResult(false, -1, -1, false, "", "Timed out", appShellOk = false)
@@ -1003,17 +1155,41 @@ object GeoBypassEngine {
         maxTotalCandidates = maxCandidates
     ).flatten().take(maxCandidates)
 
+    data class QualifiedHopPool(
+        val cleanExits: List<TunnelConfig.ProxyHop>,
+        val relays: List<TunnelConfig.ProxyHop>,
+        val resolvedByHopKey: Map<String, LocalProxyServer.HopTraceResult> = emptyMap()
+    )
+
+    /** Pure-Kotlin eligibility gate ensuring a candidate both unlocks [targetService] AND rotates away from blocked IPs. */
+    fun isEligibleRouteReport(
+        report: AccessProbeReport,
+        targetService: TargetService,
+        excludedEgressIps: Set<String> = emptySet()
+    ): Boolean {
+        if (!report.targetReady(targetService)) return false
+        val ip = report.egress?.ip?.trim().orEmpty()
+        if (ip.isEmpty()) return false
+        return !excludedEgressIps.contains(ip)
+    }
+
     /**
-     * Tests Layer 0 (External Lantern VPN) and progressively escalates 1 -> 2 -> 3 -> 4 proxy layers
-     * in diverse orders until [targetService] passes ALL strict geo-restriction, HTTPS, account,
-     * and app-shell checks. Skips dead Layer-1 entry hops as first-hop entries while still trying
-     * them behind working relays (`[Relay, Hop]`) in higher layers.
+     * Tests Layer 0 (when not excluded) and autonomously runs multi-round cycles of:
+     *   1) Fresh proxy pool harvesting (GitHub + jsDelivr + Telegram) across untried `/16` subnets
+     *   2) Parallel real CONNECT + TLS `/cdn-cgi/trace` qualification & exit-country discovery
+     *   3) Progressive 1 -> 2 -> 3 -> 4 layer cascading & IP rotation
+     *   4) Strict non-blocked egress IP verification
+     * until [targetService] unlocks cleanly on a working, non-georestricted new exit IP.
      */
     fun discoverAndChainBestRoute(
         context: Context,
         targetService: TargetService,
         allowHarvest: Boolean = true,
-        maxCandidates: Int = 40,
+        maxCandidates: Int = 48,
+        excludedEgressIps: Set<String> = emptySet(),
+        excludeCurrentRoute: Boolean = false,
+        excludedChainSpecs: Set<String> = emptySet(),
+        maxRounds: Int = 3,
         onStep: (String) -> Unit = {}
     ): ChainDiscoveryResult {
         val settings = TunnelConfig.load(context)
@@ -1022,75 +1198,157 @@ object GeoBypassEngine {
 
         onStep("Scanning local proxy ports (v2rayNG, NekoBox, Hiddify, Clash, Orbot)…")
         val listening = discoverListeningProxies(timeoutMs = 150)
+        val initialPool = TunnelConfig.loadChainableProxyPool(context)
 
-        var harvestedRaw = TunnelConfig.loadHarvestedConfigs(context)
-        var proxyHops = UniversalConfig.extractChainableProxyHops(harvestedRaw)
-        if (proxyHops.isEmpty() && allowHarvest) {
-            onStep("Harvesting chainable SOCKS5 / HTTP / Telegram proxy nodes…")
-            val harvested = runCatching { ConfigHarvester.harvestResilient(context) }.getOrNull()
-            if (harvested != null && harvested.configs.isNotEmpty()) {
-                TunnelConfig.saveHarvestedConfigs(context, harvested.configs)
-                harvestedRaw = harvested.configs
-                proxyHops = UniversalConfig.extractChainableProxyHops(harvestedRaw)
-            }
-        }
-
-        // Pre-benchmark up to 48 harvested proxy hops in parallel to preserve geographic diversity
-        val aliveHarvested = if (proxyHops.isNotEmpty()) {
-            val sampleSize = proxyHops.size.coerceAtMost(48)
-            onStep("Benchmarking $sampleSize harvested proxy nodes…")
-            benchmarkAliveHops(proxyHops.take(sampleSize), timeoutMs = 1100).take(16)
-        } else {
-            emptyList()
-        }
-
-        val stagesInitial = buildProgressiveLayerStages(
+        val result = discoverBestRouteLoop(
+            targetService = targetService,
+            externalVpnActive = extVpn,
             existingHops = existingHops,
             listening = listening,
-            harvestedHops = aliveHarvested,
-            maxTotalCandidates = (maxCandidates * 2).coerceAtLeast(72)
+            initialPool = initialPool,
+            allowHarvest = allowHarvest,
+            maxCandidates = maxCandidates,
+            excludedEgressIps = excludedEgressIps,
+            excludeCurrentRoute = excludeCurrentRoute,
+            excludedChainSpecs = excludedChainSpecs,
+            maxRounds = maxRounds,
+            hopQualifier = { batch ->
+                qualifyProxyHops(
+                    hops = batch,
+                    targetService = targetService,
+                    excludedEgressIps = excludedEgressIps,
+                    timeoutMs = 1800
+                )
+            },
+            harvester = { round, testedHosts, testedSubnets ->
+                onStep("Round $round/$maxRounds: Harvesting fresh SOCKS5/HTTP proxy feeds (GitHub → Mirror → Telegram)…")
+                runCatching {
+                    ConfigHarvester.harvestProxyChainPool(
+                        context = context,
+                        maxHops = 260,
+                        excludedHosts = testedHosts,
+                        excludedSubnets16 = testedSubnets
+                    ) { msg -> onStep("  $msg") }
+                }.getOrDefault(emptyList()) +
+                    if (round >= 2) {
+                        runCatching {
+                            val r = ConfigHarvester.harvestResilient(context)
+                            UniversalConfig.extractChainableProxyHops(r.configs)
+                        }.getOrDefault(emptyList())
+                    } else {
+                        emptyList()
+                    }
+            },
+            routeProber = { hops, label ->
+                if (hops.isEmpty()) {
+                    val directRoute = RouteResolution(
+                        shouldStartDastyabVpn = false,
+                        shouldStartLocalBridge = false,
+                        webViewHttpProxyPort = null,
+                        javaNetProxy = Proxy.NO_PROXY,
+                        routeLabel = label,
+                        externalVpnActive = extVpn,
+                        targetService = targetService
+                    )
+                    runAccessProbe(directRoute, timeoutMs = 4500) to null
+                } else {
+                    probeChainThroughEphemeralBridgeWithError(hops, label, extVpn, targetService, timeoutMs = 4500)
+                }
+            },
+            onStep = onStep
         )
+
+        if (result.success) {
+            TunnelConfig.saveServiceProxyChain(
+                context = context,
+                targetServiceKey = targetService.key,
+                hops = result.bestHops,
+                preserveExternalVpn = true
+            )
+            // Keep winning hops at the front of the persistent proxy pool for fast warm reconnects
+            val savedPool = (result.bestHops + TunnelConfig.loadChainableProxyPool(context))
+                .distinctBy { "${it.scheme.name}:${it.host}:${it.port}" }
+            TunnelConfig.saveHarvestedProxyHops(context, savedPool)
+            if (result.bestHops.isNotEmpty()) {
+                LocalProxyService.startSafely(context, targetService.key)
+            }
+        }
+        return result
+    }
+
+    /**
+     * Pure-Kotlin multi-round auto-chain & IP-rotation orchestrator (fully deterministic and
+     * unit-testable on the plain JVM without Android runtime stubs).
+     */
+    fun discoverBestRouteLoop(
+        targetService: TargetService,
+        externalVpnActive: Boolean,
+        existingHops: List<TunnelConfig.ProxyHop>,
+        listening: List<ListeningProxy>,
+        initialPool: List<TunnelConfig.ProxyHop>,
+        allowHarvest: Boolean = true,
+        maxCandidates: Int = 48,
+        excludedEgressIps: Set<String> = emptySet(),
+        excludeCurrentRoute: Boolean = false,
+        excludedChainSpecs: Set<String> = emptySet(),
+        maxRounds: Int = 3,
+        hopQualifier: (List<TunnelConfig.ProxyHop>) -> QualifiedHopPool,
+        harvester: (round: Int, excludedHosts: Set<String>, excludedSubnets16: Set<String>) -> List<TunnelConfig.ProxyHop>,
+        routeProber: (hops: List<TunnelConfig.ProxyHop>, label: String) -> Pair<AccessProbeReport, String?>,
+        onStep: (String) -> Unit = {}
+    ): ChainDiscoveryResult {
+        fun hopKey(hop: TunnelConfig.ProxyHop): String = "${hop.scheme.name}:${hop.host}:${hop.port}"
+        fun chainKey(hops: List<TunnelConfig.ProxyHop>): String = hops.joinToString("->") { hopKey(it) }
+
+        val initialBlockedIps = excludedEgressIps.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        val blockedEgressIps = LinkedHashSet<String>(initialBlockedIps)
+        val blockedChainSpecs = LinkedHashSet<String>()
+        for (rawSpec in excludedChainSpecs) {
+            val parsed = TunnelConfig.parseProxyChain(rawSpec)
+            if (parsed.isNotEmpty()) blockedChainSpecs.add(chainKey(parsed))
+        }
+        if (excludeCurrentRoute && existingHops.isNotEmpty()) {
+            blockedChainSpecs.add(chainKey(existingHops))
+        }
 
         val attempts = ArrayList<ChainAttempt>()
         val probedKeys = HashSet<String>()
         val failedEntryKeys = HashSet<String>()
+        val triedQualifyHosts = HashSet<String>()
+        val triedQualifySubnets = HashSet<String>()
+        val knownCleanExits = LinkedHashMap<String, TunnelConfig.ProxyHop>()
+        val knownRelays = LinkedHashMap<String, TunnelConfig.ProxyHop>()
         val reachableBridgeHops = ArrayList<TunnelConfig.ProxyHop>()
-        val supportedExitHops = ArrayList<TunnelConfig.ProxyHop>()
-        var bestAttempt: ChainAttempt? = null
+        val masterPool = LinkedHashMap<String, TunnelConfig.ProxyHop>()
+        for (h in initialPool) {
+            masterPool.putIfAbsent(hopKey(h), h)
+        }
+
+        var bestEligibleAttempt: ChainAttempt? = null
+        var bestFallbackAttempt: ChainAttempt? = null
         var testedCount = 0
 
-        fun hopKey(hop: TunnelConfig.ProxyHop): String = "${hop.scheme.name}:${hop.host}:${hop.port}"
-        fun chainKey(hops: List<TunnelConfig.ProxyHop>): String = hops.joinToString("->") { hopKey(it) }
-
-        fun probeCandidate(hops: List<TunnelConfig.ProxyHop>, stageNum: Int): ChainAttempt {
+        fun recordProbe(hops: List<TunnelConfig.ProxyHop>, stageNum: Int): ChainAttempt {
             val label = if (hops.isEmpty()) {
-                if (extVpn) "Layer 0 · Active External VPN (Lantern)" else "Layer 0 · Direct Network"
+                if (externalVpnActive) "Layer 0 · Active External VPN (Lantern)" else "Layer 0 · Direct Network"
             } else {
                 "Layer ${hops.size} · ${hops.joinToString(" → ") { it.displayLabel() }}" +
-                    if (extVpn) " + External VPN" else ""
+                    if (externalVpnActive) " + External VPN" else ""
             }
             testedCount++
             onStep("[L$stageNum #$testedCount] Probing ${targetService.displayName}: $label…")
 
-            var bridgeError: String? = null
-            val report = if (hops.isEmpty()) {
-                val directRoute = RouteResolution(
-                    shouldStartDastyabVpn = false,
-                    shouldStartLocalBridge = false,
-                    webViewHttpProxyPort = null,
-                    javaNetProxy = Proxy.NO_PROXY,
-                    routeLabel = label,
-                    externalVpnActive = extVpn,
-                    targetService = targetService
-                )
-                runAccessProbe(directRoute, timeoutMs = 4500)
-            } else {
-                val (r, err) = probeChainThroughEphemeralBridgeWithError(hops, label, extVpn, targetService, timeoutMs = 4500)
-                bridgeError = err
-                r
+            val (report, bridgeError) = routeProber(hops, label)
+
+            // If this egress IP fails country/service checks, automatically blacklist it for subsequent rounds
+            report.egress?.let { eg ->
+                val svcProbe = if (targetService == TargetService.GOOGLE_FLOW) report.flow else report.aiStudio
+                val ccSupported = if (targetService == TargetService.GOOGLE_FLOW) report.flowCountrySupported else report.aiStudioCountrySupported
+                if (!ccSupported || svcProbe.unsupportedRegion || (targetService == TargetService.GOOGLE_FLOW && svcProbe.reachable && !svcProbe.appShellOk)) {
+                    blockedEgressIps.add(eg.ip)
+                }
             }
 
-            // Record Hop-1 intelligence for pruning & smart multi-hop re-ordering
             if (hops.isNotEmpty()) {
                 val firstHop = hops.first()
                 val firstKey = hopKey(firstHop)
@@ -1098,148 +1356,189 @@ object GeoBypassEngine {
                     (hops.size == 1 || bridgeError?.startsWith("Hop 1/") == true || bridgeError?.contains("Chain startup") == true)
                 if (hop1Died) {
                     failedEntryKeys.add(firstKey)
+                    knownCleanExits.remove(firstKey)
                 } else if (hops.size == 1 && report.egress != null) {
-                    // Hop 1 works on TCP/TLS from this network! Useful as an entry/bridge hop in Stage 2+.
                     reachableBridgeHops.add(firstHop)
-                    val cc = report.egress.countryCode
-                    val ccSupported = if (targetService == TargetService.GOOGLE_FLOW) {
-                        isFlowCountrySupported(cc)
+                    val eg = report.egress
+                    val ccOk = if (targetService == TargetService.GOOGLE_FLOW) isFlowCountrySupported(eg.countryCode) else isAiStudioCountrySupported(eg.countryCode)
+                    if (ccOk && !blockedEgressIps.contains(eg.ip)) {
+                        knownCleanExits.putIfAbsent(firstKey, firstHop)
                     } else {
-                        isAiStudioCountrySupported(cc)
+                        knownCleanExits.remove(firstKey)
+                        knownRelays.putIfAbsent(firstKey, firstHop)
                     }
-                    if (ccSupported) supportedExitHops.add(firstHop)
                 }
             }
 
+            val ck = chainKey(hops)
+            val eligible = !(excludeCurrentRoute && hops.isEmpty()) &&
+                !blockedChainSpecs.contains(ck) &&
+                isEligibleRouteReport(report, targetService, blockedEgressIps)
             val score = gateScore(report, targetService)
             val attempt = ChainAttempt(label, hops, report, score)
             attempts.add(attempt)
-            if (bestAttempt == null || score < bestAttempt!!.score) {
-                bestAttempt = attempt
+
+            if (eligible) {
+                if (bestEligibleAttempt == null || score < bestEligibleAttempt!!.score) {
+                    bestEligibleAttempt = attempt
+                }
+            }
+            if (bestFallbackAttempt == null || score < bestFallbackAttempt!!.score) {
+                bestFallbackAttempt = attempt
             }
             return attempt
         }
 
-        // Run Stage 0 and Stage 1 first, collecting live country & reachability intel per hop
-        var unlockedCleanly = false
-        var fallbackChecksLeftInStage = -1
-
-        for (stageIdx in 0 until stagesInitial.size.coerceAtMost(2)) {
-            if (unlockedCleanly || testedCount >= maxCandidates) break
-            if (stagesInitial[stageIdx].isEmpty()) continue
-            fallbackChecksLeftInStage = -1
-            for (hops in stagesInitial[stageIdx]) {
+        // Baseline inspection when excludeCurrentRoute = true (only to capture blocked egress IP, NEVER accepted)
+        if (excludeCurrentRoute && blockedEgressIps.isEmpty()) {
+            onStep("Recording current blocked exit IP before rotating VPN/proxy layers…")
+            val (baselineReport, _) = routeProber(existingHops, "Baseline Current Route")
+            baselineReport.egress?.ip?.takeIf { it.isNotBlank() }?.let { baseIp ->
+                blockedEgressIps.add(baseIp)
+                onStep("  • Excluding current blocked IP $baseIp — seeking new clean egress…")
+            }
+        } else if (!excludeCurrentRoute) {
+            val stage0Chains = listOfNotNull(
+                if (!blockedChainSpecs.contains("")) emptyList<TunnelConfig.ProxyHop>() else null,
+                existingHops.takeIf { it.isNotEmpty() && !blockedChainSpecs.contains(chainKey(it)) }
+            )
+            for (hops in stage0Chains) {
                 if (testedCount >= maxCandidates) break
                 val ck = chainKey(hops)
                 if (!probedKeys.add(ck)) continue
-                val attempt = probeCandidate(hops, stageIdx)
-                if (attempt.report.targetReady(targetService)) {
-                    if (attempt.report.egress?.isProxyOrHosting == false) {
-                        unlockedCleanly = true
-                        break
-                    }
-                    if (fallbackChecksLeftInStage < 0) fallbackChecksLeftInStage = 2 else fallbackChecksLeftInStage--
-                    if (fallbackChecksLeftInStage <= 0) {
-                        unlockedCleanly = true
-                        break
-                    }
-                } else if (fallbackChecksLeftInStage > 0) {
-                    fallbackChecksLeftInStage--
-                    if (fallbackChecksLeftInStage == 0) {
-                        unlockedCleanly = true
-                        break
-                    }
-                }
-            }
-            if (bestAttempt?.report?.targetReady(targetService) == true) {
-                unlockedCleanly = true
-                break
-            }
-        }
-
-        // Escalate progressively to Stage 2 -> Stage 3 -> Stage 4 ONLY if Stages 0-1 did not pass!
-        if (!unlockedCleanly && testedCount < maxCandidates) {
-            val smartStages = buildProgressiveLayerStages(
-                existingHops = existingHops,
-                listening = listening,
-                harvestedHops = aliveHarvested,
-                preferredEntries = reachableBridgeHops,
-                preferredExits = supportedExitHops,
-                maxTotalCandidates = (maxCandidates * 2).coerceAtLeast(72)
-            )
-            // Skip stages 0 & 1 since we already ran them above, execute 2 -> 3 -> 4 progressively
-            for (sIdx in 2 until smartStages.size) {
-                if (unlockedCleanly || testedCount >= maxCandidates) break
-                val stageCandidates = smartStages[sIdx]
-                if (stageCandidates.isEmpty()) continue
-                onStep("Escalating to Layer $sIdx (${stageCandidates.size} candidate order(s))…")
-                fallbackChecksLeftInStage = -1
-                for (hops in stageCandidates) {
-                    if (testedCount >= maxCandidates) break
-                    if (hops.isNotEmpty() && failedEntryKeys.contains(hopKey(hops.first()))) {
-                        // First hop failed direct dialing; skip as entry (still allowed as Hop 2/3/4!)
-                        continue
-                    }
-                    val ck = chainKey(hops)
-                    if (!probedKeys.add(ck)) continue
-                    val attempt = probeCandidate(hops, sIdx)
-                    if (attempt.report.targetReady(targetService)) {
-                        if (attempt.report.egress?.isProxyOrHosting == false) {
-                            unlockedCleanly = true
-                            break
-                        }
-                        if (fallbackChecksLeftInStage < 0) fallbackChecksLeftInStage = 2 else fallbackChecksLeftInStage--
-                        if (fallbackChecksLeftInStage <= 0) {
-                            unlockedCleanly = true
-                            break
-                        }
-                    } else if (fallbackChecksLeftInStage > 0) {
-                        fallbackChecksLeftInStage--
-                        if (fallbackChecksLeftInStage == 0) {
-                            unlockedCleanly = true
-                            break
-                        }
-                    }
-                }
-                if (bestAttempt?.report?.targetReady(targetService) == true) {
-                    unlockedCleanly = true
+                val attempt = recordProbe(hops, 0)
+                if (bestEligibleAttempt != null && attempt.report.egress?.isProxyOrHosting == false) {
                     break
                 }
             }
         }
 
-        val winner = bestAttempt ?: ChainAttempt(
-            label = "Direct",
-            hops = emptyList(),
-            report = runAccessProbe(resolveCurrentRoute(context, settings, targetService)),
-            score = Long.MAX_VALUE
-        )
-        val passed = winner.report.targetReady(targetService)
-        if (passed) {
-            TunnelConfig.saveServiceProxyChain(
-                context = context,
-                targetServiceKey = targetService.key,
-                hops = winner.hops,
-                preserveExternalVpn = true
+        val effectiveRounds = maxRounds.coerceIn(1, 5)
+        for (round in 1..effectiveRounds) {
+            if (bestEligibleAttempt != null && bestEligibleAttempt!!.report.egress?.isProxyOrHosting == false) {
+                break
+            }
+            if (testedCount >= maxCandidates) break
+
+            val untestedBeforeHarvest = masterPool.values.filterNot { triedQualifyHosts.contains(it.host) }
+            if (allowHarvest && (round > 1 || untestedBeforeHarvest.size < 16)) {
+                val newlyHarvested = harvester(round, triedQualifyHosts.toSet(), triedQualifySubnets.toSet())
+                for (h in newlyHarvested) {
+                    masterPool.putIfAbsent(hopKey(h), h)
+                }
+            }
+
+            val untestedAll = masterPool.values.filterNot { triedQualifyHosts.contains(it.host) }
+            val batch = UniversalConfig.selectDiverseProxyHops(
+                hops = untestedAll,
+                limit = 48,
+                excludedHosts = triedQualifyHosts,
+                excludedSubnets16 = triedQualifySubnets
             )
-            if (winner.hops.isNotEmpty()) {
-                LocalProxyService.startSafely(context, targetService.key)
+            val roundCleanExits = ArrayList<TunnelConfig.ProxyHop>()
+            if (batch.isNotEmpty()) {
+                for (h in batch) {
+                    triedQualifyHosts.add(h.host)
+                    triedQualifySubnets.add(UniversalConfig.subnet16Of(h.host))
+                }
+                onStep("Round $round/$effectiveRounds: Qualifying ${batch.size} diverse hops (CONNECT + TLS geo-trace)…")
+                val q = hopQualifier(batch)
+                for (h in q.cleanExits) {
+                    roundCleanExits.add(h)
+                    knownCleanExits.putIfAbsent(hopKey(h), h)
+                }
+                for (h in q.relays) knownRelays.putIfAbsent(hopKey(h), h)
+                onStep("  • Qualified ${q.cleanExits.size} clean exit(s), ${q.relays.size} relay hop(s)")
+            }
+
+            // Prioritize newly qualified clean exits from this round ahead of older relays
+            val orderedCleanExits = (roundCleanExits + knownCleanExits.values)
+                .distinctBy { hopKey(it) }
+            val aliveOrdered = UniversalConfig.selectDiverseProxyHops(
+                hops = orderedCleanExits + knownRelays.values.toList(),
+                limit = 24
+            )
+            if (aliveOrdered.isEmpty() && listening.isEmpty()) {
+                continue
+            }
+
+            val roundStages = buildProgressiveLayerStages(
+                existingHops = if (excludeCurrentRoute) emptyList() else existingHops,
+                listening = listening,
+                harvestedHops = aliveOrdered,
+                preferredEntries = reachableBridgeHops + knownRelays.values.toList(),
+                preferredExits = orderedCleanExits,
+                maxTotalCandidates = (maxCandidates * 2).coerceAtLeast(96)
+            )
+
+            // Allocate budget so earlier rounds leave slots for fresh harvests in subsequent rounds
+            val roundsRemainingAfterThis = (effectiveRounds - round)
+            val reserveForNextRounds = if (roundsRemainingAfterThis > 0 && allowHarvest) (roundsRemainingAfterThis * 10).coerceAtMost(maxCandidates / 2) else 0
+            val roundBudgetLimit = (maxCandidates - reserveForNextRounds).coerceAtLeast(testedCount + 6).coerceAtMost(maxCandidates)
+
+            var foundCleanInRound = false
+            // Run Stages 1 -> 2 -> 3 -> 4 for this round (skipping Stage 0 when excludeCurrentRoute or already probed)
+            for (sIdx in 1 until roundStages.size) {
+                if (foundCleanInRound || testedCount >= roundBudgetLimit) break
+                val candidates = roundStages[sIdx]
+                if (candidates.isEmpty()) continue
+                if (sIdx >= 2) {
+                    onStep("[Round $round] Escalating to Layer $sIdx (${candidates.size} cascade candidate(s))…")
+                }
+                var nonResidentialGraceLeft = -1
+                for (hops in candidates) {
+                    if (testedCount >= roundBudgetLimit) break
+                    if (hops.isNotEmpty() && failedEntryKeys.contains(hopKey(hops.first()))) continue
+                    val ck = chainKey(hops)
+                    if (blockedChainSpecs.contains(ck) || !probedKeys.add(ck)) continue
+
+                    val attempt = recordProbe(hops, sIdx)
+                    val eligible = isEligibleRouteReport(attempt.report, targetService, blockedEgressIps)
+                    if (eligible) {
+                        if (attempt.report.egress?.isProxyOrHosting == false) {
+                            foundCleanInRound = true
+                            break
+                        }
+                        nonResidentialGraceLeft = if (nonResidentialGraceLeft < 0) 2 else (nonResidentialGraceLeft - 1)
+                        if (nonResidentialGraceLeft <= 0) {
+                            foundCleanInRound = true
+                            break
+                        }
+                    } else if (nonResidentialGraceLeft > 0) {
+                        nonResidentialGraceLeft--
+                        if (nonResidentialGraceLeft == 0) {
+                            foundCleanInRound = true
+                            break
+                        }
+                    }
+                }
+                if (bestEligibleAttempt != null) {
+                    foundCleanInRound = true
+                    break
+                }
             }
         }
 
+        val winner = bestEligibleAttempt ?: bestFallbackAttempt ?: run {
+            val (fallbackRep, _) = routeProber(emptyList(), "Direct")
+            ChainAttempt("Direct", emptyList(), fallbackRep, Long.MAX_VALUE)
+        }
+
+        val passed = bestEligibleAttempt != null &&
+            isEligibleRouteReport(winner.report, targetService, initialBlockedIps)
         val egressTag = winner.report.egress?.let { "${it.countryCode} (${it.ip})" } ?: "unknown egress"
         val summary = if (passed) {
-            "Unlocked ${targetService.displayName} via ${winner.label} · Egress $egressTag"
+            "Unlocked ${targetService.displayName} via ${winner.label} · New Clean Egress $egressTag"
         } else {
             val detail = if (targetService == TargetService.GOOGLE_FLOW) winner.report.flow.detail else winner.report.aiStudio.detail
-            "No tested layer unlocked ${targetService.displayName} (best egress: $egressTag · $detail). " +
-                "Connect a residential proxy / v2rayNG node or switch Lantern location."
+            "Tested ${attempts.size} layer(s) across $effectiveRounds round(s) excluding ${blockedEgressIps.size} blocked IP(s) — " +
+                "no clean exit unlocked ${targetService.displayName} (best egress: $egressTag · $detail)."
         }
 
         return ChainDiscoveryResult(
             targetService = targetService,
             success = passed,
-            externalVpnActive = extVpn,
+            externalVpnActive = externalVpnActive,
             bestHops = winner.hops,
             bestChainLabel = winner.label,
             report = winner.report,
@@ -1248,25 +1547,74 @@ object GeoBypassEngine {
         )
     }
 
-    private fun benchmarkAliveHops(hops: List<TunnelConfig.ProxyHop>, timeoutMs: Int): List<TunnelConfig.ProxyHop> {
-        if (hops.isEmpty()) return emptyList()
-        val pool = Executors.newFixedThreadPool(hops.size.coerceAtMost(8))
+    /**
+     * Qualifies proxy hops in parallel via real HTTP/SOCKS5 CONNECT + TLS `/cdn-cgi/trace`,
+     * separating clean non-blocked exits from usable relay hops.
+     */
+    fun qualifyProxyHops(
+        hops: List<TunnelConfig.ProxyHop>,
+        targetService: TargetService,
+        excludedEgressIps: Set<String> = emptySet(),
+        timeoutMs: Int = 1800
+    ): QualifiedHopPool {
+        if (hops.isEmpty()) return QualifiedHopPool(emptyList(), emptyList())
+        val pool = Executors.newFixedThreadPool(hops.size.coerceAtMost(10))
         return try {
             val tasks = hops.map { hop ->
                 Callable {
-                    val ms = CleanEndpointScout.probeTcpLatency(hop.host, hop.port, timeoutMs)
-                    if (ms >= 0) hop to ms else null
+                    LocalProxyServer.probeHopTrace(hop, timeoutMs = timeoutMs)
                 }
             }
-            pool.invokeAll(tasks, 2500, TimeUnit.MILLISECONDS)
-                .mapNotNull { runCatching { it.get() }.getOrNull() }
-                .sortedBy { it.second }
-                .map { it.first }
+            val futures = pool.invokeAll(tasks, timeoutMs + 2200L, TimeUnit.MILLISECONDS)
+            val results = futures.mapNotNull { runCatching { it.get() }.getOrNull() }
+            classifyQualifiedTraces(results, targetService, excludedEgressIps)
         } catch (_: Exception) {
-            emptyList()
+            QualifiedHopPool(emptyList(), emptyList())
         } finally {
             pool.shutdownNow()
         }
+    }
+
+    /** Pure-Kotlin classification of traced hop results into clean preferred exits and relays. */
+    fun classifyQualifiedTraces(
+        traces: List<LocalProxyServer.HopTraceResult>,
+        targetService: TargetService,
+        excludedEgressIps: Set<String> = emptySet()
+    ): QualifiedHopPool {
+        val clean = ArrayList<LocalProxyServer.HopTraceResult>()
+        val relays = ArrayList<LocalProxyServer.HopTraceResult>()
+        val byKey = LinkedHashMap<String, LocalProxyServer.HopTraceResult>()
+
+        for (t in traces) {
+            val k = "${t.hop.scheme.name}:${t.hop.host}:${t.hop.port}"
+            byKey[k] = t
+            val ccOk = if (targetService == TargetService.GOOGLE_FLOW) {
+                isFlowCountrySupported(t.countryCode)
+            } else {
+                isAiStudioCountrySupported(t.countryCode)
+            }
+            if (ccOk && !excludedEgressIps.contains(t.exitIp)) {
+                clean.add(t)
+            } else {
+                relays.add(t)
+            }
+        }
+
+        // Prioritize preferred clean countries first, then shortest latency, then enforce /16 subnet spread
+        val sortedClean = clean.sortedWith(
+            compareBy<LocalProxyServer.HopTraceResult> {
+                if (PREFERRED_CLEAN_COUNTRIES.contains(it.countryCode)) 0 else 1
+            }.thenBy { it.latencyMs }
+        ).map { it.hop }
+        val diverseClean = UniversalConfig.selectDiverseProxyHops(sortedClean, limit = sortedClean.size.coerceAtLeast(1))
+
+        val sortedRelays = relays.sortedBy { it.latencyMs }.map { it.hop }
+        val diverseRelays = UniversalConfig.selectDiverseProxyHops(sortedRelays, limit = sortedRelays.size.coerceAtLeast(1))
+        return QualifiedHopPool(
+            cleanExits = diverseClean,
+            relays = diverseClean + diverseRelays,
+            resolvedByHopKey = byKey
+        )
     }
 
     private fun probeChainThroughEphemeralBridge(

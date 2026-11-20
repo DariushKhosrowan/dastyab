@@ -195,11 +195,17 @@ object ConnectivityTroubleshooter {
         onProgress("Probing Telegram Web (t.me)…")
         val tgMs = CleanEndpointScout.probeTcpLatency("t.me", 443, 2500)
 
-        onProgress("Probing Google AI Studio (aistudio.google.com)…")
-        val aiMs = CleanEndpointScout.probeTcpLatency("aistudio.google.com", 443, 2500)
-
-        onProgress("Probing Google Flow (flow.google.com)…")
-        val flowMs = CleanEndpointScout.probeTcpLatency("flow.google.com", 443, 2500)
+        onProgress("Verifying non-geoblocked access for Google AI Studio & Google Flow…")
+        val aiRoute = GeoBypassEngine.resolveCurrentRoute(context, settings, GeoBypassEngine.TargetService.AI_STUDIO)
+        val flowRoute = GeoBypassEngine.resolveCurrentRoute(context, settings, GeoBypassEngine.TargetService.GOOGLE_FLOW)
+        val aiReport = GeoBypassEngine.runAccessProbe(aiRoute, timeoutMs = 3500)
+        val flowReport = if (flowRoute.upstreamChainSpec == aiRoute.upstreamChainSpec && flowRoute.javaNetProxy == aiRoute.javaNetProxy) {
+            aiReport
+        } else {
+            GeoBypassEngine.runAccessProbe(flowRoute, timeoutMs = 3500)
+        }
+        val aiMs = if (aiReport.readyForAiStudio) aiReport.aiStudio.latencyMs.coerceAtLeast(1L) else -1L
+        val flowMs = if (flowReport.readyForFlow) flowReport.flow.latencyMs.coerceAtLeast(1L) else -1L
 
         return diagnose(
             ProbeSnapshot(

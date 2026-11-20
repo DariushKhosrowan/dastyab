@@ -730,4 +730,217 @@ class GeoBypassAndProxyTest {
         // Preferred exit C is prioritized up front among harvested Stage-1 candidates
         assertEquals("198.51.100.30", stages[1][1].first().host)
     }
+
+    @Test
+    fun isAiStudioCountrySupported_rejectsEmbargoedAndUnknownTerritories() {
+        for (ok in listOf("US", "de", "LY", "GB", "JP", "SG", "TR")) {
+            assertTrue("Expected $ok to be supported by AI Studio", GeoBypassEngine.isAiStudioCountrySupported(ok))
+        }
+        for (blocked in listOf("IR", "ir", "CN", "RU", "KP", "BY", "SY", "CU", "SD", "AF", "HK", "MO", "MM", "SS", "XX", "", " ")) {
+            assertFalse("Expected $blocked to be blocked for AI Studio", GeoBypassEngine.isAiStudioCountrySupported(blocked))
+        }
+    }
+
+    @Test
+    fun isEligibleRouteReport_enforcesTargetReadyAndExcludedIps() {
+        val okAi = GeoBypassEngine.ServiceProbeResult(true, 200, 90, false, "https://aistudio.google.com/", "ok", appShellOk = true)
+        val okFlow = GeoBypassEngine.ServiceProbeResult(true, 200, 110, false, "https://flow.google.com/", "ok", appShellOk = true)
+        val usEgress = GeoBypassEngine.EgressInfo("203.0.113.10", "US", "United States", false, "ipwho.is")
+        val report = GeoBypassEngine.AccessProbeReport(
+            routeLabel = "Chain",
+            egress = usEgress,
+            flowCountrySupported = true,
+            aiStudio = okAi,
+            flow = okFlow,
+            headline = "Ready",
+            recommendation = "",
+            accountsReachable = true
+        )
+        assertTrue(GeoBypassEngine.isEligibleRouteReport(report, GeoBypassEngine.TargetService.GOOGLE_FLOW))
+        assertFalse(
+            "Must reject blocked current IP",
+            GeoBypassEngine.isEligibleRouteReport(report, GeoBypassEngine.TargetService.GOOGLE_FLOW, setOf("203.0.113.10"))
+        )
+        assertFalse(
+            "Must reject null egress",
+            GeoBypassEngine.isEligibleRouteReport(report.copy(egress = null), GeoBypassEngine.TargetService.AI_STUDIO)
+        )
+    }
+
+    @Test
+    fun classifyQualifiedTraces_separatesCleanExitsAndPreservesSubnetDiversity() {
+        val irHop = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "10.10.1.1", 1080)
+        val excludedUsHop = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "10.20.1.1", 1080)
+        val deHop1 = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "10.30.1.1", 1080)
+        val deHop2 = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "10.30.2.2", 1080)
+        val usHop = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.HTTP, "10.40.1.1", 8080)
+
+        val traces = listOf(
+            LocalProxyServer.HopTraceResult(irHop, 35, "5.5.5.5", "IR"),
+            LocalProxyServer.HopTraceResult(excludedUsHop, 40, "198.51.100.99", "US"),
+            LocalProxyServer.HopTraceResult(deHop1, 90, "185.1.1.1", "DE"),
+            LocalProxyServer.HopTraceResult(deHop2, 95, "185.1.2.2", "DE"),
+            LocalProxyServer.HopTraceResult(usHop, 60, "203.0.113.20", "US")
+        )
+
+        val pool = GeoBypassEngine.classifyQualifiedTraces(
+            traces = traces,
+            targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
+            excludedEgressIps = setOf("198.51.100.99")
+        )
+
+        assertEquals(3, pool.cleanExits.size)
+        assertEquals(listOf(usHop, deHop1, deHop2), pool.cleanExits)
+        assertFalse(pool.cleanExits.contains(irHop))
+        assertFalse(pool.cleanExits.contains(excludedUsHop))
+        assertTrue(pool.relays.contains(irHop))
+        assertTrue(pool.relays.contains(excludedUsHop))
+    }
+
+    @Test
+    fun localProxyServer_probeHopTraceQueriesMockCloudflareTrace() {
+        val traceServer = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
+        val traceThread = thread(isDaemon = true) {
+            while (!traceServer.isClosed) {
+                val c = try { traceServer.accept() } catch (_: Exception) { break }
+                thread(isDaemon = true) {
+                    c.use { sock ->
+                        val ins = sock.getInputStream().bufferedReader(StandardCharsets.US_ASCII)
+                        while (true) {
+                            val line = ins.readLine() ?: break
+                            if (line.isEmpty()) break
+                        }
+                        val body = "fl=12f34\nip=203.0.113.77\nloc=DE\ntls=TLSv1.3\n"
+                        val resp = "HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\n\r\n$body"
+                        sock.getOutputStream().write(resp.toByteArray(StandardCharsets.UTF_8))
+                        sock.getOutputStream().flush()
+                    }
+                }
+            }
+        }
+        val hopServer = LocalProxyServer(requestedPort = 0, upstream = LocalProxyServer.Upstream.Direct)
+        val hopPort = hopServer.start()
+        try {
+            val res = LocalProxyServer.probeHopTrace(
+                hop = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "127.0.0.1", hopPort),
+                timeoutMs = 3000,
+                traceHost = "127.0.0.1",
+                tracePort = traceServer.localPort,
+                useTls = false
+            )
+            assertTrue("Expected probeHopTrace to succeed against loopback mock", res != null)
+            assertEquals("203.0.113.77", res!!.exitIp)
+            assertEquals("DE", res.countryCode)
+        } finally {
+            hopServer.close()
+            traceServer.close()
+            traceThread.interrupt()
+        }
+    }
+
+    @Test
+    fun discoverBestRouteLoop_excludesBlockedIpHarvestsSecondRoundAndUnlocksChain() {
+        val blockedHop = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "198.51.100.10", 1080)
+        val relayHop = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "198.51.100.20", 1080)
+        val cleanExitHop = TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.HTTP, "203.0.113.55", 8080)
+
+        val okAi = GeoBypassEngine.ServiceProbeResult(true, 200, 100, false, "https://aistudio.google.com/", "ok", appShellOk = true)
+        val okFlow = GeoBypassEngine.ServiceProbeResult(true, 200, 120, false, "https://flow.google.com/", "ok", appShellOk = true)
+        val geoBlockedFlow = GeoBypassEngine.ServiceProbeResult(false, 302, 80, true, "https://flow.google.com/unsupported-country", "Geo-blocked", appShellOk = false)
+
+        fun blockedReport(ip: String, cc: String) = GeoBypassEngine.AccessProbeReport(
+            routeLabel = "Blocked",
+            egress = GeoBypassEngine.EgressInfo(ip, cc, cc, false, "trace"),
+            flowCountrySupported = false,
+            aiStudio = okAi,
+            flow = geoBlockedFlow,
+            headline = "Blocked",
+            recommendation = "",
+            accountsReachable = true
+        )
+
+        val round2Harvested = mutableListOf<Int>()
+        val result = GeoBypassEngine.discoverBestRouteLoop(
+            targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
+            externalVpnActive = true,
+            existingHops = listOf(blockedHop),
+            listening = emptyList(),
+            initialPool = listOf(blockedHop),
+            allowHarvest = true,
+            maxCandidates = 32,
+            excludedEgressIps = emptySet(),
+            excludeCurrentRoute = true,
+            maxRounds = 3,
+            hopQualifier = { batch ->
+                val traces = batch.mapNotNull { hop ->
+                    when (hop) {
+                        blockedHop -> LocalProxyServer.HopTraceResult(hop, 40, "5.5.5.5", "IR")
+                        relayHop -> LocalProxyServer.HopTraceResult(hop, 50, "6.6.6.6", "CN")
+                        cleanExitHop -> LocalProxyServer.HopTraceResult(hop, 70, "203.0.113.55", "US")
+                        else -> null
+                    }
+                }
+                GeoBypassEngine.classifyQualifiedTraces(traces, GeoBypassEngine.TargetService.GOOGLE_FLOW, setOf("5.5.5.5"))
+            },
+            harvester = { round, _, _ ->
+                round2Harvested.add(round)
+                if (round >= 2) listOf(relayHop, cleanExitHop) else emptyList()
+            },
+            routeProber = { hops, label ->
+                when {
+                    hops == listOf(blockedHop) || hops.isEmpty() ->
+                        blockedReport("5.5.5.5", "IR") to null
+                    hops.lastOrNull() == cleanExitHop ->
+                        GeoBypassEngine.AccessProbeReport(
+                            routeLabel = label,
+                            egress = GeoBypassEngine.EgressInfo("203.0.113.55", "US", "United States", false, "ipwho.is"),
+                            flowCountrySupported = true,
+                            aiStudio = okAi,
+                            flow = okFlow,
+                            headline = "Ready",
+                            recommendation = "",
+                            accountsReachable = true
+                        ) to null
+                    else ->
+                        blockedReport("6.6.6.6", "CN") to null
+                }
+            }
+        )
+
+        assertTrue("Expected round >= 2 harvest to be triggered", round2Harvested.contains(2))
+        assertTrue("Expected discovery to unlock Flow", result.success)
+        assertEquals("203.0.113.55", result.report.egress?.ip)
+        assertFalse("Must exclude baseline blocked IP", result.report.egress?.ip == "5.5.5.5")
+    }
+
+    @Test
+    fun planRoute_bridgesRemoteHttpHopThroughLocalBridgeWhileLoopbackStaysDirect() {
+        val remoteSettings = TunnelConfig.Settings(
+            googleAccessMode = TunnelConfig.GoogleAccessMode.IN_APP_PROXY,
+            upstreamProxyScheme = TunnelConfig.ProxyScheme.HTTP,
+            upstreamProxyHost = "198.51.100.50",
+            upstreamProxyPort = 8080,
+            localBridgePort = 10850
+        )
+        val remotePlan = GeoBypassEngine.planRoute(
+            settings = remoteSettings,
+            externalVpnActive = false,
+            dastyabVpnActive = false,
+            runningBridgePort = null,
+            detectedListeningHttpPort = null
+        )
+        assertTrue("Remote HTTP hop must be bridged locally", remotePlan.shouldStartLocalBridge)
+        assertEquals(10850, remotePlan.webViewHttpProxyPort)
+
+        val loopbackSettings = remoteSettings.copy(upstreamProxyHost = "127.0.0.1", upstreamProxyPort = 10809)
+        val loopbackPlan = GeoBypassEngine.planRoute(
+            settings = loopbackSettings,
+            externalVpnActive = false,
+            dastyabVpnActive = false,
+            runningBridgePort = null,
+            detectedListeningHttpPort = null
+        )
+        assertFalse("Single unauthenticated loopback HTTP hop should not start redundant bridge", loopbackPlan.shouldStartLocalBridge)
+        assertEquals(10809, loopbackPlan.webViewHttpProxyPort)
+    }
 }

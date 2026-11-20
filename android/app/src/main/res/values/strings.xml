@@ -810,8 +810,10 @@
     <string name="browser_dom_geo_blocked_title">%1$s Geo-Blocked Inside Browser</string>
     <string name="browser_dom_geo_blocked_msg">The loaded page reported a regional or account access restriction (%1$s).\n\nWould you like DastYab to automatically stack multi-layer proxy hops on top of Lantern / system VPN for %2$s?</string>
     <string name="browser_btn_auto_chain">Auto-Chain Layers</string>
-    <string name="browser_auto_chain_running">Auto-chaining proxy layers for %1$s (on top of Lantern)…</string>
+    <string name="browser_auto_chain_running">Auto-chaining proxy layers for %1$s (harvesting &amp; rotating exit IP)…</string>
     <string name="browser_auto_chain_failed">Could not find a non-georestricted layer for %1$s</string>
+    <string name="browser_auto_chain_failed_title">No Clean Unblocked IP Found Yet</string>
+    <string name="browser_btn_retry_chain">Retry Fresh Harvest &amp; Rotate</string>
     <string name="browser_banner_ready">%1$s ✓ · %2$s (%3$s · %4$s)</string>
     <string name="browser_banner_blocked">%1$s Geo-Blocked ✗ · %2$s (%3$s)</string>
 
@@ -830,4 +832,8 @@
 
     <string name="main_btn_auto_chain_service">Auto-Chain Layers for %1$s</string>
     <string name="lantern_dialog_dual_body">AI Studio : %1$s\n  Route   : %2$s\n\nGoogle Flow : %3$s\n  Route     : %4$s\n\nExit IP: %5$s (%6$s · %7$s)\n\n%8$s</string>
+    <string name="main_connect_verifying_geo">VPN active — verifying AI Studio &amp; Flow (no geo-block)…</string>
+    <string name="main_connect_auto_chaining">Geo-block detected on %1$s (%2$s) — auto-chaining bypass layers…</string>
+    <string name="main_connect_all_clear">Connected &amp; Geo-Clear ✓ (%1$s · AI Studio &amp; Flow Ready)</string>
+    <string name="main_connect_partial_or_blocked">%1$s · %2$s · %3$s</string>
 </resources>

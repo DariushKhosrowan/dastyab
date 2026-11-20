@@ -255,7 +255,10 @@ object NewbieAutopilot {
                         context = context,
                         targetService = GeoBypassEngine.TargetService.AI_STUDIO,
                         allowHarvest = true,
-                        maxCandidates = 36
+                        maxCandidates = 44,
+                        excludedEgressIps = setOfNotNull(aiProbe.egress?.ip),
+                        excludeCurrentRoute = true,
+                        maxRounds = 3
                     ) { emit("    $it") }
                     aiProbe = aiChain.report
                     emit("  • AI Studio result: ${aiChain.summary}")
@@ -266,7 +269,10 @@ object NewbieAutopilot {
                         context = context,
                         targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
                         allowHarvest = true,
-                        maxCandidates = 44
+                        maxCandidates = 52,
+                        excludedEgressIps = setOfNotNull(flowProbe.egress?.ip),
+                        excludeCurrentRoute = true,
+                        maxRounds = 3
                     ) { emit("    $it") }
                     flowProbe = flowChain.report
                     emit("  • Google Flow result: ${flowChain.summary}")
@@ -285,7 +291,7 @@ object NewbieAutopilot {
                 DastyabVpnService.start(context)
                 try { Thread.sleep(900) } catch (_: InterruptedException) {}
 
-                val afterVpn = ReachabilityVerifier.verifyAll(timeoutMs = 3000)
+                val afterVpn = ReachabilityVerifier.verifyAll(timeoutMs = 3500)
                 emit("  • Post-VPN Internet  : ${afterVpn.internet.detail}")
                 emit("  • Post-VPN AI Studio : ${afterVpn.aiStudio.detail}")
                 emit("  • Post-VPN Flow      : ${afterVpn.flow.detail}")
@@ -346,19 +352,49 @@ object NewbieAutopilot {
             emit("Step 5/5: No configs harvested yet (GitHub & Telegram unreachable).")
         }
 
-        // If active Lantern still geo-blocked Flow/AI Studio before Step 4, re-try auto-chain now with newly harvested nodes!
-        if (externalVpnActive && (!check.aiStudio.isOk || !check.flow.isOk)) {
+        // If either AI Studio or Flow is still geo-blocked after VPN + harvest, run autonomous multi-round
+        // proxy-hop harvesting + progressive 1..4-hop cascading & egress IP rotation!
+        if (!check.aiStudio.isOk || !check.flow.isOk) {
+            emit("Geo-restriction detected — autonomously harvesting & rotating multi-layer bypass IPs…")
+            var anyChainUnlocked = false
+            val blockedAiIps = listOfNotNull(
+                aiProbe.egress?.ip,
+                check.aiStudio.resolvedIp.takeIf { it.isNotBlank() && it != "-" && it != "via-proxy" }
+            ).toSet()
+            val blockedFlowIps = listOfNotNull(
+                flowProbe.egress?.ip,
+                check.flow.resolvedIp.takeIf { it.isNotBlank() && it != "-" && it != "via-proxy" }
+            ).toSet()
+
             if (!check.aiStudio.isOk) {
                 val retryAi = GeoBypassEngine.discoverAndChainBestRoute(
-                    context, GeoBypassEngine.TargetService.AI_STUDIO, allowHarvest = false, maxCandidates = 36
-                ) { emit("  [re-chain AI Studio] $it") }
+                    context = context,
+                    targetService = GeoBypassEngine.TargetService.AI_STUDIO,
+                    allowHarvest = true,
+                    maxCandidates = 44,
+                    excludedEgressIps = blockedAiIps,
+                    excludeCurrentRoute = true,
+                    maxRounds = 3
+                ) { emit("  [auto-chain AI Studio] $it") }
                 aiProbe = retryAi.report
+                if (retryAi.success) anyChainUnlocked = true
             }
             if (!check.flow.isOk) {
                 val retryFlow = GeoBypassEngine.discoverAndChainBestRoute(
-                    context, GeoBypassEngine.TargetService.GOOGLE_FLOW, allowHarvest = false, maxCandidates = 44
-                ) { emit("  [re-chain Flow] $it") }
+                    context = context,
+                    targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
+                    allowHarvest = true,
+                    maxCandidates = 52,
+                    excludedEgressIps = blockedFlowIps,
+                    excludeCurrentRoute = true,
+                    maxRounds = 3
+                ) { emit("  [auto-chain Flow] $it") }
                 flowProbe = retryFlow.report
+                if (retryFlow.success) anyChainUnlocked = true
+            }
+            if (anyChainUnlocked && DastyabVpnService.isConnected() && !externalVpnActive) {
+                DastyabVpnService.start(context)
+                try { Thread.sleep(500) } catch (_: InterruptedException) {}
             }
             check = ReachabilityVerifier.FullVerification(
                 internet = check.internet,
@@ -367,14 +403,27 @@ object NewbieAutopilot {
             )
         }
 
-        // Final decision
+        // Final decision (requires true non-geoblock clearance, never raw HTTP 200)
         val finalOutcome = decideOutcome(check, activeVpnOrExternal || DastyabVpnService.isConnected(), vpnConsentNeeded && !externalVpnActive && listeningProxies.isEmpty())
+        val bothClear = check.aiStudio.isOk && check.flow.isOk
         val (headline, summary) = when (finalOutcome) {
             Outcome.READY_WITH_VPN ->
-                "Autopilot Connected & Geo-Verified!" to
+                (if (bothClear) {
+                    "Autopilot Connected & Both Services Geo-Clear!"
+                } else if (check.aiStudio.isOk) {
+                    "Autopilot Partial: AI Studio Ready ✓ · Flow Geo-Blocked ✗"
+                } else {
+                    "Autopilot Partial: Flow Ready ✓ · AI Studio Geo-Blocked ✗"
+                }) to
                     "AI Studio: ${check.aiStudio.detail}\nGoogle Flow: ${check.flow.detail}"
             Outcome.READY_DIRECT ->
-                "AI Studio & Flow Verified Geo-Clear!" to
+                (if (bothClear) {
+                    "AI Studio & Flow Verified Geo-Clear!"
+                } else if (check.aiStudio.isOk) {
+                    "AI Studio Geo-Clear ✓ · Flow Geo-Blocked ✗"
+                } else {
+                    "Google Flow Geo-Clear ✓ · AI Studio Geo-Blocked ✗"
+                }) to
                     "AI Studio: ${check.aiStudio.detail}\nGoogle Flow: ${check.flow.detail}"
             Outcome.NEEDS_VPN_CONSENT ->
                 "Tap Allow to Start Autopilot VPN" to
@@ -475,7 +524,10 @@ object NewbieAutopilot {
                 context = context,
                 targetService = GeoBypassEngine.TargetService.AI_STUDIO,
                 allowHarvest = true,
-                maxCandidates = 36
+                maxCandidates = 44,
+                excludedEgressIps = setOfNotNull(aiProbe.egress?.ip),
+                excludeCurrentRoute = true,
+                maxRounds = 3
             ) { step -> emit("    $step") }
             aiProbe = discoveredAi.report
             emit("  → AI Studio: ${discoveredAi.summary}")
@@ -496,7 +548,10 @@ object NewbieAutopilot {
                 context = context,
                 targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
                 allowHarvest = true,
-                maxCandidates = 44
+                maxCandidates = 52,
+                excludedEgressIps = setOfNotNull(flowProbe.egress?.ip),
+                excludeCurrentRoute = true,
+                maxRounds = 3
             ) { step -> emit("    $step") }
             flowProbe = discoveredFlow.report
             emit("  → Google Flow: ${discoveredFlow.summary}")

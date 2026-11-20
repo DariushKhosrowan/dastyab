@@ -126,6 +126,7 @@ class MainActivity : DastyabActivity() {
     private var pendingGoogleLaunchUrl: String? = null
     private var pendingGoogleLaunchName: String? = null
     private var vpnReceiverRegistered = false
+    private val postConnectGeoInFlight = AtomicBoolean(false)
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -598,7 +599,11 @@ class MainActivity : DastyabActivity() {
         } else {
             DastyabVpnService.start(this)
             refreshVpnCard()
-            openPendingGoogleUrlIfAny()
+            if (launchUrl != null) {
+                openPendingGoogleUrlIfAny()
+            } else {
+                verifyAndEnsureNoGeoBlockAfterConnect()
+            }
         }
     }
 
@@ -611,7 +616,11 @@ class MainActivity : DastyabActivity() {
                 DastyabVpnService.start(this)
                 postOutput(getString(R.string.main_vpn_started_log) + "\n")
                 refreshVpnCard()
-                openPendingGoogleUrlIfAny()
+                if (pendingGoogleLaunchUrl != null) {
+                    openPendingGoogleUrlIfAny()
+                } else {
+                    verifyAndEnsureNoGeoBlockAfterConnect()
+                }
             } else {
                 postOutput(getString(R.string.main_vpn_declined_log) + "\n")
                 val failedName = pendingGoogleLaunchName
@@ -621,6 +630,131 @@ class MainActivity : DastyabActivity() {
                 if (failedName != null && failedUrl != null) {
                     showGoogleRescueDialog(failedName, failedUrl)
                 }
+            }
+        }
+    }
+
+    /**
+     * Runs immediately whenever Connect activates DastYab VPN without opening a specific URL:
+     * verifies TRUE non-geoblocked access for both AI Studio & Google Flow (never trusting HTTP 200),
+     * and autonomously harvests + multi-layer chains non-georestricted IPs if either site is geo-blocked.
+     */
+    private fun verifyAndEnsureNoGeoBlockAfterConnect() {
+        if (!postConnectGeoInFlight.compareAndSet(false, true)) return
+        val checkingLabel = getString(R.string.main_connect_verifying_geo)
+        simpleProgress.visibility = View.VISIBLE
+        tvSimpleReachability.text = checkingLabel
+        tvReachabilityBadge.text = checkingLabel
+        postStatus(checkingLabel)
+        setStatusDot(DotState.ORANGE)
+        postOutput("[connect] $checkingLabel\n")
+
+        thread(isDaemon = true, name = "dastyab-post-connect-geo") {
+            try {
+                try { Thread.sleep(700) } catch (_: InterruptedException) {}
+                val settings = TunnelConfig.load(this)
+                val aiRoute = GeoBypassEngine.resolveCurrentRoute(this, settings, GeoBypassEngine.TargetService.AI_STUDIO)
+                val flowRoute = GeoBypassEngine.resolveCurrentRoute(this, settings, GeoBypassEngine.TargetService.GOOGLE_FLOW)
+                var aiProbe = GeoBypassEngine.runAccessProbe(aiRoute, timeoutMs = 4000)
+                var flowProbe = if (flowRoute.upstreamChainSpec == aiRoute.upstreamChainSpec && flowRoute.javaNetProxy == aiRoute.javaNetProxy) {
+                    aiProbe
+                } else {
+                    GeoBypassEngine.runAccessProbe(flowRoute, timeoutMs = 4000)
+                }
+
+                val excludedIps = LinkedHashSet<String>()
+                if (!aiProbe.readyForAiStudio) aiProbe.egress?.ip?.takeIf { it.isNotBlank() }?.let { excludedIps.add(it) }
+                if (!flowProbe.readyForFlow) flowProbe.egress?.ip?.takeIf { it.isNotBlank() }?.let { excludedIps.add(it) }
+
+                if (!aiProbe.readyForAiStudio || !flowProbe.readyForFlow) {
+                    val blockedTarget = if (!aiProbe.readyForAiStudio && !flowProbe.readyForFlow) {
+                        "AI Studio & Flow"
+                    } else if (!aiProbe.readyForAiStudio) {
+                        "AI Studio"
+                    } else {
+                        "Google Flow"
+                    }
+                    val ccTag = flowProbe.egress?.countryCode ?: aiProbe.egress?.countryCode ?: "??"
+                    val chainBanner = getString(R.string.main_connect_auto_chaining, blockedTarget, ccTag)
+                    postUi {
+                        if (!UiSafety.isActivityAlive(this)) return@postUi
+                        tvSimpleReachability.text = chainBanner
+                        tvReachabilityBadge.text = chainBanner
+                        postStatus(chainBanner)
+                    }
+                    postOutput("[connect] $chainBanner\n")
+
+                    var unlockedAny = false
+                    if (!aiProbe.readyForAiStudio) {
+                        val aiRes = GeoBypassEngine.discoverAndChainBestRoute(
+                            context = this,
+                            targetService = GeoBypassEngine.TargetService.AI_STUDIO,
+                            allowHarvest = true,
+                            maxCandidates = 44,
+                            excludedEgressIps = excludedIps,
+                            excludeCurrentRoute = true,
+                            excludedChainSpecs = setOfNotNull(aiRoute.upstreamChainSpec.takeIf { it.isNotBlank() }),
+                            maxRounds = 3
+                        ) { step -> postOutput("  [connect-ai] $step\n") }
+                        aiProbe = aiRes.report
+                        if (aiRes.success) {
+                            unlockedAny = true
+                        } else {
+                            aiRes.report.egress?.ip?.takeIf { it.isNotBlank() }?.let { excludedIps.add(it) }
+                        }
+                    }
+
+                    if (!flowProbe.readyForFlow) {
+                        val flowRes = GeoBypassEngine.discoverAndChainBestRoute(
+                            context = this,
+                            targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
+                            allowHarvest = true,
+                            maxCandidates = 52,
+                            excludedEgressIps = excludedIps,
+                            excludeCurrentRoute = true,
+                            excludedChainSpecs = setOfNotNull(flowRoute.upstreamChainSpec.takeIf { it.isNotBlank() }),
+                            maxRounds = 3
+                        ) { step -> postOutput("  [connect-flow] $step\n") }
+                        flowProbe = flowRes.report
+                        if (flowRes.success) {
+                            unlockedAny = true
+                        }
+                    }
+
+                    if (unlockedAny && DastyabVpnService.isConnected()) {
+                        DastyabVpnService.start(this)
+                    }
+                }
+
+                val aiOk = aiProbe.readyForAiStudio
+                val flowOk = flowProbe.readyForFlow
+                val finalCc = flowProbe.egress?.countryCode ?: aiProbe.egress?.countryCode ?: "??"
+                val finalIp = flowProbe.egress?.ip ?: aiProbe.egress?.ip ?: ""
+
+                postUi {
+                    if (!UiSafety.isActivityAlive(this)) return@postUi
+                    simpleProgress.visibility = View.GONE
+                    refreshVpnCard()
+                    if (aiOk && flowOk) {
+                        val msg = getString(R.string.main_connect_all_clear, finalCc)
+                        tvSimpleReachability.text = msg
+                        tvReachabilityBadge.text = msg
+                        postStatus(msg)
+                        setStatusDot(DotState.GREEN)
+                        postOutput("[connect] $msg ($finalIp)\n")
+                    } else {
+                        val aiTag = if (aiOk) "AI Studio ✓" else "AI Studio Geo-Blocked ✗"
+                        val flowTag = if (flowOk) "Flow ✓" else "Flow Geo-Blocked ✗"
+                        val badge = getString(R.string.main_connect_partial_or_blocked, finalCc, aiTag, flowTag)
+                        tvSimpleReachability.text = badge
+                        tvReachabilityBadge.text = badge
+                        postStatus(badge)
+                        setStatusDot(if (aiOk || flowOk) DotState.ORANGE else DotState.RED)
+                        postOutput("[connect] Geo-verification result: $badge (IP: $finalIp)\n")
+                    }
+                }
+            } finally {
+                postConnectGeoInFlight.set(false)
             }
         }
     }
@@ -888,7 +1022,13 @@ class MainActivity : DastyabActivity() {
                                 )
                             )
                             .setPositiveButton(getString(R.string.main_btn_auto_chain_service, serviceName)) { _, _ ->
-                                autoChainAndOpenGoogleService(serviceName, url, targetService)
+                                autoChainAndOpenGoogleService(
+                                    serviceName = serviceName,
+                                    url = url,
+                                    targetService = targetService,
+                                    excludedIps = setOfNotNull(probe.egress?.ip),
+                                    excludedChainSpecs = setOfNotNull(route.upstreamChainSpec.takeIf { it.isNotBlank() })
+                                )
                             }
                             .setNeutralButton(getString(R.string.main_btn_open_anyway)) { _, _ ->
                                 openBrowserUrl(serviceName, url)
@@ -905,7 +1045,9 @@ class MainActivity : DastyabActivity() {
     private fun autoChainAndOpenGoogleService(
         serviceName: String,
         url: String,
-        targetService: GeoBypassEngine.TargetService
+        targetService: GeoBypassEngine.TargetService,
+        excludedIps: Set<String> = emptySet(),
+        excludedChainSpecs: Set<String> = emptySet()
     ) {
         if (operation.get() != null) return
         setBusy(true)
@@ -919,9 +1061,16 @@ class MainActivity : DastyabActivity() {
                 context = this,
                 targetService = targetService,
                 allowHarvest = true,
-                maxCandidates = if (targetService == GeoBypassEngine.TargetService.GOOGLE_FLOW) 44 else 36
+                maxCandidates = if (targetService == GeoBypassEngine.TargetService.GOOGLE_FLOW) 52 else 44,
+                excludedEgressIps = excludedIps,
+                excludeCurrentRoute = excludedIps.isNotEmpty() || excludedChainSpecs.isNotEmpty(),
+                excludedChainSpecs = excludedChainSpecs,
+                maxRounds = 3
             ) { step ->
                 postOutput("$step\n")
+            }
+            if (result.success && DastyabVpnService.isConnected()) {
+                DastyabVpnService.start(this)
             }
             postUi {
                 setBusy(false)
@@ -931,6 +1080,7 @@ class MainActivity : DastyabActivity() {
                 if (result.success) {
                     val ccTag = result.report.egress?.countryCode ?: "??"
                     tvReachabilityBadge.text = "$serviceName ✓ ($ccTag · ${result.bestChainLabel})"
+                    tvSimpleReachability.text = "$serviceName ✓ ($ccTag · ${result.bestChainLabel})"
                     postStatus(result.summary)
                     setStatusDot(DotState.GREEN)
                     openBrowserUrl(serviceName, url)
@@ -1544,6 +1694,16 @@ class MainActivity : DastyabActivity() {
                 val badge = "$ccMark · $aiMark · $flowMark"
                 tvSimpleReachability.text = badge
                 tvReachabilityBadge.text = badge
+                setStatusDot(
+                    when {
+                        aiProbe.readyForAiStudio && flowProbe.readyForFlow -> DotState.GREEN
+                        aiProbe.readyForAiStudio || flowProbe.readyForFlow -> DotState.ORANGE
+                        else -> DotState.RED
+                    }
+                )
+
+                val blockedFlowIps = setOfNotNull(flowProbe.egress?.ip?.takeIf { !flowProbe.readyForFlow })
+                val blockedFlowChains = setOfNotNull(flowRoute.upstreamChainSpec.takeIf { it.isNotBlank() && !flowProbe.readyForFlow })
 
                 val msg = getString(
                     R.string.lantern_dialog_dual_body,
@@ -1571,9 +1731,11 @@ class MainActivity : DastyabActivity() {
                         }
                         .setNeutralButton(getString(R.string.main_btn_auto_chain_service, getString(R.string.service_name_flow))) { _, _ ->
                             autoChainAndOpenGoogleService(
-                                getString(R.string.service_name_flow),
-                                CommandCompat.FLOW_URL,
-                                GeoBypassEngine.TargetService.GOOGLE_FLOW
+                                serviceName = getString(R.string.service_name_flow),
+                                url = CommandCompat.FLOW_URL,
+                                targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
+                                excludedIps = blockedFlowIps,
+                                excludedChainSpecs = blockedFlowChains
                             )
                         }
                         .setNegativeButton(android.R.string.ok, null)

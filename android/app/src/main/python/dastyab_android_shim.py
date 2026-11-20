@@ -812,10 +812,124 @@ def build_progressive_android_stages(
     return stages
 
 
-def discover_best_android_route(probe_gates_fn, want_country=None, target_service=None, max_candidates=40):
+def _subnet16_of(host):
+    parts = str(host or "").strip().split(".")
+    if len(parts) == 4 and all(p.isdigit() for p in parts):
+        return f"{parts[0]}.{parts[1]}"
+    return str(host or "").strip().lower()
+
+
+def _select_diverse_proxy_hops(hops, limit=48, excluded_hosts=(), excluded_subnets=()):
+    excl_h = set(excluded_hosts or ())
+    excl_s = set(excluded_subnets or ())
+    ordered = []
+    seen = set()
+    used_sub = set()
+    overflow = []
+    for h in hops:
+        host = h[1]
+        if host in excl_h or host in ("127.0.0.1", "localhost", "::1"):
+            continue
+        k = (h[0], host, int(h[2]))
+        if k in seen:
+            continue
+        seen.add(k)
+        sub = _subnet16_of(host)
+        if sub in excl_s or sub in used_sub:
+            overflow.append(h)
+        else:
+            used_sub.add(sub)
+            ordered.append(h)
+            if len(ordered) >= limit:
+                return ordered
+    for h in overflow:
+        ordered.append(h)
+        if len(ordered) >= limit:
+            break
+    return ordered
+
+
+def _qualify_proxy_hops(hops, target_service=None, excluded_ips=(), timeout=2.0, max_workers=10):
+    """Qualify hops via real HTTP/SOCKS5 CONNECT + HTTPS `/cdn-cgi/trace` -> (clean_exits, relays)."""
+    if not hops:
+        return [], []
+    import concurrent.futures
+
+    blocked_ips = set(excluded_ips or ())
+    aistudio_blocked = frozenset({"IR", "CN", "RU", "KP", "BY", "SY", "CU", "SD", "AF", "HK", "MO", "MM", "SS", "XX"})
+    preferred_clean = frozenset({"US", "CA", "GB", "DE", "NL", "CH", "JP", "SG", "FR", "SE", "FI", "AU", "IE", "IT", "ES"})
+    flow_supported = frozenset(
+        "AL DZ AS AO AG AR AM AW AU AT AZ BS BH BD BE BZ BJ BM BO BA BW BR BG BF "
+        "CV KH CM CA KY CL CO CR CI HR CY CZ DK DO EC EG SV EE FJ FI FR GA DE GH "
+        "GI GR GU GT GW HT HN HK HU IS IN ID IQ IE IL IT JM JP JO KZ KE KW KG LA "
+        "LV LB LI LT LU MO MY MV ML MT MU MX MD MC MA MZ NA NP NL NZ NI NE NG MK "
+        "MP NO OM PK PW PA PG PY PE PH PL PT PR QA RO RW SM SA SN RS SC SL SG SK "
+        "SI ZA KR ES LK SE CH TW TJ TZ TH TG TO TT TN TR TM VI UG UA AE GB US UY "
+        "UZ VE VN VG YE ZM ZW".split()
+    )
+
+    def _trace_one(hop):
+        t0 = time.monotonic()
+        try:
+            code, _, body = _http_request_via_proxy(
+                "https://1.1.1.1/cdn-cgi/trace",
+                hop[0],
+                hop[1],
+                hop[2],
+                timeout=timeout,
+            )
+            if code != 200 or not body:
+                return None
+            ip = ""
+            cc = ""
+            for line in body.splitlines():
+                if line.startswith("ip="):
+                    ip = line[3:].strip()
+                elif line.startswith("loc="):
+                    c = line[4:].strip().upper()
+                    if len(c) == 2 and c != "XX":
+                        cc = c
+            if not ip or len(cc) != 2:
+                return None
+            ms = max(1, int((time.monotonic() - t0) * 1000))
+            return (ms, ip, cc, hop)
+        except Exception:
+            return None
+
+    clean_scored = []
+    relay_scored = []
+    workers = min(max(1, len(hops)), max_workers)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        for res in ex.map(_trace_one, hops):
+            if res is None:
+                continue
+            ms, ip, cc, hop = res
+            cc_ok = (cc in flow_supported) if target_service == "flow" else (cc not in aistudio_blocked)
+            if cc_ok and ip not in blocked_ips:
+                pref_rank = 0 if cc in preferred_clean else 1
+                clean_scored.append((pref_rank, ms, hop))
+            else:
+                relay_scored.append((ms, hop))
+    clean_scored.sort(key=lambda item: (item[0], item[1]))
+    relay_scored.sort(key=lambda item: item[0])
+    clean_hops = _select_diverse_proxy_hops([item[2] for item in clean_scored], limit=max(len(clean_scored), 1))
+    relay_hops = _select_diverse_proxy_hops([item[1] for item in relay_scored], limit=max(len(relay_scored), 1))
+    return clean_hops, clean_hops + relay_hops
+
+
+def discover_best_android_route(
+    probe_gates_fn,
+    want_country=None,
+    target_service=None,
+    max_candidates=40,
+    excluded_ips=None,
+    exclude_current_route=False,
+    max_rounds=2,
+):
     """
     Progressively probe Layer 0 (External Lantern VPN) -> Layer 1 -> Layer 2 -> Layer 3 -> Layer 4
-    cascades in diverse hop orders until `target_service` passes without geo-restriction.
+    cascades across /16-diverse qualified exit/relay pools until `target_service` passes without
+    geo-restriction, excluding previously blocked egress IPs across rounds.
     """
     doc = _read_route_doc()
     ext_vpn = bool(doc.get("external_vpn_active"))
@@ -826,14 +940,27 @@ def discover_best_android_route(probe_gates_fn, want_country=None, target_servic
         else ("DastYab VpnService" if dastyab_vpn else "Device Network / System VPN")
     )
 
+    blocked_ips = set(str(x).strip() for x in (excluded_ips or ()) if str(x).strip())
     listening_proxies = detect_android_proxies(target_service=target_service)
     raw_harvested = [h for h in (_normalize_hop(x) for x in doc.get("proxy_hops", [])) if h]
-    alive_harvested = _benchmark_proxy_hops(raw_harvested[:48], timeout=0.8)[:16]
+    diverse_batch_1 = _select_diverse_proxy_hops(raw_harvested, limit=48)
+    alive_fast = _benchmark_proxy_hops(diverse_batch_1, timeout=0.8)[:24]
+    clean_exits, qualified_relays = _qualify_proxy_hops(
+        alive_fast,
+        target_service=target_service,
+        excluded_ips=blocked_ips,
+        timeout=2.0,
+    )
+    alive_harvested = clean_exits + [h for h in qualified_relays if h not in clean_exits]
+    if not alive_harvested:
+        alive_harvested = alive_fast[:16]
 
     stages_initial = build_progressive_android_stages(
         doc=doc,
         listening_proxies=listening_proxies,
         alive_harvested=alive_harvested,
+        preferred_entries=qualified_relays,
+        preferred_exits=clean_exits,
         sys_label=sys_label,
         target_service=target_service,
         max_total_candidates=max(72, max_candidates * 2),
@@ -843,7 +970,7 @@ def discover_best_android_route(probe_gates_fn, want_country=None, target_servic
     probed_keys = set()
     failed_entry_keys = set()
     reachable_bridge_hops = []
-    supported_exit_hops = []
+    supported_exit_hops = list(clean_exits)
     best_clean_found = False
 
     def _hop_key(h):
@@ -865,13 +992,21 @@ def discover_best_android_route(probe_gates_fn, want_country=None, target_servic
             return (scheme, target, int(port), "", "")
         return None
 
-    def _probe_stage(stage_routes, is_stage1=False, skip_dead_entries=False):
+    def _is_clean_non_blocked(g):
+        if not g.get("verdict"):
+            return False
+        eg = str(g.get("egress") or "").strip()
+        return bool(eg) and eg not in blocked_ips
+
+    def _probe_stage(stage_routes, is_stage1=False, skip_dead_entries=False, allow_direct=True):
         nonlocal best_clean_found
         fallback_left = -1
         stage_passed = False
         for route in stage_routes:
             if len(results) >= max_candidates:
                 break
+            if not allow_direct and route[0] == "direct":
+                continue
             first_hop = _first_hop_of(route)
             if skip_dead_entries and first_hop is not None and _hop_key(first_hop) in failed_entry_keys:
                 continue
@@ -885,6 +1020,15 @@ def discover_best_android_route(probe_gates_fn, want_country=None, target_servic
                 g = probe_gates_fn(want_country=want_country)
             finally:
                 set_active_proxy_override(None)
+
+            eg_ip = str(g.get("egress") or "").strip()
+            if eg_ip and not g.get("verdict"):
+                blocked_ips.add(eg_ip)
+            if g.get("verdict") and eg_ip in blocked_ips:
+                g = dict(g)
+                g["verdict"] = False
+                g["reason"] = f"excluded previously blocked IP {eg_ip}"
+
             results.append((route, g))
 
             if is_stage1 and first_hop is not None:
@@ -893,10 +1037,16 @@ def discover_best_android_route(probe_gates_fn, want_country=None, target_servic
                 else:
                     reachable_bridge_hops.append(first_hop)
                     reason_low = str(g.get("reason") or "").lower()
-                    if g.get("country") and "unsupported" not in reason_low and "not on google" not in reason_low and "region-gate" not in reason_low:
+                    if (
+                        g.get("country")
+                        and eg_ip not in blocked_ips
+                        and "unsupported" not in reason_low
+                        and "not on google" not in reason_low
+                        and "region-gate" not in reason_low
+                    ):
                         supported_exit_hops.append(first_hop)
 
-            if g.get("verdict"):
+            if _is_clean_non_blocked(g):
                 stage_passed = True
                 if not g.get("proxy") and not g.get("hosting"):
                     best_clean_found = True
@@ -916,28 +1066,48 @@ def discover_best_android_route(probe_gates_fn, want_country=None, target_servic
     for idx in (0, 1):
         if best_clean_found or len(results) >= max_candidates:
             break
-        if _probe_stage(stages_initial[idx], is_stage1=(idx == 1)):
+        if _probe_stage(stages_initial[idx], is_stage1=(idx == 1), allow_direct=not (exclude_current_route and idx == 0)):
             best_clean_found = True
             break
 
-    # Step 2: Progressively escalate Stage 2 -> Stage 3 -> Stage 4 ONLY if Stages 0-1 did not pass
-    if not best_clean_found and len(results) < max_candidates:
+    # Step 2: Progressively escalate Stage 2 -> Stage 3 -> Stage 4 across rounds if Stages 0-1 did not pass
+    tested_hosts = set(h[1] for h in diverse_batch_1)
+    tested_subs = set(_subnet16_of(h[1]) for h in diverse_batch_1)
+    for round_idx in range(max(1, min(int(max_rounds), 3))):
+        if best_clean_found or len(results) >= max_candidates:
+            break
+        if round_idx > 0:
+            next_batch = _select_diverse_proxy_hops(
+                raw_harvested, limit=48, excluded_hosts=tested_hosts, excluded_subnets=tested_subs
+            )
+            if next_batch:
+                tested_hosts.update(h[1] for h in next_batch)
+                tested_subs.update(_subnet16_of(h[1]) for h in next_batch)
+                alive_next = _benchmark_proxy_hops(next_batch, timeout=0.8)[:24]
+                ce2, qr2 = _qualify_proxy_hops(
+                    alive_next, target_service=target_service, excluded_ips=blocked_ips, timeout=2.0
+                )
+                supported_exit_hops = ce2 + supported_exit_hops
+                for h in qr2 + alive_next:
+                    if h not in alive_harvested:
+                        alive_harvested.append(h)
+
         smart_stages = build_progressive_android_stages(
             doc=doc,
             listening_proxies=listening_proxies,
             alive_harvested=alive_harvested,
-            preferred_entries=reachable_bridge_hops,
+            preferred_entries=reachable_bridge_hops + qualified_relays,
             preferred_exits=supported_exit_hops,
             sys_label=sys_label,
             target_service=target_service,
             max_total_candidates=max(72, max_candidates * 2),
         )
-        for s_idx in (2, 3, 4):
+        for s_idx in (1, 2, 3, 4):
             if best_clean_found or len(results) >= max_candidates:
                 break
             if not smart_stages[s_idx]:
                 continue
-            if _probe_stage(smart_stages[s_idx], is_stage1=False, skip_dead_entries=True):
+            if _probe_stage(smart_stages[s_idx], is_stage1=(s_idx == 1), skip_dead_entries=True):
                 best_clean_found = True
                 break
 

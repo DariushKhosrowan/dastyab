@@ -249,13 +249,17 @@ class TunnelSettingsActivity : DastyabActivity() {
         btn: Button
     ) {
         btn.isEnabled = false
+        val currentChain = TunnelConfig.formatProxyChain(TunnelConfig.parseProxyChain(targetEdit.text.toString()))
         Toast.makeText(this, getString(R.string.tunnel_autochain_scanning, target.displayName), Toast.LENGTH_SHORT).show()
         kotlin.concurrent.thread(isDaemon = true, name = "dastyab-settings-chain") {
             val result = GeoBypassEngine.discoverAndChainBestRoute(
                 context = this,
                 targetService = target,
                 allowHarvest = true,
-                maxCandidates = if (target == GeoBypassEngine.TargetService.GOOGLE_FLOW) 44 else 36
+                maxCandidates = if (target == GeoBypassEngine.TargetService.GOOGLE_FLOW) 52 else 44,
+                excludeCurrentRoute = true,
+                excludedChainSpecs = setOfNotNull(currentChain.takeIf { it.isNotBlank() }),
+                maxRounds = 3
             )
             runOnUiThread {
                 if (!UiSafety.isActivityAlive(this)) return@runOnUiThread

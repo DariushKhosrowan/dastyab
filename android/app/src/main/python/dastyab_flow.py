@@ -46,6 +46,9 @@ ACCOUNTS_URL = "https://accounts.google.com/"
 GATE_MARKERS = (
     "unsupported-country-title",
     "not available in your country yet",
+    "not available in your country",
+    "isn't available in your country",
+    "unsupported_country",
     "flow is not available in your country",
 )
 UNAVAILABLE_MARKERS = (
@@ -534,18 +537,23 @@ def _fetch_geo_via_tunnel():
             continue
         if j.get("status") == "fail" or j.get("success") is False:
             continue
-        cc = (
+        json_cc = (
             j.get("countryCode")
             or j.get("country_code")
             or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) == 2 else "")
             or trace_cc
         ).strip().upper()
-        cname = (
-            j.get("country_name")
-            or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) > 2 else "")
-            or (j.get("country") if len(str(j.get("country") or "")) > 2 else "")
-            or cc
-        )
+        if len(trace_cc) == 2 and trace_cc != json_cc and trace_cc not in SUPPORTED_COUNTRIES and json_cc in SUPPORTED_COUNTRIES:
+            cc = trace_cc
+            cname = trace_cc
+        else:
+            cc = json_cc
+            cname = (
+                j.get("country_name")
+                or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) > 2 else "")
+                or (j.get("country") if len(str(j.get("country") or "")) > 2 else "")
+                or cc
+            )
         sec = j.get("security") if isinstance(j.get("security"), dict) else {}
         org = str(j.get("org") or "").lower()
         org_hosting = any(
@@ -557,8 +565,8 @@ def _fetch_geo_via_tunnel():
                 "status": "success",
                 "countryCode": cc,
                 "country": cname,
-                "proxy": bool(j.get("proxy") or sec.get("proxy")),
-                "hosting": bool(j.get("hosting") or sec.get("hosting") or org_hosting),
+                "proxy": bool(j.get("proxy") or sec.get("proxy") or sec.get("vpn") or sec.get("tor")),
+                "hosting": bool(j.get("hosting") or sec.get("hosting") or sec.get("vpn") or sec.get("tor") or org_hosting),
             }
 
     if trace_ip and len(trace_cc) == 2:

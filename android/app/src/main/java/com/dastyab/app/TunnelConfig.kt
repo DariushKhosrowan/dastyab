@@ -27,6 +27,7 @@ object TunnelConfig {
     private const val KEY_DNS_TUNNEL_DOMAIN = "dns_tunnel_domain"
     private const val KEY_BOOTSTRAP_CONFIG = "bootstrap_config"
     private const val KEY_HARVESTED_CONFIGS = "harvested_configs"
+    private const val KEY_HARVESTED_PROXY_HOPS = "harvested_proxy_hops"
     private const val KEY_AUTO_CONNECT_BOOT = "auto_connect_on_boot"
     private const val KEY_WATCHDOG_ENABLED = "watchdog_enabled"
     private const val KEY_GOOGLE_ACCESS_MODE = "google_access_mode"
@@ -402,6 +403,42 @@ object TunnelConfig {
         val raw = prefs(context).getString(KEY_HARVESTED_CONFIGS, "") ?: ""
         if (raw.isBlank()) return emptyList()
         return raw.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+    }
+
+    fun saveHarvestedProxyHops(context: Context, hops: List<ProxyHop>) {
+        val cleaned = hops
+            .filter { it.scheme != ProxyScheme.DIRECT && it.port in 1..MAX_PORT && it.host.isNotBlank() }
+            .distinctBy { "${it.scheme.name}:${it.host}:${it.port}" }
+            .take(400)
+            .map { it.toUriString() }
+        prefs(context).edit()
+            .putString(KEY_HARVESTED_PROXY_HOPS, cleaned.joinToString("\n"))
+            .apply()
+    }
+
+    fun loadHarvestedProxyHops(context: Context): List<ProxyHop> {
+        val raw = prefs(context).getString(KEY_HARVESTED_PROXY_HOPS, "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return raw.lineSequence()
+            .mapNotNull { parseProxyHop(it) }
+            .distinctBy { "${it.scheme.name}:${it.host}:${it.port}" }
+            .toList()
+    }
+
+    fun loadChainableProxyPool(context: Context): List<ProxyHop> {
+        val merged = LinkedHashMap<String, ProxyHop>()
+        for (hop in loadHarvestedProxyHops(context)) {
+            merged.putIfAbsent("${hop.scheme.name}:${hop.host}:${hop.port}", hop)
+        }
+        for (hop in UniversalConfig.extractChainableProxyHops(loadHarvestedConfigs(context))) {
+            merged.putIfAbsent("${hop.scheme.name}:${hop.host}:${hop.port}", hop)
+        }
+        return merged.values.toList()
+    }
+
+    fun isLoopbackHost(host: String): Boolean {
+        val norm = host.trim().removePrefix("[").removeSuffix("]").lowercase()
+        return norm == "127.0.0.1" || norm == "localhost" || norm == "::1"
     }
 
     fun sanitizeDohUrl(url: String?): String {

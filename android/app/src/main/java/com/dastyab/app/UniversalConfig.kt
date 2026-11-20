@@ -608,6 +608,114 @@ object UniversalConfig {
         return out.values.toList()
     }
 
+    private val PROXY_SCHEME_LINE_REGEX = Regex(
+        """(?<![A-Za-z0-9+.-])(?:socks5|socks|http)://(?:[^\s"'<>`\\]+@)?(?:\[[0-9a-fA-F:]+\]|[A-Za-z0-9.-]+):(\d{1,5})(?=[\s"'<>`,;|#\r\n]|$)""",
+        RegexOption.IGNORE_CASE
+    )
+    private val BARE_IPV4_PORT_REGEX = Regex(
+        """(?<![A-Za-z0-9_./:-])(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})(?![.\d/])"""
+    )
+
+    /**
+     * Extracts chainable SOCKS5 / HTTP proxy hops from raw proxy-list feeds, HTML pages,
+     * `tg://socks` links, explicit `socks5://` / `http://ip:port` URIs, or bare `IPv4:port` lines,
+     * returning a `/16`-subnet-diverse list capped at [maxHops].
+     */
+    fun extractProxyListHops(
+        rawPayload: String,
+        defaultScheme: TunnelConfig.ProxyScheme = TunnelConfig.ProxyScheme.SOCKS5,
+        maxHops: Int = 250
+    ): List<TunnelConfig.ProxyHop> {
+        if (rawPayload.isBlank()) return emptyList()
+        val unescaped = unescapeHtml(rawPayload)
+        val texts = mutableListOf(unescaped)
+        tryDecodeBase64(unescaped)?.let { decoded ->
+            if (decoded.contains(':') || decoded.contains("://")) {
+                texts.add(decoded)
+            }
+        }
+
+        val out = LinkedHashMap<String, TunnelConfig.ProxyHop>()
+        fun addHop(hop: TunnelConfig.ProxyHop?) {
+            if (hop == null || hop.scheme == TunnelConfig.ProxyScheme.DIRECT) return
+            if (hop.port !in 1..65535 || hop.host.isBlank()) return
+            if (hop.host.startsWith("0.") || TunnelConfig.isLoopbackHost(hop.host)) return
+            out.putIfAbsent("${hop.scheme.name}:${hop.host}:${hop.port}", hop)
+        }
+
+        for (text in texts) {
+            TG_SOCKS_URI_REGEX.findAll(text).forEach { m ->
+                addHop(TunnelConfig.parseProxyHop(cleanUri(m.value)))
+            }
+            PROXY_SCHEME_LINE_REGEX.findAll(text).forEach { m ->
+                addHop(TunnelConfig.parseProxyHop(cleanUri(m.value)))
+            }
+            if (defaultScheme != TunnelConfig.ProxyScheme.DIRECT) {
+                BARE_IPV4_PORT_REGEX.findAll(text).forEach { m ->
+                    val ip = m.groupValues[1]
+                    val port = m.groupValues[2].toIntOrNull()
+                    if (port != null && port in 1..65535 && TunnelConfig.isValidIpv4(ip)) {
+                        addHop(TunnelConfig.ProxyHop(defaultScheme, ip, port))
+                    }
+                }
+            }
+        }
+        return selectDiverseProxyHops(out.values.toList(), limit = maxHops)
+    }
+
+    /** Returns `/16` prefix (`A.B`) for IPv4 hosts or normalized domain root so probes span different providers. */
+    fun subnet16Of(host: String): String {
+        val clean = host.trim().lowercase()
+        if (TunnelConfig.isValidIpv4(clean)) {
+            val parts = clean.split('.')
+            if (parts.size >= 2) return "${parts[0]}.${parts[1]}"
+        }
+        return clean
+    }
+
+    /**
+     * Picks up to [limit] hops using round-robin across `/16` subnets so a single blocked
+     * datacenter range never monopolizes all probe slots.
+     */
+    fun selectDiverseProxyHops(
+        hops: List<TunnelConfig.ProxyHop>,
+        limit: Int,
+        excludedHosts: Set<String> = emptySet(),
+        excludedSubnets16: Set<String> = emptySet()
+    ): List<TunnelConfig.ProxyHop> {
+        if (hops.isEmpty() || limit <= 0) return emptyList()
+        val deduped = hops
+            .filter { it.scheme != TunnelConfig.ProxyScheme.DIRECT && it.host.isNotBlank() && it.port in 1..65535 }
+            .filterNot { excludedHosts.contains(it.host) }
+            .distinctBy { "${it.scheme.name}:${it.host}:${it.port}" }
+        if (deduped.isEmpty()) return emptyList()
+
+        // Prefer hops outside excluded /16 subnets first, then fallback to excluded subnets if needed
+        val freshSubnets = deduped.filterNot { excludedSubnets16.contains(subnet16Of(it.host)) }
+        val recycledSubnets = deduped.filter { excludedSubnets16.contains(subnet16Of(it.host)) }
+
+        val result = ArrayList<TunnelConfig.ProxyHop>(limit.coerceAtMost(deduped.size))
+        for (bucketSource in listOf(freshSubnets, recycledSubnets)) {
+            if (bucketSource.isEmpty() || result.size >= limit) continue
+            val buckets = LinkedHashMap<String, ArrayDeque<TunnelConfig.ProxyHop>>()
+            for (h in bucketSource) {
+                buckets.getOrPut(subnet16Of(h.host)) { ArrayDeque() }.addLast(h)
+            }
+            var madeProgress = true
+            while (result.size < limit && madeProgress) {
+                madeProgress = false
+                for (q in buckets.values) {
+                    if (q.isNotEmpty()) {
+                        result.add(q.removeFirst())
+                        madeProgress = true
+                        if (result.size >= limit) break
+                    }
+                }
+            }
+        }
+        return result
+    }
+
     private fun parseAuthorityHostPort(uriStr: String): Pair<String, Int>? {
         val afterScheme = uriStr.substringAfter("://")
         val authorityAndPath = afterScheme.substringBefore('#').substringBefore('?').substringBefore('/')
