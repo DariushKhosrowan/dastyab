@@ -176,6 +176,30 @@ class InAppBrowserActivity : DastyabActivity() {
                 lastDomAlertKey = ""
                 webView.reload()
             }
+            findViewById<Button>(R.id.btnBrowserRotate).setOnClickListener {
+                BrutalAntiGeoblockEngine.enforceStrictBypass(this)
+                Toast.makeText(this, "Rotated VPN Layer & applied Brutal headers", Toast.LENGTH_SHORT).show()
+                webView.reload()
+            }
+            findViewById<Button>(R.id.btnBrowserToggleDns).setOnClickListener {
+                val settings = TunnelConfig.load(this)
+                val newMode = if (settings.mode == TunnelConfig.Mode.DNS_BLACKOUT) TunnelConfig.Mode.SMART else TunnelConfig.Mode.DNS_BLACKOUT
+                TunnelConfig.saveMode(this, newMode)
+                Toast.makeText(this, "Switched mode -> ${newMode.name}", Toast.LENGTH_SHORT).show()
+                applyProxyAndLoad(currentOrInitialUrl(), bypassCache = true)
+            }
+            findViewById<Button>(R.id.btnBrowserDesktop).setOnClickListener {
+                val settings = webView.settings
+                val ua = settings.userAgentString ?: ""
+                if (ua.contains("Windows NT")) {
+                    settings.userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
+                    Toast.makeText(this, "Switched to Mobile User-Agent", Toast.LENGTH_SHORT).show()
+                } else {
+                    settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                    Toast.makeText(this, "Switched to Desktop User-Agent", Toast.LENGTH_SHORT).show()
+                }
+                webView.reload()
+            }
             findViewById<Button>(R.id.btnBrowserProxyMode).setOnClickListener {
                 GoogleAccessSheet.show(this, tvTitle.text.toString(), currentOrInitialUrl()) {
                     applyProxyAndLoad(currentOrInitialUrl())

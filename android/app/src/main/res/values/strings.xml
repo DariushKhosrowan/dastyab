@@ -287,6 +287,9 @@
     <string name="widget_label">DastYab VPN (1-Tap)</string>
     <string name="browser_btn_autofix">Auto-Fix</string>
     <string name="browser_btn_chrome">Chrome</string>
+    <string name="browser_btn_rotate">Rotate Node</string>
+    <string name="browser_btn_dns">DNS Blackout</string>
+    <string name="browser_btn_desktop">Desktop UA</string>
     <string name="browser_btn_back">← Back</string>
     <string name="browser_btn_forward">Forward →</string>
     <string name="browser_btn_reload">↻ Reload</string>

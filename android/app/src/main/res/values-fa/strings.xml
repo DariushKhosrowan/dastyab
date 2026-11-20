@@ -272,6 +272,9 @@
     <string name="widget_label">ویجت VPN دستیاب (تک‌کلیک)</string>
     <string name="browser_btn_autofix">رفع خودکار</string>
     <string name="browser_btn_chrome">کروم</string>
+    <string name="browser_btn_rotate">چرخش نود</string>
+    <string name="browser_btn_dns">خاموشی DNS</string>
+    <string name="browser_btn_desktop">حالت دسکتاپ</string>
     <string name="browser_btn_back">→ بازگشت</string>
     <string name="browser_btn_forward">جلو ←</string>
     <string name="browser_btn_reload">↻ بارگذاری مجدد</string>
