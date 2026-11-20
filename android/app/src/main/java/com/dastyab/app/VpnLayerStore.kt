@@ -34,7 +34,8 @@ object VpnLayerStore {
         val upstreamProxyScheme: TunnelConfig.ProxyScheme = TunnelConfig.ProxyScheme.DIRECT,
         val upstreamProxyHost: String = TunnelConfig.DEFAULT_PROXY_HOST,
         val upstreamProxyPort: Int = TunnelConfig.DEFAULT_UPSTREAM_PROXY_PORT,
-        val roleLabel: String = ""
+        val roleLabel: String = "",
+        val upstreamProxyChain: String = ""
     ) {
         fun subtitle(): String {
             val ep = TunnelConfig.parseVlessUri(configUri)?.summary()
@@ -42,9 +43,14 @@ object VpnLayerStore {
                 ?: if (mode == TunnelConfig.Mode.DNS_BLACKOUT) dohUrl.removePrefix("https://")
                 else if (configUri.isNotBlank()) "${UniversalConfig.protocolOf(configUri).uppercase()} endpoint"
                 else "Cloudflare Edge Smart DNS"
-            val chainTag = if (upstreamProxyScheme != TunnelConfig.ProxyScheme.DIRECT) {
-                " · Chain ${upstreamProxyScheme.name} $upstreamProxyHost:$upstreamProxyPort"
-            } else ""
+            val chainHops = TunnelConfig.parseProxyChain(upstreamProxyChain)
+            val chainTag = when {
+                chainHops.size > 1 -> " · ${chainHops.size}-Hop Chain"
+                chainHops.size == 1 -> " · Chain ${chainHops[0].displayLabel()}"
+                upstreamProxyScheme != TunnelConfig.ProxyScheme.DIRECT ->
+                    " · Chain ${upstreamProxyScheme.name} $upstreamProxyHost:$upstreamProxyPort"
+                else -> ""
+            }
             return "${mode.label} · $ep · DNS $dnsPrimary$chainTag"
         }
 
@@ -156,7 +162,12 @@ object VpnLayerStore {
     fun activateLayer(context: Context, layer: VpnLayer, restartIfConnected: Boolean = true) {
         val existing = TunnelConfig.load(context)
         val isVless = layer.configUri.startsWith("vless://", ignoreCase = true)
-        val chainActive = layer.upstreamProxyScheme != TunnelConfig.ProxyScheme.DIRECT
+        val layerChainHops = TunnelConfig.parseProxyChain(layer.upstreamProxyChain)
+        val firstChainHop = layerChainHops.firstOrNull()
+        val effectiveScheme = firstChainHop?.scheme ?: layer.upstreamProxyScheme
+        val effectiveHost = firstChainHop?.host ?: layer.upstreamProxyHost
+        val effectivePort = firstChainHop?.port ?: layer.upstreamProxyPort
+        val chainActive = layerChainHops.isNotEmpty() || effectiveScheme != TunnelConfig.ProxyScheme.DIRECT
         val updated = existing.copy(
             mode = layer.mode,
             vlessUri = if (isVless) layer.configUri else existing.vlessUri,
@@ -167,9 +178,10 @@ object VpnLayerStore {
             mtu = TunnelConfig.clampMtu(layer.mtu),
             bypassLan = layer.bypassLan,
             autoVpnForGoogle = layer.autoVpnForGoogle,
-            upstreamProxyScheme = layer.upstreamProxyScheme,
-            upstreamProxyHost = TunnelConfig.sanitizeProxyHost(layer.upstreamProxyHost),
-            upstreamProxyPort = TunnelConfig.clampPort(layer.upstreamProxyPort, TunnelConfig.DEFAULT_UPSTREAM_PROXY_PORT, min = 1),
+            upstreamProxyScheme = effectiveScheme,
+            upstreamProxyHost = TunnelConfig.sanitizeProxyHost(effectiveHost),
+            upstreamProxyPort = TunnelConfig.clampPort(effectivePort, TunnelConfig.DEFAULT_UPSTREAM_PROXY_PORT, min = 1),
+            upstreamProxyChain = layer.upstreamProxyChain.trim(),
             googleAccessMode = if (chainActive) TunnelConfig.GoogleAccessMode.VPN_CHAIN_PROXY else existing.googleAccessMode
         )
         TunnelConfig.save(context, updated)
@@ -177,7 +189,7 @@ object VpnLayerStore {
             .edit()
             .putString(KEY_ACTIVE_LAYER_ID, layer.id)
             .apply()
-        if (chainActive && updated.upstreamProxyScheme == TunnelConfig.ProxyScheme.SOCKS5) {
+        if (layerChainHops.size > 1 || (chainActive && updated.upstreamProxyScheme == TunnelConfig.ProxyScheme.SOCKS5)) {
             LocalProxyService.startSafely(context)
         }
         if (restartIfConnected && DastyabVpnService.isConnected()) {
@@ -396,6 +408,7 @@ object VpnLayerStore {
                 put("upstreamProxyHost", l.upstreamProxyHost)
                 put("upstreamProxyPort", l.upstreamProxyPort)
                 put("roleLabel", l.roleLabel)
+                put("upstreamProxyChain", l.upstreamProxyChain)
             })
         }
         return arr.toString()
@@ -426,7 +439,8 @@ object VpnLayerStore {
                         upstreamProxyScheme = TunnelConfig.ProxyScheme.fromName(o.optString("upstreamProxyScheme", TunnelConfig.ProxyScheme.DIRECT.name)),
                         upstreamProxyHost = TunnelConfig.sanitizeProxyHost(o.optString("upstreamProxyHost", TunnelConfig.DEFAULT_PROXY_HOST)),
                         upstreamProxyPort = TunnelConfig.clampPort(o.optInt("upstreamProxyPort", TunnelConfig.DEFAULT_UPSTREAM_PROXY_PORT), TunnelConfig.DEFAULT_UPSTREAM_PROXY_PORT, min = 1),
-                        roleLabel = o.optString("roleLabel", "")
+                        roleLabel = o.optString("roleLabel", ""),
+                        upstreamProxyChain = o.optString("upstreamProxyChain", "")
                     )
                 )
             }

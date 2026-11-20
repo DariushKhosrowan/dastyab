@@ -35,6 +35,10 @@ class TunnelSettingsActivity : DastyabActivity() {
     private lateinit var etLocalBridgePort: EditText
     private lateinit var cbAutoStartBridge: CheckBox
     private lateinit var btnToggleLocalBridge: Button
+    private lateinit var etAiStudioChain: EditText
+    private lateinit var etFlowChain: EditText
+    private lateinit var btnAutoChainAiStudio: Button
+    private lateinit var btnAutoChainFlow: Button
     private lateinit var etVlessUri: EditText
     private lateinit var tvVlessStatus: TextView
     private lateinit var etDnsPrimary: EditText
@@ -65,6 +69,10 @@ class TunnelSettingsActivity : DastyabActivity() {
         etLocalBridgePort = findViewById(R.id.etLocalBridgePort)
         cbAutoStartBridge = findViewById(R.id.cbAutoStartBridge)
         btnToggleLocalBridge = findViewById(R.id.btnToggleLocalBridge)
+        etAiStudioChain = findViewById(R.id.etAiStudioChain)
+        etFlowChain = findViewById(R.id.etFlowChain)
+        btnAutoChainAiStudio = findViewById(R.id.btnAutoChainAiStudio)
+        btnAutoChainFlow = findViewById(R.id.btnAutoChainFlow)
         etVlessUri = findViewById(R.id.etVlessUri)
         tvVlessStatus = findViewById(R.id.tvVlessStatus)
         etDnsPrimary = findViewById(R.id.etDnsPrimary)
@@ -175,6 +183,15 @@ class TunnelSettingsActivity : DastyabActivity() {
             Toast.makeText(this, getString(R.string.tunnel_copied_prefix, uri), Toast.LENGTH_LONG).show()
         }
 
+        etAiStudioChain.setText(settings.aiStudioProxyChain)
+        etFlowChain.setText(settings.flowProxyChain)
+        btnAutoChainAiStudio.setOnClickListener {
+            runAutoChainButton(GeoBypassEngine.TargetService.AI_STUDIO, etAiStudioChain, btnAutoChainAiStudio)
+        }
+        btnAutoChainFlow.setOnClickListener {
+            runAutoChainButton(GeoBypassEngine.TargetService.GOOGLE_FLOW, etFlowChain, btnAutoChainFlow)
+        }
+
         etVlessUri.setText(settings.vlessUri)
         etDnsPrimary.setText(settings.dnsPrimary)
         etDnsSecondary.setText(settings.dnsSecondary)
@@ -224,6 +241,31 @@ class TunnelSettingsActivity : DastyabActivity() {
         etUpstreamHost.setText(host)
         etUpstreamPort.setText(port.toString())
         Toast.makeText(this, getString(R.string.tunnel_preset_loaded, scheme.name, host, port), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun runAutoChainButton(
+        target: GeoBypassEngine.TargetService,
+        targetEdit: EditText,
+        btn: Button
+    ) {
+        btn.isEnabled = false
+        Toast.makeText(this, getString(R.string.tunnel_autochain_scanning, target.displayName), Toast.LENGTH_SHORT).show()
+        kotlin.concurrent.thread(isDaemon = true, name = "dastyab-settings-chain") {
+            val result = GeoBypassEngine.discoverAndChainBestRoute(
+                context = this,
+                targetService = target,
+                allowHarvest = true,
+                maxCandidates = 18
+            )
+            runOnUiThread {
+                if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
+                btn.isEnabled = true
+                val formatted = TunnelConfig.formatProxyChain(result.bestHops)
+                targetEdit.setText(formatted)
+                refreshBridgeToggleButton()
+                Toast.makeText(this, result.summary, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun refreshBridgeToggleButton() {
@@ -303,9 +345,24 @@ class TunnelSettingsActivity : DastyabActivity() {
             return
         }
 
+        val previous = TunnelConfig.load(this)
         val mtuVal = etMtu.text.toString().trim().toIntOrNull() ?: TunnelConfig.DEFAULT_MTU
         val upPort = etUpstreamPort.text.toString().trim().toIntOrNull() ?: TunnelConfig.DEFAULT_UPSTREAM_PROXY_PORT
         val bridgePort = etLocalBridgePort.text.toString().trim().toIntOrNull() ?: TunnelConfig.DEFAULT_LOCAL_BRIDGE_PORT
+        val cleanBridgePort = TunnelConfig.clampPort(bridgePort, TunnelConfig.DEFAULT_LOCAL_BRIDGE_PORT, min = TunnelConfig.MIN_LOCAL_PORT)
+
+        val chosenScheme = proxySchemes[spinnerUpstreamScheme.selectedItemPosition.coerceIn(proxySchemes.indices)]
+        val chosenHost = TunnelConfig.sanitizeProxyHost(etUpstreamHost.text.toString())
+        val chosenUpPort = TunnelConfig.clampPort(upPort, TunnelConfig.DEFAULT_UPSTREAM_PROXY_PORT, min = 1)
+        val aiChain = TunnelConfig.formatProxyChain(TunnelConfig.parseProxyChain(etAiStudioChain.text.toString(), cleanBridgePort))
+        val flowChain = TunnelConfig.formatProxyChain(TunnelConfig.parseProxyChain(etFlowChain.text.toString(), cleanBridgePort))
+        val derivedGlobalChain = when {
+            chosenScheme == TunnelConfig.ProxyScheme.DIRECT -> ""
+            previous.upstreamProxyChain.isNotBlank() &&
+                TunnelConfig.parseProxyChain(previous.upstreamProxyChain, cleanBridgePort).size > 1 ->
+                previous.upstreamProxyChain
+            else -> TunnelConfig.ProxyHop(chosenScheme, chosenHost, chosenUpPort).toUriString()
+        }
 
         val settings = TunnelConfig.Settings(
             mode = modes[spinnerMode.selectedItemPosition.coerceIn(modes.indices)],
@@ -319,11 +376,14 @@ class TunnelSettingsActivity : DastyabActivity() {
             autoConnectOnBoot = cbAutoConnectBoot.isChecked,
             watchdogEnabled = cbWatchdogEnabled.isChecked,
             googleAccessMode = accessModes[spinnerGoogleAccessMode.selectedItemPosition.coerceIn(accessModes.indices)],
-            upstreamProxyScheme = proxySchemes[spinnerUpstreamScheme.selectedItemPosition.coerceIn(proxySchemes.indices)],
-            upstreamProxyHost = TunnelConfig.sanitizeProxyHost(etUpstreamHost.text.toString()),
-            upstreamProxyPort = TunnelConfig.clampPort(upPort, TunnelConfig.DEFAULT_UPSTREAM_PROXY_PORT, min = 1),
-            localBridgePort = TunnelConfig.clampPort(bridgePort, TunnelConfig.DEFAULT_LOCAL_BRIDGE_PORT, min = TunnelConfig.MIN_LOCAL_PORT),
-            autoStartLocalBridge = cbAutoStartBridge.isChecked
+            upstreamProxyScheme = chosenScheme,
+            upstreamProxyHost = chosenHost,
+            upstreamProxyPort = chosenUpPort,
+            localBridgePort = cleanBridgePort,
+            autoStartLocalBridge = cbAutoStartBridge.isChecked,
+            upstreamProxyChain = derivedGlobalChain,
+            aiStudioProxyChain = aiChain,
+            flowProxyChain = flowChain
         )
         TunnelConfig.save(this, settings)
         updateVlessPreview(vless)

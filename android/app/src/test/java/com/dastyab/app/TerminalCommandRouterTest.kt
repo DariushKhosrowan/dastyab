@@ -56,7 +56,13 @@ class TerminalCommandRouterTest {
             bridgePort = 10850,
             upstreamScheme = TunnelConfig.ProxyScheme.SOCKS5,
             upstreamHost = "127.0.0.1",
-            upstreamPort = 10808
+            upstreamPort = 10808,
+            upstreamChain = "http://127.0.0.1:10809",
+            aiStudioChain = "socks5://127.0.0.1:10808",
+            flowChain = "socks5://127.0.0.1:10808 -> http://198.51.100.8:8080",
+            harvestedProxyHops = listOf(
+                TunnelConfig.ProxyHop(TunnelConfig.ProxyScheme.SOCKS5, "203.0.113.5", 1080, "u", "p")
+            )
         )
         assertTrue(json.contains("\"external_vpn_active\":false"))
         assertTrue(json.contains("\"dastyab_vpn_active\":true"))
@@ -64,6 +70,11 @@ class TerminalCommandRouterTest {
         assertTrue(json.contains("\"upstream_scheme\":\"socks5\""))
         assertTrue(json.contains("\"upstream_host\":\"127.0.0.1\""))
         assertTrue(json.contains("\"upstream_port\":10808"))
+        assertTrue(json.contains("\"upstream_chain\":[{\"scheme\":\"http\",\"host\":\"127.0.0.1\",\"port\":10809"))
+        assertTrue(json.contains("\"aistudio_chain\":[{\"scheme\":\"socks5\",\"host\":\"127.0.0.1\",\"port\":10808"))
+        assertTrue(json.contains("\"flow_chain\":[{\"scheme\":\"socks5\",\"host\":\"127.0.0.1\",\"port\":10808"))
+        assertTrue(json.contains("\"host\":\"198.51.100.8\",\"port\":8080"))
+        assertTrue(json.contains("\"proxy_hops\":[{\"scheme\":\"socks5\",\"host\":\"203.0.113.5\",\"port\":1080,\"username\":\"u\",\"password\":\"p\"}]"))
     }
 
     @Test

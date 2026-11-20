@@ -78,6 +78,11 @@ object UniversalConfig {
         RegexOption.IGNORE_CASE
     )
 
+    private val TG_SOCKS_URI_REGEX = Regex(
+        """(?:tg://socks\?[^\s"'<>`\\]+|https?://(?:t\.me|telegram\.me)/socks\?[^\s"'<>`\\]+)""",
+        RegexOption.IGNORE_CASE
+    )
+
     private val B64_TOKEN_REGEX = Regex("""[A-Za-z0-9+/_=-]{32,}""")
 
     /** Extracts every supported config URI (including WireGuard INI blocks, MTProto links, and nested Base64 blobs). */
@@ -122,6 +127,10 @@ object UniversalConfig {
             if (isPlausible(cleaned)) out.add(cleaned)
         }
         MTPROTO_URI_REGEX.findAll(text).forEach { m ->
+            val cleaned = cleanUri(m.value)
+            if (parse(cleaned) != null) out.add(cleaned)
+        }
+        TG_SOCKS_URI_REGEX.findAll(text).forEach { m ->
             val cleaned = cleanUri(m.value)
             if (parse(cleaned) != null) out.add(cleaned)
         }
@@ -365,6 +374,11 @@ object UniversalConfig {
         ) {
             return "mtproto"
         }
+        if (trimmed.startsWith("tg://socks", ignoreCase = true) ||
+            Regex("^https?://(?:t\\.me|telegram\\.me)/socks\\?", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
+        ) {
+            return "socks5"
+        }
         val idx = trimmed.indexOf("://")
         return if (idx > 0) trimmed.substring(0, idx).lowercase() else "unknown"
     }
@@ -426,6 +440,15 @@ object UniversalConfig {
             val port = params["port"]?.trim()?.toIntOrNull() ?: 443
             if (server.isEmpty() || port !in 1..65535) return null
             return ParsedEndpoint(trimmed, "mtproto", Family.TELEGRAM_MTPROTO, server, port, "Telegram MTProto")
+        }
+
+        // Telegram SOCKS5 share links (tg://socks?server=...&port=...&user=...&pass=...)
+        if (proto == "socks5" && (trimmed.startsWith("tg://socks", ignoreCase = true) ||
+                trimmed.contains("t.me/socks?", ignoreCase = true) ||
+                trimmed.contains("telegram.me/socks?", ignoreCase = true))
+        ) {
+            val hop = TunnelConfig.parseProxyHop(trimmed) ?: return null
+            return ParsedEndpoint(trimmed, "socks5", Family.PROXY_TUNNEL, hop.host, hop.port, "Telegram SOCKS5")
         }
 
         // VMess Base64(JSON)
@@ -574,6 +597,21 @@ object UniversalConfig {
             }
         }
         return result.sortedWith(compareBy<String> { priorityRank(it) }.thenBy { it.length })
+    }
+
+    /** Extracts chainable SOCKS5 / HTTP proxy hops from harvested URIs for multi-layer stacking. */
+    fun extractChainableProxyHops(configs: Collection<String>): List<TunnelConfig.ProxyHop> {
+        val out = LinkedHashMap<String, TunnelConfig.ProxyHop>()
+        for (raw in configs) {
+            val proto = protocolOf(raw)
+            if (proto in setOf("socks5", "socks", "http")) {
+                val hop = TunnelConfig.parseProxyHop(raw) ?: continue
+                if (hop.scheme != TunnelConfig.ProxyScheme.DIRECT) {
+                    out.putIfAbsent("${hop.scheme.name}:${hop.host}:${hop.port}", hop)
+                }
+            }
+        }
+        return out.values.toList()
     }
 
     private fun parseAuthorityHostPort(uriStr: String): Pair<String, Int>? {

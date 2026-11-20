@@ -45,12 +45,41 @@ class LocalProxyServer(
             override fun describe(): String = "Direct / Active System VPN"
         }
 
-        data class Http(val host: String, val port: Int) : Upstream() {
+        data class Http(
+            val host: String,
+            val port: Int,
+            val username: String = "",
+            val password: String = ""
+        ) : Upstream() {
             override fun describe(): String = "HTTP $host:$port"
         }
 
-        data class Socks5(val host: String, val port: Int) : Upstream() {
+        data class Socks5(
+            val host: String,
+            val port: Int,
+            val username: String = "",
+            val password: String = ""
+        ) : Upstream() {
             override fun describe(): String = "SOCKS5 $host:$port"
+        }
+
+        data class Chain(val hops: List<Upstream>) : Upstream() {
+            fun flattenedHops(): List<Upstream> = hops.flatMap {
+                when (it) {
+                    is Direct -> emptyList()
+                    is Chain -> it.flattenedHops()
+                    else -> listOf(it)
+                }
+            }
+
+            override fun describe(): String {
+                val flat = flattenedHops()
+                return if (flat.isEmpty()) {
+                    Direct.describe()
+                } else {
+                    "${flat.size}-Hop Chain (${flat.joinToString(" → ") { it.describe() }})"
+                }
+            }
         }
 
         abstract fun describe(): String
@@ -317,93 +346,195 @@ class LocalProxyServer(
 
     @Throws(IOException::class)
     private fun openUpstreamSocket(targetHost: String, targetPort: Int): Socket {
-        return when (upstream) {
-            is Upstream.Direct -> {
-                Socket().apply {
-                    tcpNoDelay = true
-                    soTimeout = socketReadTimeoutMs
-                    connect(InetSocketAddress(targetHost, targetPort), connectTimeoutMs)
-                }
-            }
-            is Upstream.Http -> {
-                val sock = Socket().apply {
-                    tcpNoDelay = true
-                    soTimeout = connectTimeoutMs
-                    connect(InetSocketAddress(upstream.host, upstream.port), connectTimeoutMs)
-                }
-                try {
-                    val req = "CONNECT $targetHost:$targetPort HTTP/1.1\r\nHost: $targetHost:$targetPort\r\n\r\n"
-                    sock.getOutputStream().write(req.toByteArray(StandardCharsets.US_ASCII))
-                    sock.getOutputStream().flush()
-                    val respLines = readHttpHeaders(sock.getInputStream())
-                        ?: throw IOException("Empty response from upstream HTTP proxy")
-                    val statusLine = respLines.firstOrNull().orEmpty()
-                    val code = statusLine.split(' ').getOrNull(1)?.toIntOrNull() ?: 0
-                    if (code !in 200..299) {
-                        throw IOException("Upstream HTTP proxy rejected CONNECT: $statusLine")
-                    }
-                    sock.soTimeout = socketReadTimeoutMs
-                    sock
-                } catch (e: IOException) {
-                    runCatching { sock.close() }
-                    throw e
-                }
-            }
-            is Upstream.Socks5 -> {
-                val sock = Socket().apply {
-                    tcpNoDelay = true
-                    soTimeout = connectTimeoutMs
-                    connect(InetSocketAddress(upstream.host, upstream.port), connectTimeoutMs)
-                }
-                try {
-                    val out = sock.getOutputStream()
-                    val ins = sock.getInputStream()
-                    // Greeting: VER=5, NMETHODS=1, NOAUTH=0
-                    out.write(byteArrayOf(0x05, 0x01, 0x00))
-                    out.flush()
-                    val authReply = readExact(ins, 2)
-                        ?: throw IOException("Upstream SOCKS5 EOF during greeting")
-                    if (authReply[0] != 0x05.toByte() || authReply[1] != 0x00.toByte()) {
-                        throw IOException("Upstream SOCKS5 auth rejected (${authReply[1].toInt() and 0xFF})")
-                    }
-                    // Domain CONNECT request
-                    val hostBytes = targetHost.toByteArray(StandardCharsets.US_ASCII)
-                    if (hostBytes.size > 255) throw IOException("Target host too long for SOCKS5")
-                    val req = ByteArray(7 + hostBytes.size)
-                    req[0] = 0x05
-                    req[1] = 0x01 // CONNECT
-                    req[2] = 0x00 // RSV
-                    req[3] = 0x03 // DOMAINNAME
-                    req[4] = hostBytes.size.toByte()
-                    System.arraycopy(hostBytes, 0, req, 5, hostBytes.size)
-                    req[5 + hostBytes.size] = ((targetPort shr 8) and 0xFF).toByte()
-                    req[6 + hostBytes.size] = (targetPort and 0xFF).toByte()
-                    out.write(req)
-                    out.flush()
+        return openTunneledSocket(upstream, targetHost, targetPort)
+    }
 
-                    val repHead = readExact(ins, 4)
-                        ?: throw IOException("Upstream SOCKS5 EOF during CONNECT")
-                    if (repHead[0] != 0x05.toByte() || repHead[1] != 0x00.toByte()) {
-                        throw IOException("Upstream SOCKS5 CONNECT failed (code=${repHead[1].toInt() and 0xFF})")
-                    }
-                    when (repHead[3].toInt() and 0xFF) {
-                        0x01 -> readExact(ins, 4 + 2)
-                        0x04 -> readExact(ins, 16 + 2)
-                        0x03 -> {
-                            val dLen = ins.read()
-                            if (dLen > 0) readExact(ins, dLen + 2) else readExact(ins, 2)
-                        }
-                        else -> throw IOException("Upstream SOCKS5 unknown address type")
-                    } ?: throw IOException("Upstream SOCKS5 truncated bind address")
-
-                    sock.soTimeout = socketReadTimeoutMs
-                    sock
-                } catch (e: IOException) {
-                    runCatching { sock.close() }
-                    throw e
-                }
+    @Throws(IOException::class)
+    private fun openTunneledSocket(selectedUpstream: Upstream, targetHost: String, targetPort: Int): Socket {
+        val hops = when (selectedUpstream) {
+            is Upstream.Direct -> emptyList()
+            is Upstream.Chain -> selectedUpstream.flattenedHops()
+            else -> listOf(selectedUpstream)
+        }
+        if (hops.isEmpty()) {
+            guardSelfLoop(targetHost, targetPort)
+            return Socket().apply {
+                tcpNoDelay = true
+                soTimeout = socketReadTimeoutMs
+                connect(InetSocketAddress(targetHost, targetPort), connectTimeoutMs)
             }
         }
+
+        val (firstHost, firstPort) = hopHostPort(hops[0])
+        guardSelfLoop(firstHost, firstPort)
+        val sock = Socket().apply {
+            tcpNoDelay = true
+            soTimeout = connectTimeoutMs
+            connect(InetSocketAddress(firstHost, firstPort), connectTimeoutMs)
+        }
+        try {
+            for (i in hops.indices) {
+                val hop = hops[i]
+                val (nextHost, nextPort) = if (i + 1 < hops.size) {
+                    hopHostPort(hops[i + 1])
+                } else {
+                    targetHost to targetPort
+                }
+                if (i + 1 < hops.size) {
+                    guardSelfLoop(nextHost, nextPort)
+                }
+                try {
+                    when (hop) {
+                        is Upstream.Http -> handshakeHttpConnect(sock, hop, nextHost, nextPort)
+                        is Upstream.Socks5 -> handshakeSocks5Connect(sock, hop, nextHost, nextPort)
+                        else -> throw IOException("Unsupported chain hop: ${hop.describe()}")
+                    }
+                } catch (e: IOException) {
+                    throw IOException(
+                        "Hop ${i + 1}/${hops.size} (${hop.describe()} → $nextHost:$nextPort): ${e.message ?: e.javaClass.simpleName}",
+                        e
+                    )
+                }
+            }
+            sock.soTimeout = socketReadTimeoutMs
+            return sock
+        } catch (e: IOException) {
+            runCatching { sock.close() }
+            throw e
+        }
+    }
+
+    private fun guardSelfLoop(host: String, port: Int) {
+        val norm = host.trim().lowercase()
+        if ((norm == "127.0.0.1" || norm == "localhost" || norm == "::1") && actualPort > 0 && port == actualPort) {
+            throw IOException("Proxy self-loop blocked ($host:$port)")
+        }
+    }
+
+    private fun hopHostPort(hop: Upstream): Pair<String, Int> = when (hop) {
+        is Upstream.Http -> hop.host to hop.port
+        is Upstream.Socks5 -> hop.host to hop.port
+        else -> throw IOException("No endpoint for hop ${hop.describe()}")
+    }
+
+    @Throws(IOException::class)
+    private fun handshakeHttpConnect(sock: Socket, hop: Upstream.Http, targetHost: String, targetPort: Int) {
+        val out = sock.getOutputStream()
+        val authority = if (targetHost.contains(':') && !targetHost.startsWith("[")) {
+            "[$targetHost]:$targetPort"
+        } else {
+            "$targetHost:$targetPort"
+        }
+        val sb = StringBuilder()
+            .append("CONNECT ").append(authority).append(" HTTP/1.1\r\n")
+            .append("Host: ").append(authority).append("\r\n")
+        if (hop.username.isNotEmpty() || hop.password.isNotEmpty()) {
+            val token = encodeBase64("${hop.username}:${hop.password}".toByteArray(StandardCharsets.UTF_8))
+            sb.append("Proxy-Authorization: Basic ").append(token).append("\r\n")
+        }
+        sb.append("Proxy-Connection: keep-alive\r\n\r\n")
+        out.write(sb.toString().toByteArray(StandardCharsets.US_ASCII))
+        out.flush()
+
+        val respLines = readHttpHeaders(sock.getInputStream())
+            ?: throw IOException("Empty response from upstream HTTP proxy")
+        val statusLine = respLines.firstOrNull().orEmpty()
+        val code = statusLine.split(' ').getOrNull(1)?.toIntOrNull() ?: 0
+        if (code !in 200..299) {
+            throw IOException("Upstream HTTP proxy rejected CONNECT: $statusLine")
+        }
+    }
+
+    @Throws(IOException::class)
+    private fun handshakeSocks5Connect(sock: Socket, hop: Upstream.Socks5, targetHost: String, targetPort: Int) {
+        val out = sock.getOutputStream()
+        val ins = sock.getInputStream()
+        val hasAuth = hop.username.isNotEmpty() || hop.password.isNotEmpty()
+        if (hasAuth) {
+            // Offer NOAUTH (0x00) and USERNAME/PASSWORD (0x02)
+            out.write(byteArrayOf(0x05, 0x02, 0x00, 0x02))
+        } else {
+            out.write(byteArrayOf(0x05, 0x01, 0x00))
+        }
+        out.flush()
+
+        val authReply = readExact(ins, 2)
+            ?: throw IOException("Upstream SOCKS5 EOF during greeting")
+        if (authReply[0] != 0x05.toByte()) {
+            throw IOException("Upstream SOCKS5 bad version (${authReply[0].toInt() and 0xFF})")
+        }
+        when (val method = authReply[1].toInt() and 0xFF) {
+            0x00 -> { /* no auth required */ }
+            0x02 -> {
+                if (!hasAuth) throw IOException("Upstream SOCKS5 requires username/password")
+                val uBytes = hop.username.toByteArray(StandardCharsets.UTF_8)
+                val pBytes = hop.password.toByteArray(StandardCharsets.UTF_8)
+                if (uBytes.size > 255 || pBytes.size > 255) {
+                    throw IOException("SOCKS5 credentials exceed 255 bytes")
+                }
+                val authReq = ByteArray(3 + uBytes.size + pBytes.size)
+                authReq[0] = 0x01
+                authReq[1] = uBytes.size.toByte()
+                System.arraycopy(uBytes, 0, authReq, 2, uBytes.size)
+                authReq[2 + uBytes.size] = pBytes.size.toByte()
+                System.arraycopy(pBytes, 0, authReq, 3 + uBytes.size, pBytes.size)
+                out.write(authReq)
+                out.flush()
+                val userPassRep = readExact(ins, 2)
+                    ?: throw IOException("Upstream SOCKS5 EOF during auth")
+                if (userPassRep[1] != 0x00.toByte()) {
+                    throw IOException("Upstream SOCKS5 username/password rejected")
+                }
+            }
+            else -> throw IOException("Upstream SOCKS5 auth rejected ($method)")
+        }
+
+        val cleanHost = targetHost.trim().removePrefix("[").removeSuffix("]")
+        val hostBytes = cleanHost.toByteArray(StandardCharsets.US_ASCII)
+        if (hostBytes.size > 255) throw IOException("Target host too long for SOCKS5")
+        val req = ByteArray(7 + hostBytes.size)
+        req[0] = 0x05
+        req[1] = 0x01 // CONNECT
+        req[2] = 0x00 // RSV
+        req[3] = 0x03 // DOMAINNAME (remote DNS resolution on upstream proxy)
+        req[4] = hostBytes.size.toByte()
+        System.arraycopy(hostBytes, 0, req, 5, hostBytes.size)
+        req[5 + hostBytes.size] = ((targetPort shr 8) and 0xFF).toByte()
+        req[6 + hostBytes.size] = (targetPort and 0xFF).toByte()
+        out.write(req)
+        out.flush()
+
+        val repHead = readExact(ins, 4)
+            ?: throw IOException("Upstream SOCKS5 EOF during CONNECT")
+        if (repHead[0] != 0x05.toByte() || repHead[1] != 0x00.toByte()) {
+            throw IOException("Upstream SOCKS5 CONNECT failed (code=${repHead[1].toInt() and 0xFF})")
+        }
+        when (repHead[3].toInt() and 0xFF) {
+            0x01 -> readExact(ins, 4 + 2)
+            0x04 -> readExact(ins, 16 + 2)
+            0x03 -> {
+                val dLen = ins.read()
+                if (dLen > 0) readExact(ins, dLen + 2) else readExact(ins, 2)
+            }
+            else -> throw IOException("Upstream SOCKS5 unknown address type")
+        } ?: throw IOException("Upstream SOCKS5 truncated bind address")
+    }
+
+    private fun encodeBase64(bytes: ByteArray): String {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        val sb = StringBuilder(((bytes.size + 2) / 3) * 4)
+        var i = 0
+        while (i < bytes.size) {
+            val b0 = bytes[i].toInt() and 0xFF
+            val b1 = if (i + 1 < bytes.size) bytes[i + 1].toInt() and 0xFF else 0
+            val b2 = if (i + 2 < bytes.size) bytes[i + 2].toInt() and 0xFF else 0
+            sb.append(alphabet[b0 ushr 2])
+            sb.append(alphabet[((b0 and 0x03) shl 4) or (b1 ushr 4)])
+            sb.append(if (i + 1 < bytes.size) alphabet[((b1 and 0x0F) shl 2) or (b2 ushr 6)] else '=')
+            sb.append(if (i + 2 < bytes.size) alphabet[b2 and 0x3F] else '=')
+            i += 3
+        }
+        return sb.toString()
     }
 
     private fun relayBidirectional(clientIn: InputStream, clientOut: OutputStream, remote: Socket) {

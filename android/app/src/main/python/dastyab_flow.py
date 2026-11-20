@@ -493,6 +493,77 @@ def stop(quiet=False):
         print("[flow] Tunnel stopped")
 
 
+def _fetch_geo_via_tunnel():
+    """Query egress IP + ISO country + proxy/hosting flags via HTTPS providers (or HTTP ip-api on Linux)."""
+    trace_ip = ""
+    trace_cc = ""
+    r_tr = _curl(["https://1.1.1.1/cdn-cgi/trace"], 8)
+    if r_tr and r_tr.stdout:
+        for line in r_tr.stdout.splitlines():
+            if line.startswith("ip="):
+                trace_ip = line[3:].strip()
+            elif line.startswith("loc="):
+                cc = line[4:].strip().upper()
+                if len(cc) == 2 and cc != "XX":
+                    trace_cc = cc
+
+    providers = [
+        "https://ipwho.is/",
+        "https://ipapi.co/json/",
+        "https://ipinfo.io/json",
+    ]
+    if not _shim.is_android():
+        providers.insert(0, IPAPI)
+
+    for url in providers:
+        r = _curl([url], 12)
+        raw = (r.stdout or "").strip() if r else ""
+        if not raw or not raw.startswith("{"):
+            continue
+        try:
+            j = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if j.get("status") == "fail" or j.get("success") is False:
+            continue
+        cc = (
+            j.get("countryCode")
+            or j.get("country_code")
+            or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) == 2 else "")
+            or trace_cc
+        ).strip().upper()
+        cname = (
+            j.get("country_name")
+            or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) > 2 else "")
+            or (j.get("country") if len(str(j.get("country") or "")) > 2 else "")
+            or cc
+        )
+        sec = j.get("security") if isinstance(j.get("security"), dict) else {}
+        org = str(j.get("org") or "").lower()
+        org_hosting = any(
+            k in org
+            for k in ("datacenter", "hosting", "cloud", "amazon", "digitalocean", "hetzner", "ovh", "linode", "vultr", "cdn77", "m247", "leaseweb")
+        )
+        if len(cc) == 2:
+            return {
+                "status": "success",
+                "countryCode": cc,
+                "country": cname,
+                "proxy": bool(j.get("proxy") or sec.get("proxy")),
+                "hosting": bool(j.get("hosting") or sec.get("hosting") or org_hosting),
+            }
+
+    if trace_ip and len(trace_cc) == 2:
+        return {
+            "status": "success",
+            "countryCode": trace_cc,
+            "country": trace_cc,
+            "proxy": False,
+            "hosting": False,
+        }
+    return {}
+
+
 def probe_gates(want_country=None, browser_profile=None):
     res = {
         "egress": None,
@@ -515,30 +586,9 @@ def probe_gates(want_country=None, browser_profile=None):
         return res
     res["egress"] = ip
 
-    r = _curl([IPAPI], 15)
-    geo = {}
-    try:
-        geo = json.loads((r.stdout or "").strip()) if r else {}
-    except json.JSONDecodeError:
-        geo = {}
+    geo = _fetch_geo_via_tunnel()
     if geo.get("status") != "success":
-        # Fallback to HTTPS geo trace / ipwho.is if HTTP ip-api blocked
-        r2 = _curl(["https://ipwho.is/"], 12)
-        try:
-            j2 = json.loads((r2.stdout or "").strip()) if r2 else {}
-            if j2.get("success"):
-                geo = {
-                    "status": "success",
-                    "countryCode": j2.get("country_code"),
-                    "country": j2.get("country"),
-                    "proxy": bool((j2.get("security") or {}).get("proxy")),
-                    "hosting": bool((j2.get("security") or {}).get("hosting")),
-                }
-        except json.JSONDecodeError:
-            pass
-
-    if geo.get("status") != "success":
-        res["reason"] = "geo lookup failed (ip-api unreachable through tunnel)"
+        res["reason"] = "geo lookup failed (geo providers unreachable through route)"
         res["latency_ms"] = int((time.time() - t0) * 1000)
         return res
     res["country"] = geo.get("countryCode")
@@ -554,15 +604,29 @@ def probe_gates(want_country=None, browser_profile=None):
         res["reason"] = f"egress country {res['country']} != requested {want_country.upper()}"
         return res
 
-    r = _curl(["-o", "/dev/null", "-w", "%{http_code}", FLOW_URL], 25)
-    code = (r.stdout or "").strip() if r else "000"
-    res["flow_ok"] = code not in ("", "000")
+    using_shim = _shim.is_android() or not _has_curl()
+    r_body = _curl(["-L", FLOW_URL], 25)
+    body = (r_body.stdout or "") if r_body else ""
+    if using_shim:
+        code_num = int(_shim._LAST_HTTP_META.get("code") or 0)
+        code = f"{code_num:03d}" if code_num > 0 else "000"
+        final_url = _shim.get_last_final_url() or FLOW_URL
+    else:
+        r_meta = _curl(["-L", "-o", "/dev/null", "-w", "%{http_code}|%{url_effective}", FLOW_URL], 25)
+        meta_parts = ((r_meta.stdout or "").strip() if r_meta else "").split("|", 1)
+        code = meta_parts[0] if meta_parts and meta_parts[0] else "000"
+        final_url = meta_parts[1] if len(meta_parts) > 1 else FLOW_URL
+
+    res["flow_ok"] = code not in ("", "000", "403", "451")
+    final_low = final_url.lower()
+    if "unsupported-country" in final_low or "/sorry/" in final_low:
+        res["flow_ok"] = False
+        res["reason"] = f"REGION-GATE: Flow redirected to {final_url} (HTTP {code})"
+        return res
     if not res["flow_ok"]:
-        res["reason"] = f"flow.google.com unreachable through tunnel (HTTP {code})"
+        res["reason"] = f"flow.google.com blocked or unreachable through tunnel (HTTP {code})"
         return res
 
-    r = _curl([FLOW_URL], 25)
-    body = (r.stdout or "") if r else ""
     low_body = body.lower()
     for marker in GATE_MARKERS:
         if marker in low_body:
@@ -570,12 +634,12 @@ def probe_gates(want_country=None, browser_profile=None):
             return res
     res["app_shell_ok"] = "AiSandboxAngularFrontend" in body
     if not res["app_shell_ok"]:
-        res["reason"] = "flow.google.com answered but not with the Flow app shell"
+        res["reason"] = "flow.google.com answered but not with the Flow app shell (AiSandboxAngularFrontend missing)"
         return res
 
     r = _curl(["-o", "/dev/null", "-w", "%{http_code}", ACCOUNTS_URL], 25)
-    code = (r.stdout or "").strip() if r else "000"
-    res["accounts_ok"] = code not in ("", "000")
+    acc_code = (r.stdout or "").strip() if r else "000"
+    res["accounts_ok"] = acc_code not in ("", "000")
     if not res["accounts_ok"]:
         res["reason"] = "accounts.google.com unreachable (sign-in would fail)"
         return res
@@ -801,10 +865,10 @@ def launch_browser(proxy_port=None):
 
 
 def _android_start_bridge(want_country=None):
-    """Android multi-layer bridge when no standalone xray ELF binary is present."""
+    """Android multi-layer bridge: probes active VPN (Lantern) + 1/2/3-hop proxy cascades against Flow gates."""
     p = _paths()
-    print("[flow] Android CPython Core: probing active proxy ports & system VPN (L3+L4+L5)...")
-    results = _shim.discover_best_android_route(probe_gates, want_country=want_country)
+    print("[flow] Android CPython Core: probing Layer 0 (Lantern) + multi-hop chains against Flow L3+L4+L5 gates...")
+    results = _shim.discover_best_android_route(probe_gates, want_country=want_country, target_service="flow")
     best = None
     for route, g in results:
         scheme, host, port, label = route
@@ -815,26 +879,41 @@ def _android_start_bridge(want_country=None):
 
     if best is None:
         print(
-            "[flow] No active Android route passed Flow's 151-country + HTTPS gates.",
+            "[flow] No active Android route or multi-hop chain passed Flow's 151-country + HTTPS + shell gates.",
             file=sys.stderr,
         )
         print(
-            "[flow] Tip: Start Lantern or connect v2rayNG (:10808/:10809) in a supported country, OR install ~/.dastyab/bin/xray.",
+            "[flow] Tip: Harvest residential SOCKS5/HTTP hops, connect v2rayNG (:10808/:10809), or switch Lantern country.",
             file=sys.stderr,
         )
         return 3
 
     route, g = best
     scheme, host, port, label = route
+    chain_hops = (
+        [{"scheme": h[0], "host": h[1], "port": h[2]} for h in host]
+        if scheme == "chain" and isinstance(host, list)
+        else []
+    )
+    hops_count = len(chain_hops) if scheme == "chain" else (0 if scheme == "direct" else 1)
     write_json_atomic(
         p["BRIDGEFILE"],
-        {"scheme": scheme, "host": host, "port": port, "label": label, "egress": g["egress"]},
+        {
+            "scheme": scheme,
+            "host": host if scheme != "chain" else "",
+            "port": port,
+            "hops": hops_count,
+            "chain": chain_hops,
+            "label": label,
+            "egress": g["egress"],
+            "country": g["country"],
+        },
     )
     write_json_atomic(
         p["STATEFILE"],
         {
             "idx": 0,
-            "hops": 1,
+            "hops": hops_count,
             "egress": g["egress"],
             "country": g["country"],
             "country_name": g["country_name"],
@@ -842,9 +921,9 @@ def _android_start_bridge(want_country=None):
             "route_label": label,
         },
     )
-    print(f"[flow] Verified route: {label}")
+    print(f"[flow] Verified route ({hops_count}-hop): {label}")
     print(f"[flow] {g['reason']}")
-    launch_browser(proxy_port=port if scheme in ("http", "socks5") else None)
+    launch_browser(proxy_port=port if scheme in ("http", "socks5") and port > 0 else None)
     return 0
 
 
@@ -853,7 +932,8 @@ def cmd_start(index=None, hops=1, want_country=None):
     if is_running():
         print(f"[flow] Tunnel already active on 127.0.0.1:{SOCK}")
         bridge = read_json(p["BRIDGEFILE"], {})
-        launch_browser(proxy_port=bridge.get("port") or None)
+        bport = bridge.get("port")
+        launch_browser(proxy_port=bport if isinstance(bport, int) and bport > 0 else None)
         return 0
 
     if _find_xray_optional() is None and _shim.is_android():
@@ -928,10 +1008,10 @@ def cmd_stop():
 def cmd_status():
     p = _paths()
     xray = _find_xray_optional()
-    print(f"[flow] xray core: {xray or 'Not installed (Android Hybrid Proxy Bridge active)'}")
+    print(f"[flow] xray core: {xray or 'Not installed (Android Multi-Layer Bridge active)'}")
     print(f"[flow] SOCKS port: 127.0.0.1:{SOCK} | profile: {p['PROFILE_DIR']}")
     if _shim.is_android() and not xray:
-        results = _shim.discover_best_android_route(probe_gates)
+        results = _shim.discover_best_android_route(probe_gates, target_service="flow")
         any_ok = False
         for route, g in results:
             verdict = "PASS" if g["verdict"] else "FAIL"
@@ -983,8 +1063,8 @@ def cmd_best(try_n=10, want_country=None):
     cands = load_candidates()
 
     if xray is None and _shim.is_android():
-        print("[flow] Step 1/2: Probing active Android proxies & system VPNs against Flow gates...")
-        results = _shim.discover_best_android_route(probe_gates, want_country=want_country)
+        print("[flow] Step 1/2: Probing Layer 0 (Lantern) + multi-hop chains against Flow gates...")
+        results = _shim.discover_best_android_route(probe_gates, want_country=want_country, target_service="flow")
         for route, g in results:
             mark = f"PASS {g['country']} {g['egress']} ({g['latency_ms']}ms)" if g["verdict"] else f"FAIL ({g['reason']})"
             print(f"   • {route[3]} -> {mark}", flush=True)

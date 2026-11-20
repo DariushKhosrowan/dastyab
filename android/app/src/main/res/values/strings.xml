@@ -805,4 +805,29 @@
     <string name="layers_btn_build_shield">Auto-Build Strong Multi-Layer Shield</string>
     <string name="layers_shield_building">Building &amp; benchmarking multi-protocol VPN layers…</string>
     <string name="layers_shield_built_toast">Built %1$d-layer resilient VPN shield!</string>
+
+    <!-- Multi-Layer Geo-Bypass & Separate AI Studio / Flow Chaining -->
+    <string name="browser_dom_geo_blocked_title">%1$s Geo-Blocked Inside Browser</string>
+    <string name="browser_dom_geo_blocked_msg">The loaded page reported a regional or account access restriction (%1$s).\n\nWould you like DastYab to automatically stack multi-layer proxy hops on top of Lantern / system VPN for %2$s?</string>
+    <string name="browser_btn_auto_chain">Auto-Chain Layers</string>
+    <string name="browser_auto_chain_running">Auto-chaining proxy layers for %1$s (on top of Lantern)…</string>
+    <string name="browser_auto_chain_failed">Could not find a non-georestricted layer for %1$s</string>
+    <string name="browser_banner_ready">%1$s ✓ · %2$s (%3$s · %4$s)</string>
+    <string name="browser_banner_blocked">%1$s Geo-Blocked ✗ · %2$s (%3$s)</string>
+
+    <string name="access_sheet_opt_chain_aistudio">Auto-Chain Layers for Google AI Studio (On Top of Lantern)</string>
+    <string name="access_sheet_opt_chain_flow">Auto-Chain Layers for Google Flow (Harder · Separate Route)</string>
+    <string name="access_sheet_chain_progress_title">Chaining Multi-Layer Route for %1$s</string>
+    <string name="access_sheet_chain_running">Testing Layer 0 (Lantern) + 1/2/3-hop proxy chains…</string>
+    <string name="access_sheet_geocheck_dual">AI Studio Route : %1$s\nAI Studio Status: %2$s\n\nGoogle Flow Route : %3$s\nGoogle Flow Status: %4$s\nFlow App Shell    : %5$s\nAccounts Sign-In  : %6$s</string>
+
+    <string name="tunnel_aistudio_chain_label">AI Studio Multi-Hop Chain (separated from Flow; optional, comma or -&gt; separated)</string>
+    <string name="tunnel_flow_chain_label">Google Flow Multi-Hop Chain (harder target · separated from AI Studio)</string>
+    <string name="tunnel_chain_hint">socks5://127.0.0.1:10808 -> socks5://user:pass@host:port</string>
+    <string name="tunnel_btn_autochain_aistudio">Auto-Chain AI Studio</string>
+    <string name="tunnel_btn_autochain_flow">Auto-Chain Flow</string>
+    <string name="tunnel_autochain_scanning">Discovering &amp; verifying multi-layer route for %1$s…</string>
+
+    <string name="main_btn_auto_chain_service">Auto-Chain Layers for %1$s</string>
+    <string name="lantern_dialog_dual_body">AI Studio : %1$s\n  Route   : %2$s\n\nGoogle Flow : %3$s\n  Route     : %4$s\n\nExit IP: %5$s (%6$s · %7$s)\n\n%8$s</string>
 </resources>

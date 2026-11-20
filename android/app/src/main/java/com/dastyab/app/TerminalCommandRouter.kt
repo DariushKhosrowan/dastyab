@@ -89,13 +89,26 @@ object TerminalCommandRouter {
         }
     }
 
+    internal fun serializeChainJson(hops: List<TunnelConfig.ProxyHop>): String =
+        hops.joinToString(prefix = "[", postfix = "]", separator = ",") { hop ->
+            val scheme = escapeJson(hop.scheme.name.lowercase())
+            val host = escapeJson(hop.host)
+            val user = escapeJson(hop.username)
+            val pass = escapeJson(hop.password)
+            "{\"scheme\":\"$scheme\",\"host\":\"$host\",\"port\":${hop.port},\"username\":\"$user\",\"password\":\"$pass\"}"
+        }
+
     fun buildRouteSyncJson(
         externalVpnActive: Boolean,
         dastyabVpnActive: Boolean,
         bridgePort: Int?,
         upstreamScheme: TunnelConfig.ProxyScheme,
         upstreamHost: String,
-        upstreamPort: Int
+        upstreamPort: Int,
+        upstreamChain: String = "",
+        aiStudioChain: String = "",
+        flowChain: String = "",
+        harvestedProxyHops: List<TunnelConfig.ProxyHop> = emptyList()
     ): String {
         val fields = mutableListOf(
             "\"external_vpn_active\":$externalVpnActive",
@@ -110,6 +123,21 @@ object TerminalCommandRouter {
             fields.add("\"upstream_scheme\":\"$scheme\"")
             fields.add("\"upstream_host\":\"$host\"")
             fields.add("\"upstream_port\":$upstreamPort")
+        }
+        val parsedGlobal = TunnelConfig.parseProxyChain(upstreamChain, bridgePort)
+        if (parsedGlobal.isNotEmpty()) {
+            fields.add("\"upstream_chain\":${serializeChainJson(parsedGlobal)}")
+        }
+        val parsedAi = TunnelConfig.parseProxyChain(aiStudioChain, bridgePort)
+        if (parsedAi.isNotEmpty()) {
+            fields.add("\"aistudio_chain\":${serializeChainJson(parsedAi)}")
+        }
+        val parsedFlow = TunnelConfig.parseProxyChain(flowChain, bridgePort)
+        if (parsedFlow.isNotEmpty()) {
+            fields.add("\"flow_chain\":${serializeChainJson(parsedFlow)}")
+        }
+        if (harvestedProxyHops.isNotEmpty()) {
+            fields.add("\"proxy_hops\":${serializeChainJson(harvestedProxyHops.take(24))}")
         }
         return fields.joinToString(prefix = "{", postfix = "}", separator = ",")
     }

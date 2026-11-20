@@ -1,7 +1,10 @@
 package com.dastyab.app
 
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.InetAddress
+import java.net.Proxy
 import java.net.URL
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -11,8 +14,8 @@ import java.util.concurrent.TimeUnit
  * ReachabilityVerifier — real end-to-end HTTPS/DNS reachability checker specifically
  * engineered for Google AI Studio, Google Flow, and general internet health (`generate_204`).
  *
- * Ensures DastYab never reports a tunnel as "working" when websites are unreachable,
- * and distinguishes between DNS poisoning, TLS/IP blocking, geo/HTTP blocking, and healthy access.
+ * Ensures DastYab never reports a tunnel as "working" when websites are geo-restricted or blocked,
+ * and distinguishes between DNS poisoning, TLS/IP blocking, geo-restriction, HTTP blocking, and healthy access.
  */
 object ReachabilityVerifier {
 
@@ -25,7 +28,8 @@ object ReachabilityVerifier {
         DNS_POISONED,
         DNS_FAILED,
         TLS_OR_IP_BLOCKED,
-        HTTP_RESTRICTED
+        HTTP_RESTRICTED,
+        GEO_RESTRICTED
     }
 
     data class EndpointCheck(
@@ -57,38 +61,67 @@ object ReachabilityVerifier {
         else -> Status.HTTP_RESTRICTED
     }
 
-    /** Verifies real DNS + TLS + HTTP reachability for a single HTTPS URL. */
-    fun verifyHttpsEndpoint(name: String, urlStr: String, timeoutMs: Int = 3500): EndpointCheck {
+    /** Verifies real DNS + TLS + HTTP + geo-gate reachability for a single HTTPS URL (optionally through [proxy]). */
+    fun verifyHttpsEndpoint(
+        name: String,
+        urlStr: String,
+        timeoutMs: Int = 3500,
+        proxy: Proxy = Proxy.NO_PROXY
+    ): EndpointCheck {
         val host = try {
             URL(urlStr).host
         } catch (_: Exception) {
             return EndpointCheck(name, urlStr, Status.DNS_FAILED, -1, -1, "", "Invalid URL")
         }
 
-        // 1. Verify DNS resolution and check for ISP sinkhole/poisoned IPs
-        val resolvedIp = try {
-            InetAddress.getByName(host).hostAddress ?: ""
-        } catch (_: Exception) {
-            return EndpointCheck(name, urlStr, Status.DNS_FAILED, -1, -1, "", "DNS lookup failed for $host")
+        // 1. When connecting without an upstream proxy, check local DNS resolution & sinkhole IPs.
+        val resolvedIp = if (proxy == Proxy.NO_PROXY) {
+            val ip = try {
+                InetAddress.getByName(host).hostAddress ?: ""
+            } catch (_: Exception) {
+                return EndpointCheck(name, urlStr, Status.DNS_FAILED, -1, -1, "", "DNS lookup failed for $host")
+            }
+            if (NetworkTools.isSinkholeOrPrivateIp(ip)) {
+                return EndpointCheck(
+                    name = name,
+                    url = urlStr,
+                    status = Status.DNS_POISONED,
+                    httpCode = -1,
+                    latencyMs = -1,
+                    resolvedIp = ip,
+                    detail = "DNS poisoned ($host → $ip)"
+                )
+            }
+            ip
+        } else {
+            "via-proxy"
         }
 
-        if (NetworkTools.isSinkholeOrPrivateIp(resolvedIp)) {
-            return EndpointCheck(
-                name = name,
-                url = urlStr,
-                status = Status.DNS_POISONED,
-                httpCode = -1,
-                latencyMs = -1,
-                resolvedIp = resolvedIp,
-                detail = "DNS poisoned ($host → $resolvedIp)"
+        val isAiStudio = host.contains("aistudio.google.com", ignoreCase = true)
+        val isFlow = host.contains("flow.google.com", ignoreCase = true)
+        if (isAiStudio || isFlow) {
+            val probe = GeoBypassEngine.probeGoogleEndpoint(
+                urlStr = urlStr,
+                proxy = proxy,
+                timeoutMs = timeoutMs,
+                inspectFlowGate = isFlow,
+                inspectAiStudioGate = isAiStudio
             )
+            val status = when {
+                probe.unsupportedRegion -> Status.GEO_RESTRICTED
+                isFlow && probe.reachable && !probe.appShellOk -> Status.GEO_RESTRICTED
+                probe.reachable -> Status.REACHABLE
+                probe.httpCode > 0 -> classifyHttpCode(probe.httpCode)
+                else -> Status.TLS_OR_IP_BLOCKED
+            }
+            return EndpointCheck(name, urlStr, status, probe.httpCode, probe.latencyMs, resolvedIp, probe.detail)
         }
 
-        // 2. Real HTTPS GET/HEAD check
+        // 2. Real HTTPS GET/HEAD check for generic endpoints (e.g. generate_204)
         val start = System.nanoTime()
         var conn: HttpURLConnection? = null
         return try {
-            conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+            conn = (URL(urlStr).openConnection(proxy) as HttpURLConnection).apply {
                 requestMethod = "HEAD"
                 instanceFollowRedirects = false
                 connectTimeout = timeoutMs
@@ -119,17 +152,17 @@ object ReachabilityVerifier {
         }
     }
 
-    /** Verifies general internet + Google AI Studio + Google Flow in parallel (~3.5s max). */
-    fun verifyAll(timeoutMs: Int = 3500): FullVerification {
+    /** Verifies general internet + Google AI Studio + Google Flow in parallel. */
+    fun verifyAll(timeoutMs: Int = 3500, proxy: Proxy = Proxy.NO_PROXY): FullVerification {
         val pool = Executors.newFixedThreadPool(3)
         return try {
-            val fInternet = pool.submit(Callable { verifyHttpsEndpoint("Internet", URL_INTERNET_CHECK, timeoutMs) })
-            val fAi = pool.submit(Callable { verifyHttpsEndpoint("AI Studio", URL_AISTUDIO, timeoutMs) })
-            val fFlow = pool.submit(Callable { verifyHttpsEndpoint("Google Flow", URL_FLOW, timeoutMs) })
+            val fInternet = pool.submit(Callable { verifyHttpsEndpoint("Internet", URL_INTERNET_CHECK, timeoutMs, proxy) })
+            val fAi = pool.submit(Callable { verifyHttpsEndpoint("AI Studio", URL_AISTUDIO, timeoutMs, proxy) })
+            val fFlow = pool.submit(Callable { verifyHttpsEndpoint("Google Flow", URL_FLOW, timeoutMs, proxy) })
             FullVerification(
-                internet = fInternet.get(timeoutMs + 1500L, TimeUnit.MILLISECONDS),
-                aiStudio = fAi.get(timeoutMs + 1500L, TimeUnit.MILLISECONDS),
-                flow = fFlow.get(timeoutMs + 1500L, TimeUnit.MILLISECONDS)
+                internet = fInternet.get(timeoutMs + 2500L, TimeUnit.MILLISECONDS),
+                aiStudio = fAi.get(timeoutMs + 2500L, TimeUnit.MILLISECONDS),
+                flow = fFlow.get(timeoutMs + 2500L, TimeUnit.MILLISECONDS)
             )
         } catch (_: Exception) {
             val fail = EndpointCheck("Check", "", Status.TLS_OR_IP_BLOCKED, -1, -1, "", "Verification timed out")

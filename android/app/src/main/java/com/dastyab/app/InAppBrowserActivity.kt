@@ -60,6 +60,8 @@ class InAppBrowserActivity : DastyabActivity() {
     private lateinit var vpnDot: View
     private var initialUrl: String = CommandCompat.AISTUDIO_URL
     private var receiverRegistered = false
+    private var lastDomAlertKey: String = ""
+    private val autoChainInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
     private val mainExecutor = Executor { runnable -> runOnUiThread(runnable) }
 
     private val stateReceiver = object : BroadcastReceiver() {
@@ -128,6 +130,13 @@ class InAppBrowserActivity : DastyabActivity() {
                     if (!UiSafety.isActivityAlive(this@InAppBrowserActivity)) return
                     progress.visibility = View.GONE
                     checkUnsupportedRedirect(url)
+                    inspectWebViewDomGeo(url)
+                    // Re-check once SPA hydration completes (e.g. AI Studio / Flow Angular shell)
+                    webView.postDelayed({
+                        if (UiSafety.isActivityAlive(this@InAppBrowserActivity)) {
+                            inspectWebViewDomGeo(webView.url ?: url)
+                        }
+                    }, 1500L)
                 }
 
                 override fun onReceivedError(
@@ -153,6 +162,7 @@ class InAppBrowserActivity : DastyabActivity() {
                 if (webView.canGoForward()) webView.goForward()
             }
             findViewById<Button>(R.id.btnBrowserReload).setOnClickListener {
+                lastDomAlertKey = ""
                 webView.reload()
             }
             findViewById<Button>(R.id.btnBrowserProxyMode).setOnClickListener {
@@ -166,7 +176,7 @@ class InAppBrowserActivity : DastyabActivity() {
                 }
             }
             findViewById<Button>(R.id.btnBrowserGeoCheck).setOnClickListener {
-                GoogleAccessSheet.runLiveGeoCheckDialog(this)
+                GoogleAccessSheet.runLiveGeoCheckDialog(this, currentOrInitialUrl())
             }
             findViewById<Button>(R.id.btnBrowserSwitchSite).setOnClickListener {
                 val cur = currentOrInitialUrl()
@@ -182,13 +192,12 @@ class InAppBrowserActivity : DastyabActivity() {
                 }
                 initialUrl = nextUrl
                 tvTitle.text = nextTitle
+                lastDomAlertKey = ""
                 applyProxyAndLoad(nextUrl)
             }
             findViewById<Button>(R.id.btnBrowserAutoFix).setOnClickListener {
-                val rescue = Intent(this, BlackoutRescueActivity::class.java).apply {
-                    putExtra(BlackoutRescueActivity.EXTRA_AUTO_ACTION, BlackoutRescueActivity.ACTION_DNS_VPN)
-                }
-                UiSafety.safeStartActivity(this, rescue)
+                val target = GeoBypassEngine.TargetService.fromUrl(currentOrInitialUrl())
+                autoChainCurrentService(target)
             }
             findViewById<Button>(R.id.btnBrowserOpenChrome).setOnClickListener {
                 val currentUrl = currentOrInitialUrl()
@@ -215,25 +224,143 @@ class InAppBrowserActivity : DastyabActivity() {
         webView.url?.takeIf { it.startsWith("http") } ?: initialUrl
 
     private fun checkUnsupportedRedirect(url: String?) {
-        if (url != null && url.contains("unsupported-country", ignoreCase = true)) {
+        if (url.isNullOrBlank()) return
+        val target = GeoBypassEngine.TargetService.fromUrl(url)
+        val blocked = when (target) {
+            GeoBypassEngine.TargetService.GOOGLE_FLOW ->
+                GeoBypassEngine.isFlowUnsupportedResponse(200, url, "")
+            GeoBypassEngine.TargetService.AI_STUDIO ->
+                GeoBypassEngine.isAiStudioUnsupportedResponse(200, url, url, "")
+        }
+        if (blocked) {
             tvRouteStatus.text = getString(R.string.browser_geo_blocked)
             tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusError, R.color.colorStatusError))
+        }
+    }
+
+    private fun inspectWebViewDomGeo(urlHint: String?) {
+        if (!this::webView.isInitialized || !UiSafety.isActivityAlive(this)) return
+        val js = "(function(){try{return({href:location.href,text:(document.body&&document.body.innerText?document.body.innerText:'').slice(0,6000),html:(document.documentElement?document.documentElement.innerHTML:'').slice(0,8192)});}catch(e){return null;}})();"
+        webView.evaluateJavascript(js) { raw ->
+            if (!UiSafety.isActivityAlive(this) || raw.isNullOrBlank() || raw == "null") return@evaluateJavascript
+            val obj = runCatching {
+                val jsonText = if (raw.startsWith("\"")) org.json.JSONTokener(raw).nextValue() as? String ?: "" else raw
+                org.json.JSONObject(jsonText)
+            }.getOrNull() ?: return@evaluateJavascript
+
+            val href = obj.optString("href", urlHint.orEmpty())
+            val bodyText = obj.optString("text", "")
+            val html = obj.optString("html", "")
+            val combined = "$bodyText\n$html"
+            val target = GeoBypassEngine.TargetService.fromUrl(href.ifBlank { urlHint })
+            val reason = when (target) {
+                GeoBypassEngine.TargetService.GOOGLE_FLOW -> when {
+                    GeoBypassEngine.isFlowUnsupportedResponse(200, href, combined) ->
+                        "Flow unsupported region / geo-restriction"
+                    GeoBypassEngine.isFlowAccountGateResponse(combined) ->
+                        "Flow account / country access gate"
+                    else -> null
+                }
+                GeoBypassEngine.TargetService.AI_STUDIO -> when {
+                    GeoBypassEngine.isAiStudioUnsupportedResponse(200, href, href, combined) ->
+                        "AI Studio unsupported region / geo-restriction"
+                    else -> null
+                }
+            } ?: return@evaluateJavascript
+
+            tvRouteStatus.text = getString(R.string.browser_geo_blocked)
+            tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusError, R.color.colorStatusError))
+
+            val key = "${target.key}:${href.substringBefore('?')}"
+            if (key == lastDomAlertKey || autoChainInFlight.get()) return@evaluateJavascript
+            lastDomAlertKey = key
+
+            UiSafety.safeShowDialog(
+                this,
+                android.app.AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.browser_dom_geo_blocked_title, target.displayName))
+                    .setMessage(getString(R.string.browser_dom_geo_blocked_msg, reason, target.displayName))
+                    .setPositiveButton(getString(R.string.browser_btn_auto_chain)) { _, _ ->
+                        autoChainCurrentService(target)
+                    }
+                    .setNeutralButton(getString(R.string.access_sheet_switch_route_btn)) { _, _ ->
+                        GoogleAccessSheet.show(this, target.displayName, href) {
+                            applyProxyAndLoad(currentOrInitialUrl())
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+            )
+        }
+    }
+
+    private fun autoChainCurrentService(target: GeoBypassEngine.TargetService) {
+        if (!autoChainInFlight.compareAndSet(false, true)) return
+        Toast.makeText(
+            this,
+            getString(R.string.browser_auto_chain_running, target.displayName),
+            Toast.LENGTH_LONG
+        ).show()
+        if (this::tvRouteStatus.isInitialized) {
+            tvRouteStatus.text = getString(R.string.browser_auto_chain_running, target.displayName)
+            tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusWarning, R.color.colorStatusWarning))
+        }
+        thread(isDaemon = true, name = "dastyab-browser-autochain") {
+            val result = try {
+                GeoBypassEngine.discoverAndChainBestRoute(
+                    context = this,
+                    targetService = target,
+                    allowHarvest = true,
+                    maxCandidates = 18
+                ) { step ->
+                    runOnUiThread {
+                        if (UiSafety.isActivityAlive(this) && this::tvRouteStatus.isInitialized) {
+                            tvRouteStatus.text = step
+                        }
+                    }
+                }
+            } finally {
+                autoChainInFlight.set(false)
+            }
+            runOnUiThread {
+                if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
+                Toast.makeText(
+                    this,
+                    if (result.success) result.summary else getString(R.string.browser_auto_chain_failed, target.displayName),
+                    Toast.LENGTH_LONG
+                ).show()
+                if (result.success) {
+                    lastDomAlertKey = ""
+                    val reloadTargetUrl = if (target == GeoBypassEngine.TargetService.GOOGLE_FLOW) {
+                        CommandCompat.FLOW_URL
+                    } else {
+                        CommandCompat.AISTUDIO_URL
+                    }
+                    applyProxyAndLoad(reloadTargetUrl)
+                } else {
+                    probeBannerEgress(GeoBypassEngine.resolveCurrentRoute(this, targetService = target), currentOrInitialUrl())
+                }
+            }
         }
     }
 
     private fun applyProxyAndLoad(urlToLoad: String) {
         thread(isDaemon = true, name = "dastyab-browser-route") {
             val settings = TunnelConfig.load(this)
-            var route = GeoBypassEngine.resolveCurrentRoute(this, settings)
+            val targetService = GeoBypassEngine.TargetService.fromUrl(urlToLoad)
+            var route = GeoBypassEngine.resolveCurrentRoute(this, settings, targetService)
             if (route.shouldStartLocalBridge) {
-                LocalProxyService.startSafely(this)
-                // Give LocalProxyServer a brief moment to bind 127.0.0.1:<port>
+                LocalProxyService.startSafely(this, targetService.key)
+                // Wait for LocalProxyServer to bind and switch active chain spec for this targetService
                 var waited = 0
-                while (LocalProxyService.activePort() == null && waited < 900) {
+                while (
+                    (LocalProxyService.activePort() == null ||
+                        LocalProxyService.activeChainSpec() != route.upstreamChainSpec) &&
+                    waited < 1200
+                ) {
                     try { Thread.sleep(60) } catch (_: InterruptedException) { break }
                     waited += 60
                 }
-                route = GeoBypassEngine.resolveCurrentRoute(this, settings)
+                route = GeoBypassEngine.resolveCurrentRoute(this, settings, targetService)
             }
 
             runOnUiThread {
@@ -241,9 +368,10 @@ class InAppBrowserActivity : DastyabActivity() {
                 applyWebViewProxy(route.webViewHttpProxyPort) {
                     refreshRouteAndIndicator(route)
                     if (UiSafety.isActivityAlive(this)) {
+                        lastDomAlertKey = ""
                         webView.loadUrl(urlToLoad)
                     }
-                    probeBannerEgress(route)
+                    probeBannerEgress(route, urlToLoad)
                 }
             }
         }
@@ -273,20 +401,25 @@ class InAppBrowserActivity : DastyabActivity() {
         }
     }
 
-    private fun probeBannerEgress(route: GeoBypassEngine.RouteResolution) {
+    private fun probeBannerEgress(route: GeoBypassEngine.RouteResolution, targetUrl: String = initialUrl) {
         thread(isDaemon = true, name = "dastyab-browser-geo") {
-            val egress = GeoBypassEngine.fetchEgressGeo(route.javaNetProxy, timeoutMs = 3500)
+            val report = GeoBypassEngine.runAccessProbe(route, timeoutMs = 4200)
+            val target = route.targetService ?: GeoBypassEngine.TargetService.fromUrl(targetUrl)
+            val ready = report.targetReady(target)
             runOnUiThread {
                 if (!UiSafety.isActivityAlive(this)) return@runOnUiThread
+                val egress = report.egress
                 if (egress == null) {
                     tvRouteStatus.text = getString(R.string.browser_geo_check_hint, route.routeLabel)
                     tvRouteStatus.setTextColor(ThemeManager.resolveColor(this, R.attr.dastyabStatusWarning, R.color.colorStatusWarning))
                 } else {
-                    val ok = GeoBypassEngine.isFlowCountrySupported(egress.countryCode)
-                    val mark = if (ok) getString(R.string.browser_geo_supported) else getString(R.string.browser_geo_blocked_short)
-                    tvRouteStatus.text = "${route.routeLabel} · ${egress.countryCode} ($mark · ${egress.ip})"
+                    tvRouteStatus.text = if (ready) {
+                        getString(R.string.browser_banner_ready, target.displayName, route.routeLabel, egress.countryCode, egress.ip)
+                    } else {
+                        getString(R.string.browser_banner_blocked, target.displayName, route.routeLabel, egress.countryCode)
+                    }
                     tvRouteStatus.setTextColor(
-                        if (ok) ThemeManager.resolveColor(this, R.attr.dastyabStatusReady, R.color.colorStatusReady)
+                        if (ready) ThemeManager.resolveColor(this, R.attr.dastyabStatusReady, R.color.colorStatusReady)
                         else ThemeManager.resolveColor(this, R.attr.dastyabStatusError, R.color.colorStatusError)
                     )
                 }

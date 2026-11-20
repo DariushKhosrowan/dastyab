@@ -123,4 +123,59 @@ class TunnelConfigTest {
         assertEquals(10850, TunnelConfig.clampPort(70000, 10850, min = TunnelConfig.MIN_LOCAL_PORT))
         assertEquals(10809, TunnelConfig.clampPort(10809, 10850, min = TunnelConfig.MIN_LOCAL_PORT))
     }
+
+    @Test
+    fun parseProxyHop_andParseProxyChain_supportAuthTelegramAndDropSelfLoops() {
+        val socks = TunnelConfig.parseProxyHop("socks5://user:p%40ss@198.51.100.10:1080")
+        assertNotNull(socks)
+        assertEquals(TunnelConfig.ProxyScheme.SOCKS5, socks!!.scheme)
+        assertEquals("198.51.100.10", socks.host)
+        assertEquals(1080, socks.port)
+        assertEquals("user", socks.username)
+        assertEquals("p@ss", socks.password)
+
+        val tgSocks = TunnelConfig.parseProxyHop("tg://socks?server=9.9.9.9&port=443&user=u1&pass=p1")
+        assertNotNull(tgSocks)
+        assertEquals(TunnelConfig.ProxyScheme.SOCKS5, tgSocks!!.scheme)
+        assertEquals("9.9.9.9", tgSocks.host)
+        assertEquals(443, tgSocks.port)
+        assertEquals("u1", tgSocks.username)
+        assertEquals("p1", tgSocks.password)
+
+        val chain = TunnelConfig.parseProxyChain(
+            "http://127.0.0.1:10850 -> socks5://127.0.0.1:10808, http://198.51.100.2:8080 -> localhost:10850",
+            selfBridgePort = 10850
+        )
+        assertEquals(2, chain.size)
+        assertEquals(TunnelConfig.ProxyScheme.SOCKS5, chain[0].scheme)
+        assertEquals(10808, chain[0].port)
+        assertEquals(TunnelConfig.ProxyScheme.HTTP, chain[1].scheme)
+        assertEquals("198.51.100.2", chain[1].host)
+
+        val upstream = TunnelConfig.toLocalProxyUpstream(chain, selfBridgePort = 10850)
+        assertTrue(upstream is LocalProxyServer.Upstream.Chain)
+        assertEquals(2, (upstream as LocalProxyServer.Upstream.Chain).flattenedHops().size)
+    }
+
+    @Test
+    fun effectiveUpstreamHops_separatesAiStudioAndFlowWithGlobalFallback() {
+        val settings = TunnelConfig.Settings(
+            upstreamProxyScheme = TunnelConfig.ProxyScheme.HTTP,
+            upstreamProxyHost = "127.0.0.1",
+            upstreamProxyPort = 10809,
+            upstreamProxyChain = "http://127.0.0.1:10809",
+            aiStudioProxyChain = "socks5://127.0.0.1:10808",
+            flowProxyChain = "socks5://127.0.0.1:10808 -> http://198.51.100.5:3128"
+        )
+        val aiHops = TunnelConfig.effectiveUpstreamHops(settings, "aistudio", 10850)
+        val flowHops = TunnelConfig.effectiveUpstreamHops(settings, "flow", 10850)
+        val fallbackHops = TunnelConfig.effectiveUpstreamHops(settings.copy(aiStudioProxyChain = ""), "aistudio", 10850)
+
+        assertEquals(1, aiHops.size)
+        assertEquals(TunnelConfig.ProxyScheme.SOCKS5, aiHops[0].scheme)
+        assertEquals(2, flowHops.size)
+        assertEquals("198.51.100.5", flowHops[1].host)
+        assertEquals(1, fallbackHops.size)
+        assertEquals(10809, fallbackHops[0].port)
+    }
 }

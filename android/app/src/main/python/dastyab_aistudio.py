@@ -23,6 +23,18 @@ import dastyab_android_shim as _shim
 
 SOCK = int(os.environ.get("DASTYAB_AISTUDIO_SOCKS", "10850"))
 AISTUDIO_URL = "https://aistudio.google.com/"
+ACCOUNTS_URL = "https://accounts.google.com/"
+AISTUDIO_BLOCKED_COUNTRIES = frozenset({"IR", "CN", "RU", "KP", "BY", "SY", "CU", "SD", "AF"})
+AISTUDIO_GATE_MARKERS = (
+    "your region may not be supported",
+    "not available in your country",
+    "isn't available in your country",
+    "available-regions",
+    "unsupported-country",
+    "/unsupported",
+    "country is not supported",
+    "region is not supported",
+)
 CHROME_CANDS = [
     "/opt/google/chrome/google-chrome",
     "/usr/bin/google-chrome",
@@ -186,12 +198,221 @@ def _find_xray_optional():
     return _shim.find_xray_android(extra_paths=(os.path.join(here, "xray"),))
 
 
+def _curl(args, timeout=15):
+    if _shim.is_android() or not _has_curl():
+        return _shim.android_curl(args, timeout=timeout, default_socks_port=SOCK)
+    try:
+        return subprocess.run(
+            ["curl", "-s", "--max-time", str(timeout), "--socks5-hostname", f"127.0.0.1:{SOCK}"] + args,
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return _shim.android_curl(args, timeout=timeout, default_socks_port=SOCK)
+
+
+def fetch_egress_geo(timeout=10):
+    """Fetch public egress IP + ISO country + hosting/proxy flags through the active route (HTTPS-first)."""
+    trace_ip = ""
+    trace_cc = ""
+    r_tr = _curl(["https://1.1.1.1/cdn-cgi/trace"], timeout=min(timeout, 6))
+    if r_tr and r_tr.stdout:
+        for line in r_tr.stdout.splitlines():
+            if line.startswith("ip="):
+                trace_ip = line[3:].strip()
+            elif line.startswith("loc="):
+                cc = line[4:].strip().upper()
+                if len(cc) == 2 and cc != "XX":
+                    trace_cc = cc
+
+    providers = [
+        "https://ipwho.is/",
+        "https://ipapi.co/json/",
+        "https://ipinfo.io/json",
+    ]
+    if not _shim.is_android():
+        providers.append("http://ip-api.com/json/?fields=status,query,country,countryCode,proxy,hosting")
+
+    for url in providers:
+        r = _curl([url], timeout=min(timeout, 8))
+        raw = (r.stdout or "").strip() if r else ""
+        if not raw or not raw.startswith("{"):
+            continue
+        try:
+            j = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if j.get("status") == "fail" or j.get("success") is False:
+            continue
+        ip = (j.get("ip") or j.get("query") or trace_ip or "").strip()
+        cc = (
+            j.get("countryCode")
+            or j.get("country_code")
+            or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) == 2 else "")
+            or trace_cc
+        ).strip().upper()
+        cname = (
+            j.get("country_name")
+            or (j.get("country") if isinstance(j.get("country"), str) and len(j.get("country")) > 2 else "")
+            or cc
+        )
+        sec = j.get("security") if isinstance(j.get("security"), dict) else {}
+        org = str(j.get("org") or "").lower()
+        org_hosting = any(
+            k in org
+            for k in ("datacenter", "hosting", "cloud", "amazon", "digitalocean", "hetzner", "ovh", "linode", "vultr", "cdn77", "m247", "leaseweb")
+        )
+        hosting = bool(j.get("hosting") or sec.get("hosting") or org_hosting)
+        proxy_flag = bool(j.get("proxy") or sec.get("proxy"))
+        if ip and len(cc) == 2:
+            return {
+                "ip": ip,
+                "country": cc,
+                "country_name": cname,
+                "proxy": proxy_flag,
+                "hosting": hosting,
+            }
+
+    if trace_ip and len(trace_cc) == 2:
+        return {
+            "ip": trace_ip,
+            "country": trace_cc,
+            "country_name": trace_cc,
+            "proxy": False,
+            "hosting": False,
+        }
+    return None
+
+
+def probe_aistudio_gates(want_country=None, timeout=12):
+    """Deep geo-restriction + reachability gate check for Google AI Studio."""
+    res = {
+        "egress": None,
+        "country": None,
+        "country_name": None,
+        "proxy": False,
+        "hosting": False,
+        "aistudio_ok": False,
+        "accounts_ok": False,
+        "unsupported_region": False,
+        "http_code": 0,
+        "final_url": "",
+        "latency_ms": None,
+        "verdict": False,
+        "reason": "",
+    }
+    t0 = time.monotonic()
+    geo = fetch_egress_geo(timeout=min(timeout, 10))
+    if not geo:
+        ip = probe_egress(timeout=min(timeout, 8))
+        res["egress"] = ip
+        res["latency_ms"] = int((time.monotonic() - t0) * 1000)
+        res["reason"] = (
+            "geo country unverified (cannot confirm non-georestricted exit)"
+            if ip
+            else "no egress (tunnel/VPN unreachable)"
+        )
+        return res
+
+    res["egress"] = geo["ip"]
+    res["country"] = geo["country"]
+    res["country_name"] = geo["country_name"]
+    res["proxy"] = bool(geo["proxy"])
+    res["hosting"] = bool(geo["hosting"])
+
+    cc = (geo["country"] or "").upper()
+    if len(cc) != 2 or cc in AISTUDIO_BLOCKED_COUNTRIES:
+        res["unsupported_region"] = True
+        res["latency_ms"] = int((time.monotonic() - t0) * 1000)
+        res["reason"] = f"GEO-BLOCKED: egress {geo['ip']} is in {cc or '??'} ({geo['country_name']})"
+        return res
+    if want_country and cc != want_country.upper():
+        res["latency_ms"] = int((time.monotonic() - t0) * 1000)
+        res["reason"] = f"egress country {cc} != requested {want_country.upper()}"
+        return res
+
+    using_shim = _shim.is_android() or not _has_curl()
+    r_ai = _curl(["-L", AISTUDIO_URL], timeout=timeout)
+    body = (r_ai.stdout or "") if r_ai else ""
+    if using_shim:
+        code = int(_shim._LAST_HTTP_META.get("code") or 0)
+        final_url = _shim.get_last_final_url() or AISTUDIO_URL
+    else:
+        r_meta = _curl(["-L", "-o", "/dev/null", "-w", "%{http_code}|%{url_effective}", AISTUDIO_URL], timeout=timeout)
+        meta_parts = ((r_meta.stdout or "").strip() if r_meta else "").split("|", 1)
+        code = int(meta_parts[0]) if meta_parts and meta_parts[0].isdigit() else 0
+        final_url = meta_parts[1] if len(meta_parts) > 1 else AISTUDIO_URL
+
+    res["http_code"] = code
+    res["final_url"] = final_url
+    final_low = final_url.lower()
+    body_low = body.lower()
+
+    geo_hit = (
+        code in (403, 451)
+        or "/unsupported" in final_low
+        or "available-regions" in final_low
+        or "country-not-supported" in final_low
+        or "unsupported-country" in final_low
+        or "/sorry/" in final_low
+        or next((m for m in AISTUDIO_GATE_MARKERS if m in body_low), None)
+    )
+    if geo_hit:
+        res["unsupported_region"] = True
+        res["latency_ms"] = int((time.monotonic() - t0) * 1000)
+        res["reason"] = f"REGION-GATE: AI Studio geo-restricted on {cc} ({geo['ip']}, HTTP {code}, {final_url})"
+        return res
+
+    if code == 0 or code >= 500 or not body.strip():
+        res["latency_ms"] = int((time.monotonic() - t0) * 1000)
+        res["reason"] = f"aistudio.google.com unreachable (HTTP {code})"
+        return res
+    res["aistudio_ok"] = True
+
+    r_acc = _curl(["-o", "/dev/null", "-w", "%{http_code}", ACCOUNTS_URL], timeout=min(timeout, 10))
+    acc_code = (r_acc.stdout or "").strip() if r_acc else "000"
+    res["accounts_ok"] = acc_code not in ("", "000")
+    res["latency_ms"] = int((time.monotonic() - t0) * 1000)
+    if not res["accounts_ok"]:
+        res["reason"] = f"accounts.google.com unreachable (HTTP {acc_code}; sign-in would fail)"
+        return res
+
+    res["verdict"] = True
+    flags = []
+    if res["proxy"]:
+        flags.append("proxy-flagged")
+    if res["hosting"]:
+        flags.append("hosting")
+    flag_str = f" [{', '.join(flags)}]" if flags else ""
+    res["reason"] = f"egress {geo['ip']} in {cc} ({geo['country_name']}); AI Studio HTTP {code} + accounts OK{flag_str}"
+    return res
+
+
+def gate_score(g):
+    return (
+        0 if g.get("verdict") else 1,
+        0 if not g.get("proxy") else 1,
+        0 if not g.get("hosting") else 1,
+        g.get("latency_ms") or 10_000,
+    )
+
+
 def start(server_index=0):
     _, pool_path, _, _, idxfile, bridgefile = _paths()
     if is_running():
         print(f"[aistudio] Tunnel already running on 127.0.0.1:{SOCK}")
         print("[aistudio] Opening AI Studio through the existing tunnel...")
-        launch_browser()
+        proxy_port = None
+        if _shim.is_android() and os.path.exists(bridgefile):
+            try:
+                b = json.load(open(bridgefile))
+                p = b.get("port")
+                if isinstance(p, int) and p > 0:
+                    proxy_port = p
+            except Exception:
+                pass
+        launch_browser(proxy_port=proxy_port)
         return True, None
 
     if _find_xray_optional() is None and _shim.is_android():
@@ -235,49 +456,52 @@ def start(server_index=0):
 
 
 def _start_android_bridge(server_index, pool_path, idxfile, bridgefile):
-    """Android bridge when standalone `xray` ELF isn't installed: verify active proxy/VPN routes."""
-    print("[aistudio] Android Python Core: resolving active proxy/VPN & VLESS pool...")
-    proxies = _shim.detect_android_proxies()
-    routes = [(p["scheme"], p["host"], p["port"], p["label"]) for p in proxies]
-    routes.append(("direct", "", 0, "Device Network / Active External VPN (Lantern)"))
-
-    chosen = None
-    chosen_ip = None
-    for route in routes:
+    """Android bridge: verify external Lantern VPN and auto-chain 1/2/3 proxy layers until AI Studio is non-georestricted."""
+    print("[aistudio] Android Python Core: deep geo-gate probing & multi-layer route chaining...")
+    results = _shim.discover_best_android_route(probe_aistudio_gates, target_service="aistudio")
+    best = None
+    for route, g in results:
         scheme, host, port, label = route
-        _shim.set_active_proxy_override(route)
-        try:
-            ip = probe_egress(timeout=8)
-            r_ai = _shim.android_curl(["-o", "/dev/null", "-w", "%{http_code}", AISTUDIO_URL], timeout=8)
-            ai_ok = r_ai.stdout.strip() not in ("", "000", "403", "451")
-            print(f"   route={label} -> egress={ip or 'NONE'} aistudio={r_ai.stdout.strip()}")
-            if ip and ai_ok:
-                chosen = route
-                chosen_ip = ip
-                break
-        finally:
-            _shim.set_active_proxy_override(None)
+        status_s = f"PASS {g['country']} {g['egress']} ({g['latency_ms']}ms)" if g["verdict"] else f"FAIL: {g['reason']}"
+        print(f"   • {label} -> {status_s}", flush=True)
+        if g["verdict"] and (best is None or gate_score(g) < gate_score(best[1])):
+            best = (route, g)
 
-    if chosen is None:
+    if best is None:
         print(
-            "[aistudio] No live proxy/VPN path reached aistudio.google.com.",
+            "[aistudio] No route passed AI Studio's non-georestricted gate checks (country + HTTPS redirect + DOM + accounts).",
             file=sys.stderr,
         )
         print(
-            "[aistudio] Turn on Lantern / v2rayNG (:10808/:10809) or DastYab VPN, or install ~/.dastyab/bin/xray.",
+            "[aistudio] Connect a clean residential/v2rayNG/harvested proxy hop on top of Lantern, or switch Lantern region.",
             file=sys.stderr,
         )
         return False, None
 
-    scheme, host, port, label = chosen
+    route, g = best
+    scheme, host, port, label = route
+    chain_hops = (
+        [{"scheme": h[0], "host": h[1], "port": h[2]} for h in host]
+        if scheme == "chain" and isinstance(host, list)
+        else []
+    )
     with open(bridgefile, "w") as fh:
         json.dump(
-            {"scheme": scheme, "host": host, "port": port, "label": label, "egress": chosen_ip},
+            {
+                "scheme": scheme,
+                "host": host if scheme != "chain" else "",
+                "port": port,
+                "hops": len(chain_hops) if scheme == "chain" else (0 if scheme == "direct" else 1),
+                "chain": chain_hops,
+                "label": label,
+                "egress": g["egress"],
+                "country": g["country"],
+            },
             fh,
         )
-    print(f"[aistudio] Route ready via {label} | Clean egress IP: {chosen_ip}")
+    print(f"[aistudio] Unlocked via {label} | {g['reason']}")
     print("[aistudio] Opening AI Studio in DastYab Browser...")
-    proxy_port = port if scheme in ("http", "socks5") else None
+    proxy_port = port if scheme in ("http", "socks5") and port > 0 else None
     launch_browser(proxy_port=proxy_port)
     return True, server_index
 
@@ -447,20 +671,17 @@ def verify():
     has_xray = _find_xray_optional() is not None
 
     if not has_xray and _shim.is_android():
-        print("[aistudio] Checking Android active routes for AI Studio:")
-        proxies = _shim.detect_android_proxies()
-        routes = [(p["scheme"], p["host"], p["port"], p["label"]) for p in proxies]
-        routes.append(("direct", "", 0, "Device Network / Active External VPN (Lantern)"))
-        for route in routes:
-            _shim.set_active_proxy_override(route)
-            try:
-                ip = probe_egress(timeout=6)
-                r_ai = _shim.android_curl(["-o", "/dev/null", "-w", "%{http_code}", AISTUDIO_URL], timeout=8)
-                code = r_ai.stdout.strip()
-                mark = f"OK   egress {ip} (HTTP {code})" if (ip and code not in ("000", "403", "451")) else f"FAIL (egress={ip}, HTTP {code})"
-                print(f"   • {route[3]}  {mark}")
-            finally:
-                _shim.set_active_proxy_override(None)
+        print("[aistudio] Checking Android Layer 0 (Lantern) & multi-layer routes for AI Studio:")
+        results = _shim.discover_best_android_route(probe_aistudio_gates, target_service="aistudio")
+        passed_count = 0
+        for route, g in results:
+            if g["verdict"]:
+                passed_count += 1
+                mark = f"OK   {g['country']} {g['egress']} (HTTP {g['http_code']}, {g['latency_ms']}ms)"
+            else:
+                mark = f"FAIL ({g['reason']})"
+            print(f"   • {route[3]}  {mark}", flush=True)
+        print(f"[aistudio] {passed_count}/{len(results)} route(s) passed AI Studio non-georestricted gates.")
         if pool:
             print(f"[aistudio] Probing TCP/TLS latency for {len(pool)} stored VLESS server(s):")
             alive_tcp = 0

@@ -33,7 +33,12 @@ KNOWN_ANDROID_PROXIES = (
     ("DastYab Bridge", "http", "127.0.0.1", 10850),
 )
 
-_ACTIVE_PROXY_TARGET = None  # tuple: (scheme, host, port, label) or ("direct", "", 0, label)
+_ACTIVE_PROXY_TARGET = None  # 4-tuple: (scheme|"chain", host|hops_list, port, label)
+_LAST_HTTP_META = {"final_url": "", "code": 0, "headers": {}}
+
+
+def get_last_final_url():
+    return _LAST_HTTP_META.get("final_url", "")
 
 
 def set_event_callback(cb):
@@ -112,35 +117,65 @@ def tcp_probe(host, port, timeout=0.25):
                 pass
 
 
-def detect_android_proxies():
-    """Return list of currently listening local proxy dicts: {label, scheme, host, port}."""
-    found = []
-    # Respect Android route state exported by Kotlin side if present
+def _read_route_doc():
     route_file = os.path.join(profile_dir(), "android_route.json")
     if os.path.isfile(route_file):
         try:
             with open(route_file) as fh:
                 doc = json.load(fh)
-            bport = doc.get("bridge_port")
-            if isinstance(bport, int) and bport > 0 and tcp_probe("127.0.0.1", bport, 0.2):
-                found.append({
-                    "label": f"DastYab Bridge (:{bport})",
-                    "scheme": "http",
-                    "host": "127.0.0.1",
-                    "port": bport,
-                })
-            uhost = doc.get("upstream_host")
-            uport = doc.get("upstream_port")
-            uscheme = (doc.get("upstream_scheme") or "http").lower()
-            if uhost and isinstance(uport, int) and uport > 0 and tcp_probe(uhost, uport, 0.2):
-                found.append({
-                    "label": f"Configured Upstream ({uscheme.upper()} {uhost}:{uport})",
-                    "scheme": uscheme if uscheme in ("http", "socks5") else "http",
-                    "host": uhost,
-                    "port": uport,
-                })
+            if isinstance(doc, dict):
+                return doc
         except Exception:
             pass
+    return {}
+
+
+def _normalize_hop(raw):
+    if not isinstance(raw, dict):
+        return None
+    scheme = str(raw.get("scheme", "")).lower().strip()
+    host = str(raw.get("host", "")).strip()
+    try:
+        port = int(raw.get("port", 0))
+    except (TypeError, ValueError):
+        return None
+    if scheme not in ("http", "socks5") or not host or not (1 <= port <= 65535):
+        return None
+    return (
+        scheme,
+        host,
+        port,
+        str(raw.get("username", "") or ""),
+        str(raw.get("password", "") or ""),
+    )
+
+
+def _format_hop_label(hop):
+    return f"{hop[0].upper()} {hop[1]}:{hop[2]}"
+
+
+def detect_android_proxies(target_service=None):
+    """Return list of currently listening local proxy dicts: {label, scheme, host, port}."""
+    found = []
+    doc = _read_route_doc()
+    bport = doc.get("bridge_port")
+    if isinstance(bport, int) and bport > 0 and tcp_probe("127.0.0.1", bport, 0.2):
+        found.append({
+            "label": f"DastYab Bridge (:{bport})",
+            "scheme": "http",
+            "host": "127.0.0.1",
+            "port": bport,
+        })
+    uhost = doc.get("upstream_host")
+    uport = doc.get("upstream_port")
+    uscheme = (doc.get("upstream_scheme") or "http").lower()
+    if uhost and isinstance(uport, int) and uport > 0 and tcp_probe(uhost, uport, 0.2):
+        found.append({
+            "label": f"Configured Upstream ({uscheme.upper()} {uhost}:{uport})",
+            "scheme": uscheme if uscheme in ("http", "socks5") else "http",
+            "host": uhost,
+            "port": uport,
+        })
 
     seen = {(x["host"], x["port"]) for x in found}
     for label, scheme, host, port in KNOWN_ANDROID_PROXIES:
@@ -193,16 +228,37 @@ def _is_real_xray_binary(path):
     return bool(re.search(r"(Xray|V2Ray)\s+\d+\.\d+", out))
 
 
-def _socks5_connect(proxy_host, proxy_port, target_host, target_port, timeout):
-    """RFC 1928 SOCKS5 NOAUTH TCP connect with ATYP=0x03 (remote DNS, --socks5-hostname)."""
-    sock = socket.create_connection((proxy_host, int(proxy_port)), timeout=timeout)
+def _socks5_connect(
+    proxy_host,
+    proxy_port,
+    target_host,
+    target_port,
+    timeout,
+    username="",
+    password="",
+    base_sock=None,
+):
+    """RFC 1928 (+ RFC 1929 USER/PASS) SOCKS5 TCP connect with ATYP=0x03."""
+    sock = base_sock if base_sock is not None else socket.create_connection((proxy_host, int(proxy_port)), timeout=timeout)
     sock.settimeout(timeout)
     try:
-        # Greeting: VER=5, NMETHODS=1, METHOD=0x00 (NO AUTH)
-        sock.sendall(b"\x05\x01\x00")
+        has_auth = bool(username or password)
+        if has_auth:
+            sock.sendall(b"\x05\x02\x00\x02")
+        else:
+            sock.sendall(b"\x05\x01\x00")
         resp = _recv_exact(sock, 2)
-        if resp != b"\x05\x00":
+        if resp[0] != 5 or resp[1] not in (0, 2):
             raise OSError(f"SOCKS5 greeting rejected: {resp!r}")
+        if resp[1] == 2:
+            if not has_auth:
+                raise OSError("SOCKS5 proxy requires authentication")
+            ub = username.encode("utf-8")[:255]
+            pb = password.encode("utf-8")[:255]
+            sock.sendall(b"\x01" + bytes([len(ub)]) + ub + bytes([len(pb)]) + pb)
+            aresp = _recv_exact(sock, 2)
+            if aresp[1] != 0:
+                raise OSError(f"SOCKS5 auth failed: {aresp!r}")
 
         host_bytes = target_host.encode("utf-8")
         if len(host_bytes) > 255:
@@ -229,18 +285,37 @@ def _socks5_connect(proxy_host, proxy_port, target_host, target_port, timeout):
             raise OSError(f"SOCKS5 unknown ATYP={atyp}")
         return sock
     except Exception:
-        sock.close()
+        try:
+            sock.close()
+        except OSError:
+            pass
         raise
 
 
-def _http_proxy_connect(proxy_host, proxy_port, target_host, target_port, timeout):
-    """Establish HTTP CONNECT tunnel through an HTTP proxy (v2rayNG :10809, DastYab Bridge)."""
-    sock = socket.create_connection((proxy_host, int(proxy_port)), timeout=timeout)
+def _http_proxy_connect(
+    proxy_host,
+    proxy_port,
+    target_host,
+    target_port,
+    timeout,
+    username="",
+    password="",
+    base_sock=None,
+):
+    """Establish HTTP CONNECT tunnel through an HTTP proxy (optionally over an existing tunnel socket)."""
+    import base64
+
+    sock = base_sock if base_sock is not None else socket.create_connection((proxy_host, int(proxy_port)), timeout=timeout)
     sock.settimeout(timeout)
     try:
+        auth_hdr = ""
+        if username or password:
+            token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+            auth_hdr = f"Proxy-Authorization: Basic {token}\r\n"
         req = (
             f"CONNECT {target_host}:{int(target_port)} HTTP/1.1\r\n"
             f"Host: {target_host}:{int(target_port)}\r\n"
+            f"{auth_hdr}"
             f"Proxy-Connection: keep-alive\r\n\r\n"
         ).encode("ascii")
         sock.sendall(req)
@@ -255,7 +330,39 @@ def _http_proxy_connect(proxy_host, proxy_port, target_host, target_port, timeou
             raise OSError(f"HTTP CONNECT rejected: {status_line}")
         return sock
     except Exception:
-        sock.close()
+        try:
+            sock.close()
+        except OSError:
+            pass
+        raise
+
+
+def _open_proxy_chain(hops, target_host, target_port, timeout):
+    """Dial an arbitrary N-hop chain `[hop0 -> hop1 -> ... -> target_host:target_port]`."""
+    if not hops:
+        sock = socket.create_connection((target_host, int(target_port)), timeout=timeout)
+        sock.settimeout(timeout)
+        return sock
+
+    first = hops[0]
+    sock = socket.create_connection((first[1], int(first[2])), timeout=timeout)
+    sock.settimeout(timeout)
+    try:
+        for i, hop in enumerate(hops):
+            h_scheme, h_host, h_port, h_user, h_pass = hop
+            next_host, next_port = (hops[i + 1][1], hops[i + 1][2]) if i + 1 < len(hops) else (target_host, target_port)
+            if h_scheme == "socks5":
+                sock = _socks5_connect(h_host, h_port, next_host, next_port, timeout, h_user, h_pass, base_sock=sock)
+            elif h_scheme == "http":
+                sock = _http_proxy_connect(h_host, h_port, next_host, next_port, timeout, h_user, h_pass, base_sock=sock)
+            else:
+                raise OSError(f"Unsupported chain hop scheme: {h_scheme}")
+        return sock
+    except Exception:
+        try:
+            sock.close()
+        except OSError:
+            pass
         raise
 
 
@@ -290,8 +397,17 @@ def _decode_chunked(data):
     return bytes(out)
 
 
-def _http_request_via_proxy(url, proxy_scheme, proxy_host, proxy_port, timeout=15, follow_redirects=False):
-    """Execute one HTTP/HTTPS request via SOCKS5, HTTP CONNECT, or Direct/OS VPN."""
+def _http_request_via_proxy(
+    url,
+    proxy_scheme,
+    proxy_host,
+    proxy_port,
+    timeout=15,
+    follow_redirects=False,
+    _hops_remaining=6,
+):
+    """Execute HTTP/HTTPS request via SOCKS5, HTTP CONNECT, multi-hop chain, or Direct/OS VPN."""
+    global _LAST_HTTP_META
     parsed = urllib.parse.urlparse(url)
     scheme = parsed.scheme.lower()
     host = parsed.hostname
@@ -302,7 +418,10 @@ def _http_request_via_proxy(url, proxy_scheme, proxy_host, proxy_port, timeout=1
     if parsed.query:
         path = f"{path}?{parsed.query}"
 
-    if proxy_scheme == "socks5":
+    if proxy_scheme == "chain":
+        # proxy_host carries list of normalized hop tuples: (scheme, host, port, user, pass)
+        raw_sock = _open_proxy_chain(proxy_host, host, port, timeout)
+    elif proxy_scheme == "socks5":
         raw_sock = _socks5_connect(proxy_host, proxy_port, host, port, timeout)
     elif proxy_scheme == "http":
         if scheme == "https":
@@ -325,15 +444,16 @@ def _http_request_via_proxy(url, proxy_scheme, proxy_host, proxy_port, timeout=1
         req = (
             f"GET {path} HTTP/1.1\r\n"
             f"Host: {host}\r\n"
-            f"User-Agent: curl/8.5.0 DastYab-Android/3.2\r\n"
-            f"Accept: */*\r\n"
+            f"User-Agent: Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36\r\n"
+            f"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n"
+            f"Accept-Language: en-US,en;q=0.9\r\n"
             f"Accept-Encoding: identity\r\n"
             f"Connection: close\r\n\r\n"
         ).encode("ascii")
         conn.sendall(req)
 
         chunks = []
-        max_bytes = 256 * 1024  # enough for IP JSON & Flow HTML markers
+        max_bytes = 256 * 1024  # enough for IP JSON & Flow/AI Studio HTML markers
         read_total = 0
         while read_total < max_bytes:
             try:
@@ -353,6 +473,7 @@ def _http_request_via_proxy(url, proxy_scheme, proxy_host, proxy_port, timeout=1
 
     sep = raw.find(b"\r\n\r\n")
     if sep < 0:
+        _LAST_HTTP_META = {"final_url": url, "code": 0, "headers": {}}
         return 0, {}, ""
     hdr_bytes = raw[:sep]
     body_bytes = raw[sep + 4:]
@@ -372,10 +493,18 @@ def _http_request_via_proxy(url, proxy_scheme, proxy_host, proxy_port, timeout=1
         except Exception:
             pass
 
-    if follow_redirects and code in (301, 302, 303, 307, 308) and headers.get("location"):
+    _LAST_HTTP_META = {"final_url": url, "code": code, "headers": headers}
+
+    if follow_redirects and _hops_remaining > 0 and code in (301, 302, 303, 307, 308) and headers.get("location"):
         loc = urllib.parse.urljoin(url, headers["location"])
         return _http_request_via_proxy(
-            loc, proxy_scheme, proxy_host, proxy_port, timeout=timeout, follow_redirects=False
+            loc,
+            proxy_scheme,
+            proxy_host,
+            proxy_port,
+            timeout=timeout,
+            follow_redirects=True,
+            _hops_remaining=_hops_remaining - 1,
         )
 
     return code, headers, body_bytes.decode("utf-8", "replace")
@@ -389,18 +518,22 @@ class CurlResult:
 
 
 def android_curl(args, timeout=20, default_socks_port=10860):
-    """Pure-Python drop-in for `curl -s --max-time N --socks5-hostname host:port ...`."""
+    """Pure-Python drop-in for `curl -s [-L] --max-time N --socks5-hostname host:port ...`."""
     proxy_scheme = "socks5"
     proxy_host = "127.0.0.1"
     proxy_port = default_socks_port
     write_fmt = None
     out_dev_null = False
+    follow_redirects = False
     url = None
 
     i = 0
     while i < len(args):
         a = args[i]
-        if a in ("-s", "-L", "--silent"):
+        if a in ("-s", "--silent"):
+            i += 1
+        elif a in ("-L", "--location"):
+            follow_redirects = True
             i += 1
         elif a == "--max-time" and i + 1 < len(args):
             try:
@@ -430,11 +563,10 @@ def android_curl(args, timeout=20, default_socks_port=10860):
     if not url:
         return CurlResult(2, "", "no URL provided")
 
-    # Determine actual route if override is active (e.g. Android HTTP proxy or External VPN)
+    # Determine actual route if override is active (including multi-hop chains!)
     if _ACTIVE_PROXY_TARGET is not None and (proxy_host == "127.0.0.1" and proxy_port == default_socks_port):
         proxy_scheme, proxy_host, proxy_port, _ = _ACTIVE_PROXY_TARGET
     elif not tcp_probe(proxy_host, proxy_port, 0.15):
-        # If explicit local SOCKS port isn't open, check active Android proxy preset
         proxies = detect_android_proxies()
         if proxies:
             proxy_scheme = proxies[0]["scheme"]
@@ -445,18 +577,30 @@ def android_curl(args, timeout=20, default_socks_port=10860):
 
     try:
         code, headers, body = _http_request_via_proxy(
-            url, proxy_scheme, proxy_host, proxy_port, timeout=timeout, follow_redirects=False
+            url,
+            proxy_scheme,
+            proxy_host,
+            proxy_port,
+            timeout=timeout,
+            follow_redirects=follow_redirects,
         )
-        # If proxy target looks like HTTP (e.g. mixed/HTTP proxy on same port), retry as HTTP proxy
+        # If single-hop proxy target looks like HTTP rather than SOCKS5, retry as HTTP proxy
         if code == 0 and proxy_scheme == "socks5":
             try:
                 code, headers, body = _http_request_via_proxy(
-                    url, "http", proxy_host, proxy_port, timeout=timeout, follow_redirects=False
+                    url,
+                    "http",
+                    proxy_host,
+                    proxy_port,
+                    timeout=timeout,
+                    follow_redirects=follow_redirects,
                 )
             except Exception:
                 pass
         if write_fmt == "%{http_code}":
             return CurlResult(0, f"{code:03d}" if code > 0 else "000", "")
+        if write_fmt == "%{url_effective}":
+            return CurlResult(0, get_last_final_url() or url, "")
         if out_dev_null:
             return CurlResult(0, "", "")
         return CurlResult(0 if code > 0 else 52, body, "")
@@ -497,43 +641,102 @@ def probe_vless_node_transport(srv, timeout=2.5):
 
 
 def set_active_proxy_override(target):
-    """Set module override (`(scheme, host, port, label)` or `None`)."""
+    """Set module override (`(scheme|\"chain\", host|hops_list, port, label)` or `None`)."""
     global _ACTIVE_PROXY_TARGET
     _ACTIVE_PROXY_TARGET = target
 
 
-def discover_best_android_route(probe_gates_fn, want_country=None):
-    """Probe active Android proxy apps + active system VPN (e.g. Lantern) via `probe_gates_fn`."""
-    candidates = []
-    for p in detect_android_proxies():
-        candidates.append((p["scheme"], p["host"], p["port"], p["label"]))
-    # Always include active system network/VPN (e.g. Lantern or DastYab VpnService) as a route candidate
-    route_info_path = os.path.join(profile_dir(), "android_route.json")
-    ext_vpn = False
-    dastyab_vpn = False
-    if os.path.isfile(route_info_path):
-        try:
-            with open(route_info_path) as fh:
-                doc = json.load(fh)
-            ext_vpn = bool(doc.get("external_vpn_active"))
-            dastyab_vpn = bool(doc.get("dastyab_vpn_active"))
-        except Exception:
-            pass
+def _chain_to_route_tuple(hops, label_prefix="Chain"):
+    if len(hops) == 1 and not hops[0][3] and not hops[0][4]:
+        h = hops[0]
+        return (h[0], h[1], h[2], f"{label_prefix} ({_format_hop_label(h)})")
+    label = f"{label_prefix} {len(hops)}-Hop (" + " -> ".join(_format_hop_label(h) for h in hops) + ")"
+    return ("chain", list(hops), 0, label)
+
+
+def discover_best_android_route(probe_gates_fn, want_country=None, target_service=None, max_candidates=18):
+    """
+    Probe Layer 0 (External Lantern VPN), configured service-specific chains, local proxies,
+    and 2-/3-hop cascades via `probe_gates_fn`, keeping AI Studio and Flow routes independent.
+    """
+    doc = _read_route_doc()
+    ext_vpn = bool(doc.get("external_vpn_active"))
+    dastyab_vpn = bool(doc.get("dastyab_vpn_active"))
     sys_label = (
         "External System VPN (Lantern / Android VPN)"
         if ext_vpn
         else ("DastYab VpnService" if dastyab_vpn else "Device Network / System VPN")
     )
-    candidates.append(("direct", "", 0, sys_label))
+
+    candidates = []
+    seen_keys = set()
+
+    def add_candidate(route_tuple):
+        if len(candidates) >= max_candidates:
+            return
+        scheme, target, port, _ = route_tuple
+        if scheme == "chain":
+            key = "chain:" + "->".join(f"{h[0]}:{h[1]}:{h[2]}" for h in target)
+        elif scheme == "direct":
+            key = "direct"
+        else:
+            key = f"{scheme}:{target}:{port}"
+        if key not in seen_keys:
+            seen_keys.add(key)
+            candidates.append(route_tuple)
+
+    # 1. Service-specific configured chain (strictly separated for aistudio vs flow)
+    svc_key = "flow_chain" if target_service == "flow" else ("aistudio_chain" if target_service == "aistudio" else None)
+    if svc_key:
+        svc_hops = [h for h in (_normalize_hop(x) for x in doc.get(svc_key, [])) if h]
+        if svc_hops:
+            add_candidate(_chain_to_route_tuple(svc_hops, f"{target_service.upper()} Saved"))
+    global_hops = [h for h in (_normalize_hop(x) for x in doc.get("upstream_chain", [])) if h]
+    if global_hops:
+        add_candidate(_chain_to_route_tuple(global_hops, "Saved Chain"))
+
+    # 2. Layer 0: Direct / External Lantern VPN
+    add_candidate(("direct", "", 0, sys_label))
+
+    # 3. Single-hop local listening proxies
+    local_hops = []
+    for p in detect_android_proxies(target_service=target_service):
+        add_candidate((p["scheme"], p["host"], p["port"], p["label"]))
+        local_hops.append((p["scheme"], p["host"], p["port"], "", ""))
+
+    # 4. Alive harvested external SOCKS5/HTTP hops (synced from Android ConfigHarvester)
+    raw_harvested = [h for h in (_normalize_hop(x) for x in doc.get("proxy_hops", [])) if h]
+    alive_harvested = [h for h in raw_harvested[:16] if tcp_probe(h[1], h[2], 0.6)]
+    for h in alive_harvested[:6]:
+        add_candidate(_chain_to_route_tuple([h], "Harvested"))
+
+    # 5. Two-hop cascades (local_proxy -> local_proxy, local_proxy -> harvested, harvested -> harvested)
+    for a in local_hops[:3]:
+        for b in local_hops[:3]:
+            if (a[1], a[2]) != (b[1], b[2]):
+                add_candidate(_chain_to_route_tuple([a, b], "2-Hop"))
+        for b in alive_harvested[:4]:
+            add_candidate(_chain_to_route_tuple([a, b], "2-Hop"))
+    for a in alive_harvested[:3]:
+        for b in alive_harvested[:3]:
+            if (a[1], a[2]) != (b[1], b[2]):
+                add_candidate(_chain_to_route_tuple([a, b], "2-Hop"))
+
+    # 6. Three-hop cascades for stubborn geo-blocks (e.g. Google Flow on top of Lantern)
+    for a in local_hops[:2]:
+        for b in alive_harvested[:3]:
+            for c in alive_harvested[:3]:
+                if len({(a[1], a[2]), (b[1], b[2]), (c[1], c[2])}) == 3:
+                    add_candidate(_chain_to_route_tuple([a, b, c], "3-Hop"))
 
     results = []
-    for scheme, host, port, label in candidates:
-        set_active_proxy_override((scheme, host, port, label))
+    for route in candidates:
+        set_active_proxy_override(route)
         try:
             g = probe_gates_fn(want_country=want_country)
         finally:
             set_active_proxy_override(None)
-        results.append(((scheme, host, port, label), g))
+        results.append((route, g))
     return results
 
 

@@ -36,12 +36,14 @@ object GoogleAccessSheet {
         val settings = TunnelConfig.load(activity)
         val externalVpn = NetworkUtils.hasActiveExternalVpn(activity)
         val bridgePort = LocalProxyService.activePort()
+        val targetService = targetUrl?.let { GeoBypassEngine.TargetService.fromUrl(it) }
         val route = GeoBypassEngine.planRoute(
             settings = settings,
             externalVpnActive = externalVpn,
             dastyabVpnActive = DastyabVpnService.isConnected(),
             runningBridgePort = bridgePort,
-            detectedListeningHttpPort = null
+            detectedListeningHttpPort = null,
+            targetService = targetService
         )
 
         val options = mutableListOf<String>()
@@ -131,10 +133,22 @@ object GoogleAccessSheet {
             Toast.makeText(activity, activity.getString(R.string.access_sheet_toast_chain), Toast.LENGTH_SHORT).show()
         }
 
-        // 6. Live Geo & Flow Country Check
+        // 6. Auto-Chain Layers for Google AI Studio
+        options.add(activity.getString(R.string.access_sheet_opt_chain_aistudio))
+        actions.add {
+            runAutoChainDialog(activity, GeoBypassEngine.TargetService.AI_STUDIO, onConfigChanged)
+        }
+
+        // 7. Auto-Chain Layers for Google Flow (stricter / separate chain)
+        options.add(activity.getString(R.string.access_sheet_opt_chain_flow))
+        actions.add {
+            runAutoChainDialog(activity, GeoBypassEngine.TargetService.GOOGLE_FLOW, onConfigChanged)
+        }
+
+        // 8. Live Geo & Flow Country Check (tests both services separately)
         options.add(activity.getString(R.string.access_sheet_opt_geocheck))
         actions.add {
-            runLiveGeoCheckDialog(activity)
+            runLiveGeoCheckDialog(activity, targetUrl)
         }
 
         // 7. Launch Lantern directly (if installed)
@@ -421,40 +435,119 @@ object GoogleAccessSheet {
         )
     }
 
-    fun runLiveGeoCheckDialog(activity: Activity) {
+    fun runAutoChainDialog(
+        activity: Activity,
+        targetService: GeoBypassEngine.TargetService,
+        onConfigChanged: () -> Unit = {}
+    ) {
+        if (!UiSafety.isActivityAlive(activity)) return
+        val statusTv = TextView(activity).apply {
+            val pad = (18 * activity.resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, pad / 2)
+            text = activity.getString(R.string.access_sheet_chain_running)
+            textSize = 13f
+        }
+        val progressDialog = AlertDialog.Builder(activity)
+            .setTitle(activity.getString(R.string.access_sheet_chain_progress_title, targetService.displayName))
+            .setView(statusTv)
+            .setCancelable(false)
+            .create()
+        runCatching { progressDialog.show() }
+
+        val steps = mutableListOf<String>()
+        thread(isDaemon = true, name = "dastyab-sheet-autochain") {
+            val result = GeoBypassEngine.discoverAndChainBestRoute(
+                context = activity,
+                targetService = targetService,
+                allowHarvest = true,
+                maxCandidates = 18
+            ) { line ->
+                steps.add(line)
+                activity.runOnUiThread {
+                    if (UiSafety.isActivityAlive(activity)) {
+                        statusTv.text = steps.takeLast(8).joinToString("\n")
+                    }
+                }
+            }
+            activity.runOnUiThread {
+                runCatching { if (progressDialog.isShowing) progressDialog.dismiss() }
+                if (!UiSafety.isActivityAlive(activity)) return@runOnUiThread
+                val ccTag = result.report.egress?.countryCode ?: "??"
+                val ipTag = result.report.egress?.ip ?: "-"
+                val msg = buildString {
+                    append(result.summary).append("\n\n")
+                    append("Exit IP : $ipTag ($ccTag)\n")
+                    append("Attempts: ${result.attempts.size}\n\n")
+                    append(result.report.recommendation)
+                }
+                UiSafety.safeShowDialog(
+                    activity,
+                    AlertDialog.Builder(activity)
+                        .setTitle(if (result.success) "${targetService.displayName} Unlocked ✓" else "${targetService.displayName} Geo-Restricted")
+                        .setMessage(msg)
+                        .setPositiveButton(android.R.string.ok, null)
+                )
+                onConfigChanged()
+            }
+        }
+    }
+
+    fun runLiveGeoCheckDialog(activity: Activity, targetUrl: String? = null) {
         if (!UiSafety.isActivityAlive(activity)) return
         Toast.makeText(activity, activity.getString(R.string.access_sheet_geocheck_running), Toast.LENGTH_SHORT).show()
 
         thread(isDaemon = true, name = "dastyab-geo-check") {
-            val route = GeoBypassEngine.resolveCurrentRoute(activity)
-            val report = GeoBypassEngine.runAccessProbe(route, timeoutMs = 4200)
+            val settings = TunnelConfig.load(activity)
+            val aiRoute = GeoBypassEngine.resolveCurrentRoute(activity, settings, GeoBypassEngine.TargetService.AI_STUDIO)
+            val flowRoute = GeoBypassEngine.resolveCurrentRoute(activity, settings, GeoBypassEngine.TargetService.GOOGLE_FLOW)
+            val aiReport = GeoBypassEngine.runAccessProbe(aiRoute, timeoutMs = 4200)
+            val flowReport = if (flowRoute.upstreamChainSpec == aiRoute.upstreamChainSpec && flowRoute.javaNetProxy == aiRoute.javaNetProxy) {
+                aiReport
+            } else {
+                GeoBypassEngine.runAccessProbe(flowRoute, timeoutMs = 4200)
+            }
+
             activity.runOnUiThread {
                 if (!UiSafety.isActivityAlive(activity)) return@runOnUiThread
-                val egress = report.egress
+                val egress = flowReport.egress ?: aiReport.egress
                 val geoLine = if (egress != null) {
-                    val flag = if (report.flowCountrySupported) {
+                    val flag = if (flowReport.flowCountrySupported) {
                         activity.getString(R.string.browser_geo_supported)
                     } else {
                         activity.getString(R.string.browser_geo_blocked_short)
                     }
                     activity.getString(R.string.access_sheet_geo_line_ok, egress.ip, egress.countryCode, egress.countryName, flag)
                 } else {
-                    activity.getString(R.string.access_sheet_geo_line_unavailable, report.routeLabel)
+                    activity.getString(R.string.access_sheet_geo_line_unavailable, flowReport.routeLabel)
                 }
-                val msg = buildString {
-                    append(activity.getString(R.string.access_sheet_geo_route, report.routeLabel)).append("\n")
-                    append(geoLine).append("\n\n")
-                    append("AI Studio : ${report.aiStudio.detail}\n")
-                    append("Flow      : ${report.flow.detail}\n\n")
-                    append(report.recommendation)
+                val primaryTarget = targetUrl?.let { GeoBypassEngine.TargetService.fromUrl(it) }
+                    ?: if (!flowReport.readyForFlow) GeoBypassEngine.TargetService.GOOGLE_FLOW else GeoBypassEngine.TargetService.AI_STUDIO
+
+                val dualBody = activity.getString(
+                    R.string.access_sheet_geocheck_dual,
+                    aiReport.routeLabel,
+                    "${if (aiReport.readyForAiStudio) "READY ✓" else "BLOCKED ✗"} · ${aiReport.aiStudio.detail}",
+                    flowReport.routeLabel,
+                    "${if (flowReport.readyForFlow) "READY ✓" else "BLOCKED ✗"} · ${flowReport.flow.detail}",
+                    if (flowReport.flow.appShellOk) "AiSandboxAngularFrontend ✓" else "Missing ✗",
+                    if (flowReport.accountsReachable) "Reachable ✓" else "Blocked ✗"
+                )
+                val msg = "$geoLine\n\n$dualBody\n\n${flowReport.recommendation}"
+                val title = when {
+                    aiReport.readyForAiStudio && flowReport.readyForFlow -> "AI Studio ✓ & Flow ✓ (${egress?.countryCode ?: "?"})"
+                    aiReport.readyForAiStudio -> "AI Studio ✓ · Flow Geo-Blocked ✗"
+                    else -> flowReport.headline
                 }
                 UiSafety.safeShowDialog(
                     activity,
                     AlertDialog.Builder(activity)
-                        .setTitle(report.headline)
+                        .setTitle(title)
                         .setMessage(msg)
                         .setPositiveButton(activity.getString(R.string.access_sheet_switch_route_btn)) { _, _ ->
-                            show(activity)
+                            show(activity, targetUrl = targetUrl)
+                        }
+                        .setNeutralButton(activity.getString(R.string.browser_btn_auto_chain)) { _, _ ->
+                            runAutoChainDialog(activity, primaryTarget)
                         }
                         .setNegativeButton(android.R.string.ok, null)
                 )

@@ -108,6 +108,7 @@ object PythonRuntimeBridge {
             val settings = TunnelConfig.load(context)
             val layerUri = VpnLayerStore.getActiveLayer(context).configUri
             val harvested = TunnelConfig.loadHarvestedConfigs(context)
+            val harvestedProxyHops = UniversalConfig.extractChainableProxyHops(harvested)
             val nodesJson = TerminalCommandRouter.buildVlessSyncJson(
                 activeUri = settings.vlessUri,
                 layerUri = layerUri,
@@ -119,7 +120,11 @@ object PythonRuntimeBridge {
                 bridgePort = LocalProxyService.activePort(),
                 upstreamScheme = settings.upstreamProxyScheme,
                 upstreamHost = settings.upstreamProxyHost,
-                upstreamPort = settings.upstreamProxyPort
+                upstreamPort = settings.upstreamProxyPort,
+                upstreamChain = settings.upstreamProxyChain,
+                aiStudioChain = settings.aiStudioProxyChain,
+                flowChain = settings.flowProxyChain,
+                harvestedProxyHops = harvestedProxyHops
             )
             val shell = Python.getInstance().getModule("dastyab_terminal_shell")
             shell.callAttr("sync_nodes", nodesJson, routeJson).toInt()

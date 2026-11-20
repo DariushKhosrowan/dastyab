@@ -31,6 +31,7 @@ class LocalProxyService : Service() {
         const val ACTION_START = "com.dastyab.app.proxy.START"
         const val ACTION_STOP = "com.dastyab.app.proxy.STOP"
         const val ACTION_STATE_CHANGED = "com.dastyab.app.proxy.STATE_CHANGED"
+        const val EXTRA_TARGET_SERVICE = "extra_target_service"
 
         private const val CHANNEL_ID = "dastyab_local_proxy_channel"
         private const val NOTIFICATION_ID = 1043
@@ -47,14 +48,21 @@ class LocalProxyService : Service() {
                 lastError = null
             )
         )
+        private val activeTargetRef = AtomicReference<String?>(null)
+        private val activeChainSpecRef = AtomicReference<String>("")
 
         fun isRunning(): Boolean = statsRef.get().running && statsRef.get().port > 0
         fun activePort(): Int? = statsRef.get().takeIf { it.running && it.port > 0 }?.port
+        fun activeTargetService(): String? = activeTargetRef.get()
+        fun activeChainSpec(): String = activeChainSpecRef.get()
         fun getStats(): LocalProxyServer.Stats = statsRef.get()
 
-        fun startSafely(context: Context): Boolean {
+        fun startSafely(context: Context, targetServiceKey: String? = null): Boolean {
             val intent = Intent(context, LocalProxyService::class.java).apply {
                 action = ACTION_START
+                if (!targetServiceKey.isNullOrBlank()) {
+                    putExtra(EXTRA_TARGET_SERVICE, targetServiceKey)
+                }
             }
             return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -94,7 +102,8 @@ class LocalProxyService : Service() {
                 START_NOT_STICKY
             }
             else -> {
-                startBridge()
+                val targetKey = intent?.getStringExtra(EXTRA_TARGET_SERVICE)
+                startBridge(targetKey)
                 START_STICKY
             }
         }
@@ -110,29 +119,34 @@ class LocalProxyService : Service() {
         return runCatching { TunnelConfig.load(this) }.getOrElse { TunnelConfig.Settings() }
     }
 
-    private fun buildUpstream(settings: TunnelConfig.Settings, listenPort: Int): LocalProxyServer.Upstream {
-        val host = TunnelConfig.sanitizeProxyHost(settings.upstreamProxyHost)
-        val port = settings.upstreamProxyPort
-        // Avoid self-loop if upstream points to our own listening loopback port
-        val isSelfLoop = (host == "127.0.0.1" || host == "localhost") && port == listenPort
-        if (isSelfLoop || port !in 1..65535) {
-            return LocalProxyServer.Upstream.Direct
-        }
-        return when (settings.upstreamProxyScheme) {
-            TunnelConfig.ProxyScheme.DIRECT -> LocalProxyServer.Upstream.Direct
-            TunnelConfig.ProxyScheme.HTTP -> LocalProxyServer.Upstream.Http(host, port)
-            TunnelConfig.ProxyScheme.SOCKS5 -> LocalProxyServer.Upstream.Socks5(host, port)
-        }
+    private fun buildUpstream(
+        settings: TunnelConfig.Settings,
+        listenPort: Int,
+        targetServiceKey: String?
+    ): Pair<LocalProxyServer.Upstream, String> {
+        val hops = TunnelConfig.effectiveUpstreamHops(settings, targetServiceKey, listenPort)
+        val upstream = TunnelConfig.toLocalProxyUpstream(hops, listenPort)
+        return upstream to TunnelConfig.formatProxyChain(hops)
     }
 
-    private fun startBridge() {
+    private fun startBridge(targetServiceKey: String? = null) {
         val settings = loadSettingsSafely()
         val desiredPort = TunnelConfig.clampPort(
             settings.localBridgePort,
             TunnelConfig.DEFAULT_LOCAL_BRIDGE_PORT,
             TunnelConfig.MIN_LOCAL_PORT
         )
-        val upstream = buildUpstream(settings, desiredPort)
+        val (upstream, chainSpec) = buildUpstream(settings, desiredPort, targetServiceKey)
+
+        // If already running with identical upstream chain & port, keep existing sockets undisturbed.
+        if (server?.isRunning() == true &&
+            activeChainSpecRef.get() == chainSpec &&
+            server?.actualPort == desiredPort
+        ) {
+            activeTargetRef.set(targetServiceKey)
+            statsRef.set(server!!.stats())
+            return
+        }
 
         enterForegroundCompat("Starting 127.0.0.1:$desiredPort…")
 
@@ -151,6 +165,8 @@ class LocalProxyService : Service() {
             if (server == null) {
                 server = srv
             }
+            activeTargetRef.set(targetServiceKey)
+            activeChainSpecRef.set(chainSpec)
             val currentStats = (server ?: srv).stats()
             statsRef.set(currentStats)
             enterForegroundCompat("127.0.0.1:$boundPort → ${upstream.describe()}")
@@ -165,6 +181,8 @@ class LocalProxyService : Service() {
 
     private fun stopBridge() {
         stopBridgeInternal()
+        activeTargetRef.set(null)
+        activeChainSpecRef.set("")
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(STOP_FOREGROUND_REMOVE)

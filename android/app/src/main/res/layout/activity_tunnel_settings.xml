@@ -273,6 +273,80 @@
                 android:layout_marginTop="8dp"
                 android:text="@string/tunnel_btn_copy_v2rayng"
                 style="@style/DastyabButton" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:paddingBottom="4dp"
+                android:text="@string/tunnel_aistudio_chain_label"
+                android:textSize="12sp"
+                android:textColor="?attr/dastyabTextSecondary" />
+
+            <EditText
+                android:id="@+id/etAiStudioChain"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/tunnel_chain_hint"
+                android:inputType="textUri|textMultiLine"
+                android:minLines="1"
+                android:maxLines="3"
+                android:fontFamily="monospace"
+                android:textSize="12sp"
+                android:padding="12dp"
+                android:background="@drawable/input_bg"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingBottom="4dp"
+                android:text="@string/tunnel_flow_chain_label"
+                android:textSize="12sp"
+                android:textColor="?attr/dastyabTextSecondary" />
+
+            <EditText
+                android:id="@+id/etFlowChain"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/tunnel_chain_hint"
+                android:inputType="textUri|textMultiLine"
+                android:minLines="1"
+                android:maxLines="3"
+                android:fontFamily="monospace"
+                android:textSize="12sp"
+                android:padding="12dp"
+                android:background="@drawable/input_bg"
+                android:textColor="?attr/dastyabTextPrimary"
+                android:textColorHint="?attr/dastyabTextSecondary"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnAutoChainAiStudio"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:text="@string/tunnel_btn_autochain_aistudio"
+                    android:textSize="11sp"
+                    style="@style/DastyabButton" />
+
+                <Button
+                    android:id="@+id/btnAutoChainFlow"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/tunnel_btn_autochain_flow"
+                    android:textSize="11sp"
+                    style="@style/DastyabButton" />
+            </LinearLayout>
         </LinearLayout>
 
         <View

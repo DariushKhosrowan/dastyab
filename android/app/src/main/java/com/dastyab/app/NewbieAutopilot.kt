@@ -59,7 +59,11 @@ object NewbieAutopilot {
         val installedVpnApps: List<ConfigHarvester.FallbackTool>,
         val headline: String,
         val recommendation: String,
-        val logLines: List<String>
+        val logLines: List<String>,
+        val aiStudioReady: Boolean = targetReady,
+        val flowReady: Boolean = targetReady,
+        val aiStudioRouteLabel: String = routeLabel,
+        val flowRouteLabel: String = routeLabel
     )
 
     /** Pure-Kotlin outcome decision helper (unit-testable on the JVM). */
@@ -89,6 +93,57 @@ object NewbieAutopilot {
         else -> ExternalRoutePlan.NEEDS_EXTERNAL_VPN_CONNECT
     }
 
+    private fun startBridgeForRouteIfNeeded(
+        context: Context,
+        route: GeoBypassEngine.RouteResolution,
+        target: GeoBypassEngine.TargetService
+    ): GeoBypassEngine.RouteResolution {
+        if (!route.shouldStartLocalBridge) return route
+        LocalProxyService.startSafely(context, target.key)
+        var waited = 0
+        while (
+            (LocalProxyService.activePort() == null ||
+                LocalProxyService.activeChainSpec() != route.upstreamChainSpec) &&
+            waited < 1200
+        ) {
+            try { Thread.sleep(60) } catch (_: InterruptedException) { break }
+            waited += 60
+        }
+        return GeoBypassEngine.resolveCurrentRoute(context, targetService = target)
+    }
+
+    private fun toEndpointCheck(
+        name: String,
+        url: String,
+        ready: Boolean,
+        probe: GeoBypassEngine.ServiceProbeResult,
+        report: GeoBypassEngine.AccessProbeReport,
+        isFlow: Boolean
+    ): ReachabilityVerifier.EndpointCheck {
+        val ccSupported = if (isFlow) report.flowCountrySupported else report.aiStudioCountrySupported
+        val status = when {
+            ready -> ReachabilityVerifier.Status.REACHABLE
+            probe.unsupportedRegion || !ccSupported || (isFlow && probe.reachable && !probe.appShellOk) ->
+                ReachabilityVerifier.Status.GEO_RESTRICTED
+            probe.httpCode > 0 -> ReachabilityVerifier.classifyHttpCode(probe.httpCode)
+            else -> ReachabilityVerifier.Status.TLS_OR_IP_BLOCKED
+        }
+        val detail = when {
+            ready -> probe.detail
+            !ccSupported -> "Geo-blocked country ${report.egress?.countryCode ?: "unknown"} (${probe.detail})"
+            else -> probe.detail
+        }
+        return ReachabilityVerifier.EndpointCheck(
+            name = name,
+            url = url,
+            status = status,
+            httpCode = probe.httpCode,
+            latencyMs = probe.latencyMs,
+            resolvedIp = report.egress?.ip ?: "-",
+            detail = detail
+        )
+    }
+
     fun run(
         context: Context,
         onStep: (String) -> Unit = {}
@@ -102,7 +157,7 @@ object NewbieAutopilot {
         val externalVpnActive = NetworkUtils.hasActiveExternalVpn(context)
         val listeningProxies = GeoBypassEngine.discoverListeningProxies(timeoutMs = 150)
 
-        emit("Step 1/5: Checking live reachability for AI Studio & Google Flow…")
+        emit("Step 1/5: Checking deep geo & reachability for AI Studio and Google Flow separately…")
         if (externalVpnActive) {
             emit("  • Detected active External VPN (Lantern / System) — preserving OS VPN slot.")
         } else if (listeningProxies.isNotEmpty()) {
@@ -116,14 +171,36 @@ object NewbieAutopilot {
         emit("  • Flow      : ${check.flow.detail}")
 
         val installedProxies = ConfigHarvester.detectFallbackTools(context).filter { it.isInstalled }
-        if (check.allReady) {
-            emit("OK: Everything is already reachable! Harvesting backup configs in background…")
+
+        // Even when general HTTP responds, verify deep geo-gates separately for AI Studio & Flow!
+        val initialAiRoute = startBridgeForRouteIfNeeded(
+            context,
+            GeoBypassEngine.resolveCurrentRoute(context, targetService = GeoBypassEngine.TargetService.AI_STUDIO),
+            GeoBypassEngine.TargetService.AI_STUDIO
+        )
+        var aiProbe = GeoBypassEngine.runAccessProbe(initialAiRoute, timeoutMs = 4000)
+
+        val initialFlowRoute = startBridgeForRouteIfNeeded(
+            context,
+            GeoBypassEngine.resolveCurrentRoute(context, targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW),
+            GeoBypassEngine.TargetService.GOOGLE_FLOW
+        )
+        var flowProbe = GeoBypassEngine.runAccessProbe(initialFlowRoute, timeoutMs = 4000)
+
+        check = ReachabilityVerifier.FullVerification(
+            internet = check.internet,
+            aiStudio = toEndpointCheck("Google AI Studio", ReachabilityVerifier.URL_AISTUDIO, aiProbe.readyForAiStudio, aiProbe.aiStudio, aiProbe, isFlow = false),
+            flow = toEndpointCheck("Google Flow", ReachabilityVerifier.URL_FLOW, flowProbe.readyForFlow, flowProbe.flow, flowProbe, isFlow = true)
+        )
+
+        if (check.internet.isOk && aiProbe.readyForAiStudio && flowProbe.readyForFlow) {
+            emit("OK: Both AI Studio & Google Flow passed strict geo-gate checks! Harvesting backup configs…")
             val quickHarvest = ConfigHarvester.harvestResilient(context)
             val best = HarvestSourceStore.benchmarkHarvestedConfigs(quickHarvest.configs, maxToTest = 10).firstOrNull()
             return AutopilotReport(
                 outcome = if (DastyabVpnService.isConnected() || externalVpnActive) Outcome.READY_WITH_VPN else Outcome.READY_DIRECT,
-                headline = "AI Studio & Google Flow Are Ready!",
-                summary = "Both Google AI Studio (${check.aiStudio.latencyMs}ms) and Google Flow (${check.flow.latencyMs}ms) are reachable right now.",
+                headline = "AI Studio & Google Flow Are Geo-Clear!",
+                summary = "Google AI Studio (${aiProbe.aiStudio.latencyMs}ms via ${aiProbe.egress?.countryCode}) and Google Flow (${flowProbe.flow.latencyMs}ms via ${flowProbe.egress?.countryCode}) are both verified non-georestricted.",
                 verification = check,
                 bestDohLabel = TunnelConfig.load(context).dohUrl,
                 bestHarvestedUri = best?.uri,
@@ -146,66 +223,61 @@ object NewbieAutopilot {
             emit("  ✗ External DoH/DNS probes timed out — keeping default Cloudflare DoH.")
         }
 
-        // Step 3: Preserve External VPN / Local Proxy if active, otherwise start DastYab Smart VPN
+        // Step 3: Preserve External VPN / stack multi-layer chains ON TOP of Lantern or local proxy
         val vpnConsentNeeded = VpnService.prepare(context) != null
         var activeVpnOrExternal = externalVpnActive || DastyabVpnService.isConnected()
         when {
-            externalVpnActive -> {
-                emit("Step 3/5: External VPN (Lantern / System) is active — preserving OS VPN slot without overwriting it.")
+            externalVpnActive || listeningProxies.isNotEmpty() -> {
+                if (externalVpnActive) {
+                    emit("Step 3/5: External VPN (Lantern) is active — chaining proxy layers ON TOP without killing OS VPN.")
+                } else {
+                    emit("Step 3/5: Local proxy port detected — chaining proxy layers without occupying OS VPN slot.")
+                }
                 val cur = TunnelConfig.load(context)
-                if (cur.googleAccessMode == TunnelConfig.GoogleAccessMode.VPN_CHAIN_PROXY) {
+                if (cur.googleAccessMode == TunnelConfig.GoogleAccessMode.VPN_CHAIN_PROXY ||
+                    cur.googleAccessMode == TunnelConfig.GoogleAccessMode.EXTERNAL_VPN
+                ) {
                     TunnelConfig.saveGoogleProxyConfig(
                         context = context,
                         accessMode = TunnelConfig.GoogleAccessMode.AUTO_SMART,
-                        scheme = TunnelConfig.ProxyScheme.DIRECT,
+                        scheme = cur.upstreamProxyScheme,
                         host = cur.upstreamProxyHost,
-                        port = cur.upstreamProxyPort
+                        port = cur.upstreamProxyPort,
+                        localBridgePort = cur.localBridgePort,
+                        autoStartBridge = cur.autoStartLocalBridge,
+                        upstreamProxyChain = cur.upstreamProxyChain
                     )
                 }
-            }
-            listeningProxies.isNotEmpty() -> {
-                val bestProxy = listeningProxies.first().preset
-                emit("Step 3/5: Using detected local proxy ${bestProxy.label} via Internal App Proxy (OS VPN slot kept free).")
-                val cur = TunnelConfig.load(context)
-                val needsSocksBridge = bestProxy.scheme == TunnelConfig.ProxyScheme.SOCKS5
-                TunnelConfig.saveGoogleProxyConfig(
-                    context = context,
-                    accessMode = TunnelConfig.GoogleAccessMode.IN_APP_PROXY,
-                    scheme = bestProxy.scheme,
-                    host = bestProxy.host,
-                    port = bestProxy.port,
-                    localBridgePort = cur.localBridgePort,
-                    autoStartBridge = needsSocksBridge
+
+                if (!aiProbe.readyForAiStudio) {
+                    emit("  • AI Studio geo-restricted/blocked — auto-chaining layers for AI Studio…")
+                    val aiChain = GeoBypassEngine.discoverAndChainBestRoute(
+                        context = context,
+                        targetService = GeoBypassEngine.TargetService.AI_STUDIO,
+                        allowHarvest = true,
+                        maxCandidates = 18
+                    ) { emit("    $it") }
+                    aiProbe = aiChain.report
+                    emit("  • AI Studio result: ${aiChain.summary}")
+                }
+                if (!flowProbe.readyForFlow) {
+                    emit("  • Google Flow geo-restricted/blocked — auto-chaining stricter layers for Flow…")
+                    val flowChain = GeoBypassEngine.discoverAndChainBestRoute(
+                        context = context,
+                        targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
+                        allowHarvest = true,
+                        maxCandidates = 20
+                    ) { emit("    $it") }
+                    flowProbe = flowChain.report
+                    emit("  • Google Flow result: ${flowChain.summary}")
+                }
+
+                check = ReachabilityVerifier.FullVerification(
+                    internet = check.internet,
+                    aiStudio = toEndpointCheck("Google AI Studio", ReachabilityVerifier.URL_AISTUDIO, aiProbe.readyForAiStudio, aiProbe.aiStudio, aiProbe, isFlow = false),
+                    flow = toEndpointCheck("Google Flow", ReachabilityVerifier.URL_FLOW, flowProbe.readyForFlow, flowProbe.flow, flowProbe, isFlow = true)
                 )
-                if (needsSocksBridge) {
-                    LocalProxyService.startSafely(context)
-                }
-                val route = GeoBypassEngine.resolveCurrentRoute(context)
-                val probe = GeoBypassEngine.runAccessProbe(route, timeoutMs = 3200)
-                if (probe.readyForAiStudio || probe.readyForFlow) {
-                    check = ReachabilityVerifier.FullVerification(
-                        internet = check.internet,
-                        aiStudio = ReachabilityVerifier.EndpointCheck(
-                            "Google AI Studio",
-                            ReachabilityVerifier.URL_AISTUDIO,
-                            if (probe.readyForAiStudio) ReachabilityVerifier.Status.REACHABLE else ReachabilityVerifier.Status.TLS_OR_IP_BLOCKED,
-                            probe.aiStudio.httpCode,
-                            probe.aiStudio.latencyMs,
-                            probe.egress?.ip ?: "-",
-                            probe.aiStudio.detail
-                        ),
-                        flow = ReachabilityVerifier.EndpointCheck(
-                            "Google Flow",
-                            ReachabilityVerifier.URL_FLOW,
-                            if (probe.readyForFlow) ReachabilityVerifier.Status.REACHABLE else ReachabilityVerifier.Status.TLS_OR_IP_BLOCKED,
-                            probe.flow.httpCode,
-                            probe.flow.latencyMs,
-                            probe.egress?.ip ?: "-",
-                            probe.flow.detail
-                        )
-                    )
-                    activeVpnOrExternal = true
-                }
+                activeVpnOrExternal = true
             }
             !vpnConsentNeeded -> {
                 emit("Step 3/5: Activating DastYab Smart Encrypted DoH Tunnel…")
@@ -274,27 +346,48 @@ object NewbieAutopilot {
             emit("Step 5/5: No configs harvested yet (GitHub & Telegram unreachable).")
         }
 
+        // If active Lantern still geo-blocked Flow/AI Studio before Step 4, re-try auto-chain now with newly harvested nodes!
+        if (externalVpnActive && (!check.aiStudio.isOk || !check.flow.isOk)) {
+            if (!check.aiStudio.isOk) {
+                val retryAi = GeoBypassEngine.discoverAndChainBestRoute(
+                    context, GeoBypassEngine.TargetService.AI_STUDIO, allowHarvest = false, maxCandidates = 18
+                ) { emit("  [re-chain AI Studio] $it") }
+                aiProbe = retryAi.report
+            }
+            if (!check.flow.isOk) {
+                val retryFlow = GeoBypassEngine.discoverAndChainBestRoute(
+                    context, GeoBypassEngine.TargetService.GOOGLE_FLOW, allowHarvest = false, maxCandidates = 20
+                ) { emit("  [re-chain Flow] $it") }
+                flowProbe = retryFlow.report
+            }
+            check = ReachabilityVerifier.FullVerification(
+                internet = check.internet,
+                aiStudio = toEndpointCheck("Google AI Studio", ReachabilityVerifier.URL_AISTUDIO, aiProbe.readyForAiStudio, aiProbe.aiStudio, aiProbe, isFlow = false),
+                flow = toEndpointCheck("Google Flow", ReachabilityVerifier.URL_FLOW, flowProbe.readyForFlow, flowProbe.flow, flowProbe, isFlow = true)
+            )
+        }
+
         // Final decision
         val finalOutcome = decideOutcome(check, activeVpnOrExternal || DastyabVpnService.isConnected(), vpnConsentNeeded && !externalVpnActive && listeningProxies.isEmpty())
         val (headline, summary) = when (finalOutcome) {
             Outcome.READY_WITH_VPN ->
-                "Autopilot Connected & Verified!" to
-                    "Tunnel / VPN is active and AI Studio / Google Flow are verified reachable."
+                "Autopilot Connected & Geo-Verified!" to
+                    "AI Studio: ${check.aiStudio.detail}\nGoogle Flow: ${check.flow.detail}"
             Outcome.READY_DIRECT ->
-                "AI Studio & Flow Reachable!" to
-                    "Your connection reaches AI Studio / Google Flow cleanly. You can open them right now."
+                "AI Studio & Flow Verified Geo-Clear!" to
+                    "AI Studio: ${check.aiStudio.detail}\nGoogle Flow: ${check.flow.detail}"
             Outcome.NEEDS_VPN_CONSENT ->
                 "Tap Allow to Start Autopilot VPN" to
                     "Autopilot found your best DoH/DNS settings (${bestDoh?.label ?: "1.1.1.1"}) and ${pool.size} configs. Grant Android VPN permission once to connect."
             Outcome.NEEDS_FULL_PROXY_APP ->
-                "ISP Blocks Google IP/SNI — Fastest Config Ready!" to
+                "Geo-Restriction / ISP Block Persists — Fastest Config Ready!" to
                     if (bestUri != null) {
-                        "Your internet works and DNS is clean, but your ISP blocks Google AI Studio / Flow at the IP/SNI level. " +
-                            "Autopilot found & verified a fast ${ConfigHarvester.protocolOf(bestUri).uppercase()} config (${bestMs}ms)! " +
-                            "Tap below to copy it and launch a full-tunnel app (Lantern / v2rayNG / Hiddify / NekoBox / WhiteVPN) — DastYab will automatically chain with it."
+                        "Your active exit is still blocked/georestricted for AI Studio or Flow. " +
+                            "Autopilot found a fast ${ConfigHarvester.protocolOf(bestUri).uppercase()} config (${bestMs}ms)! " +
+                            "Tap below to copy it and import into Lantern / v2rayNG / NekoBox — DastYab will chain on top automatically."
                     } else {
-                        "Your ISP blocks Google AI Studio / Flow at the IP/SNI level. " +
-                            "Connect Lantern or an installed fallback VPN (WhiteVPN / SlipNet / Tor / Hiddify) or import a working config."
+                        "Your active exit is blocked/georestricted for AI Studio or Flow. " +
+                            "Switch Lantern region or run v2rayNG / NekoBox / Hiddify so DastYab can chain layers on top."
                     }
             Outcome.OFFLINE_OR_BLACKOUT ->
                 "Severe Blackout or No Internet Detected" to
@@ -317,14 +410,12 @@ object NewbieAutopilot {
     }
 
     /**
-     * 1-Tap Lantern / External VPN Autopilot for Google AI Studio & Google Flow.
+     * 1-Tap Lantern / External VPN + Multi-Layer Chaining Autopilot for Google AI Studio & Google Flow.
      *
-     * Eliminates the manual 4-step workflow ("turn on Lantern -> Route & Proxy -> External VPN
-     * -> Terminal -> aistudio"):
-     *  1. Detects active External VPN (Lantern / system VPN) or listening local proxy ports.
-     *  2. Ensures External VPN pass-through or Internal App Proxy is configured WITHOUT killing Lantern.
-     *  3. Verifies exit IP, Flow 151-country support, and live HTTPS reachability for [targetUrl].
-     *  4. Reports exact readiness or offers 1-tap Lantern / VPN launch if none is active.
+     * Treats Lantern as Layer 0 (preserving Android's OS VPN slot), probes AI Studio & Google Flow
+     * *separately* against strict geo-gates (exit country + multi-hop redirect + DOM markers + accounts +
+     * Flow `AiSandboxAngularFrontend`), and automatically chains 1-, 2-, or 3-hop proxy layers on top
+     * for whichever service is still georestricted!
      */
     fun runExternalVpnAutopilot(
         context: Context,
@@ -338,10 +429,8 @@ object NewbieAutopilot {
             onStep(msg)
         }
 
-        emit("1/4 Scanning VPN transport & local proxy ports for $targetName…")
+        emit("1/5 Scanning Lantern / External VPN & local proxy ports ($targetName)…")
         if (DastyabVpnService.isConnected()) {
-            // If user explicitly invoked External VPN / Lantern Autopilot while DastYab's own VpnService is running
-            // and another proxy isn't active, keep DastYab VPN unless an external proxy is preferred.
             emit("  • DastYab VPN is currently active.")
         }
 
@@ -353,77 +442,120 @@ object NewbieAutopilot {
         }
         val currentSettings = TunnelConfig.load(context)
 
+        // Preserve AUTO_SMART so saved per-service proxy chains layer cleanly ON TOP of Lantern!
+        TunnelConfig.saveGoogleProxyConfig(
+            context = context,
+            accessMode = TunnelConfig.GoogleAccessMode.AUTO_SMART,
+            scheme = currentSettings.upstreamProxyScheme,
+            host = currentSettings.upstreamProxyHost,
+            port = currentSettings.upstreamProxyPort,
+            localBridgePort = currentSettings.localBridgePort,
+            autoStartBridge = currentSettings.autoStartLocalBridge,
+            upstreamProxyChain = currentSettings.upstreamProxyChain
+        )
         if (externalVpnActive) {
-            emit("  ✓ External VPN detected (Lantern / System VPN) — setting External VPN pass-through.")
-            TunnelConfig.saveGoogleProxyConfig(
-                context = context,
-                accessMode = TunnelConfig.GoogleAccessMode.EXTERNAL_VPN,
-                scheme = TunnelConfig.ProxyScheme.DIRECT,
-                host = currentSettings.upstreamProxyHost,
-                port = currentSettings.upstreamProxyPort,
-                localBridgePort = currentSettings.localBridgePort,
-                autoStartBridge = false
-            )
+            emit("  ✓ External VPN detected (Lantern) — keeping OS VPN active as Layer 0.")
         } else if (listeningProxies.isNotEmpty()) {
             val fastest = listeningProxies.first()
-            emit("  ✓ Detected local proxy ${fastest.preset.label} (${fastest.latencyMs}ms) — enabling Internal App Proxy.")
-            val needsBridge = fastest.preset.scheme == TunnelConfig.ProxyScheme.SOCKS5
-            TunnelConfig.saveGoogleProxyConfig(
-                context = context,
-                accessMode = TunnelConfig.GoogleAccessMode.IN_APP_PROXY,
-                scheme = fastest.preset.scheme,
-                host = fastest.preset.host,
-                port = fastest.preset.port,
-                localBridgePort = currentSettings.localBridgePort,
-                autoStartBridge = needsBridge
-            )
-            if (needsBridge) {
-                LocalProxyService.startSafely(context)
-                var waited = 0
-                while (LocalProxyService.activePort() == null && waited < 900) {
-                    try { Thread.sleep(60) } catch (_: InterruptedException) { break }
-                    waited += 60
-                }
-            }
+            emit("  ✓ Detected local proxy ${fastest.preset.label} (${fastest.latencyMs}ms) as Layer 1.")
         } else {
-            emit("  • No active External VPN (Lantern) or local proxy port detected yet — probing active route.")
+            emit("  • No active External VPN (Lantern) or local proxy port detected yet.")
         }
 
-        emit("2/4 Resolving route & verifying exit IP + country…")
-        val route = GeoBypassEngine.resolveCurrentRoute(context)
-        val probe = GeoBypassEngine.runAccessProbe(route, timeoutMs = 4000)
-        val isFlowTarget = targetUrl.contains("flow.google.com", ignoreCase = true)
-        val targetProbe = if (isFlowTarget) probe.flow else probe.aiStudio
-        val targetReady = if (isFlowTarget) probe.readyForFlow else probe.readyForAiStudio
+        emit("2/5 Verifying Google AI Studio route (separate from Google Flow)…")
+        val aiRoute = startBridgeForRouteIfNeeded(
+            context,
+            GeoBypassEngine.resolveCurrentRoute(context, targetService = GeoBypassEngine.TargetService.AI_STUDIO),
+            GeoBypassEngine.TargetService.AI_STUDIO
+        )
+        var aiProbe = GeoBypassEngine.runAccessProbe(aiRoute, timeoutMs = 4200)
+        if (!aiProbe.readyForAiStudio) {
+            emit("  ✗ AI Studio blocked/georestricted via ${aiProbe.routeLabel} — auto-chaining layers for AI Studio…")
+            val discoveredAi = GeoBypassEngine.discoverAndChainBestRoute(
+                context = context,
+                targetService = GeoBypassEngine.TargetService.AI_STUDIO,
+                allowHarvest = true,
+                maxCandidates = 18
+            ) { step -> emit("    $step") }
+            aiProbe = discoveredAi.report
+            emit("  → AI Studio: ${discoveredAi.summary}")
+        } else {
+            emit("  ✓ AI Studio verified via ${aiProbe.routeLabel} (${aiProbe.egress?.countryCode} ${aiProbe.egress?.ip})")
+        }
 
-        val cc = probe.egress?.countryCode
-        val ip = probe.egress?.ip
-        emit("3/4 Exit IP: ${ip ?: "unknown"} (${cc ?: "??"}) · ${targetName}: ${targetProbe.detail}")
+        emit("3/5 Verifying Google Flow route (stricter 151-country + app-shell target)…")
+        val flowRoute = startBridgeForRouteIfNeeded(
+            context,
+            GeoBypassEngine.resolveCurrentRoute(context, targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW),
+            GeoBypassEngine.TargetService.GOOGLE_FLOW
+        )
+        var flowProbe = GeoBypassEngine.runAccessProbe(flowRoute, timeoutMs = 4500)
+        if (!flowProbe.readyForFlow) {
+            emit("  ✗ Google Flow blocked/georestricted via ${flowProbe.routeLabel} — auto-chaining deeper layers for Flow…")
+            val discoveredFlow = GeoBypassEngine.discoverAndChainBestRoute(
+                context = context,
+                targetService = GeoBypassEngine.TargetService.GOOGLE_FLOW,
+                allowHarvest = true,
+                maxCandidates = 20
+            ) { step -> emit("    $step") }
+            flowProbe = discoveredFlow.report
+            emit("  → Google Flow: ${discoveredFlow.summary}")
+        } else {
+            emit("  ✓ Google Flow verified via ${flowProbe.routeLabel} (${flowProbe.egress?.countryCode} ${flowProbe.egress?.ip})")
+        }
+
+        val isFlowPrimary = targetUrl.contains("flow.google.com", ignoreCase = true)
+        val primaryProbe = if (isFlowPrimary) flowProbe else aiProbe
+        val aiReady = aiProbe.readyForAiStudio
+        val flowReady = flowProbe.readyForFlow
+        val anyReady = aiReady || flowReady
+        val targetReady = if (isFlowPrimary) flowReady else (aiReady && flowReady)
+        val effectiveEgress = flowProbe.egress ?: aiProbe.egress
+        val cc = effectiveEgress?.countryCode
+        val ip = effectiveEgress?.ip
+
+        emit("4/5 AI Studio: ${if (aiReady) "READY ✓" else "GEO-BLOCKED ✗"} (${aiProbe.routeLabel}) | Flow: ${if (flowReady) "READY ✓" else "GEO-BLOCKED ✗"} (${flowProbe.routeLabel})")
 
         val plan = decideExternalAutopilotPlan(
             externalVpnActive = externalVpnActive,
             listeningProxyPort = listeningProxies.firstOrNull()?.preset?.port,
             dastyabVpnActive = DastyabVpnService.isConnected(),
-            targetReachable = targetReady
+            targetReachable = anyReady
         )
-        val needsLanternConnect = !externalVpnActive && listeningProxies.isEmpty() && !targetReady
+        val needsLanternConnect = !externalVpnActive && listeningProxies.isEmpty() && !anyReady
 
-        emit("4/4 Plan: ${plan.name} · Ready=$targetReady")
+        val headline = when {
+            aiReady && flowReady -> "Ready (${cc ?: "?"}) — AI Studio & Google Flow Geo-Clear!"
+            aiReady && !flowReady -> "AI Studio Ready ✓ · Google Flow Still Geo-Restricted (${flowProbe.egress?.countryCode ?: cc ?: "?"})"
+            !aiReady && flowReady -> "Google Flow Ready ✓ · AI Studio Blocked"
+            else -> primaryProbe.headline
+        }
+        val recommendation = buildString {
+            if (!aiReady) append("AI Studio: ${aiProbe.recommendation}\n")
+            if (!flowReady) append("Google Flow: ${flowProbe.recommendation}")
+            if (aiReady && flowReady) append(flowProbe.recommendation)
+        }.trim()
+
+        emit("5/5 Plan: ${plan.name} · AI Studio=$aiReady · Flow=$flowReady")
 
         return ExternalAutopilotResult(
             plan = plan,
             targetReady = targetReady,
-            routeLabel = probe.routeLabel,
+            routeLabel = if (isFlowPrimary) flowProbe.routeLabel else aiProbe.routeLabel,
             exitCountry = cc,
             exitIp = ip,
-            latencyMs = targetProbe.latencyMs,
-            flowCountrySupported = probe.flowCountrySupported,
+            latencyMs = if (isFlowPrimary) flowProbe.flow.latencyMs else aiProbe.aiStudio.latencyMs,
+            flowCountrySupported = flowProbe.flowCountrySupported,
             needsLanternConnect = needsLanternConnect,
             lanternPackage = lanternTool?.installedPackage,
             installedVpnApps = installedTools,
-            headline = probe.headline,
-            recommendation = probe.recommendation,
-            logLines = log
+            headline = headline,
+            recommendation = recommendation,
+            logLines = log,
+            aiStudioReady = aiReady,
+            flowReady = flowReady,
+            aiStudioRouteLabel = aiProbe.routeLabel,
+            flowRouteLabel = flowProbe.routeLabel
         )
     }
 }

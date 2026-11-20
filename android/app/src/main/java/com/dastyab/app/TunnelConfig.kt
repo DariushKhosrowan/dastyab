@@ -33,6 +33,9 @@ object TunnelConfig {
     private const val KEY_UPSTREAM_PROXY_SCHEME = "upstream_proxy_scheme"
     private const val KEY_UPSTREAM_PROXY_HOST = "upstream_proxy_host"
     private const val KEY_UPSTREAM_PROXY_PORT = "upstream_proxy_port"
+    private const val KEY_UPSTREAM_PROXY_CHAIN = "upstream_proxy_chain"
+    private const val KEY_AISTUDIO_PROXY_CHAIN = "aistudio_proxy_chain"
+    private const val KEY_FLOW_PROXY_CHAIN = "flow_proxy_chain"
     private const val KEY_LOCAL_BRIDGE_PORT = "local_bridge_port"
     private const val KEY_AUTO_START_LOCAL_BRIDGE = "auto_start_local_bridge"
 
@@ -185,6 +188,28 @@ object TunnelConfig {
         }
     }
 
+    data class ProxyHop(
+        val scheme: ProxyScheme,
+        val host: String,
+        val port: Int,
+        val username: String = "",
+        val password: String = ""
+    ) {
+        fun toUriString(): String {
+            if (scheme == ProxyScheme.DIRECT) return "direct"
+            val schemeStr = if (scheme == ProxyScheme.SOCKS5) "socks5" else "http"
+            val auth = if (username.isNotEmpty() || password.isNotEmpty()) "$username:$password@" else ""
+            val hostStr = if (host.contains(':') && !host.startsWith("[")) "[$host]" else host
+            return "$schemeStr://$auth$hostStr:$port"
+        }
+
+        fun displayLabel(): String = when (scheme) {
+            ProxyScheme.DIRECT -> "Direct / VPN"
+            ProxyScheme.HTTP -> "HTTP $host:$port"
+            ProxyScheme.SOCKS5 -> "SOCKS5 $host:$port"
+        }
+    }
+
     data class Settings(
         val mode: Mode = Mode.SMART,
         val vlessUri: String = "",
@@ -204,7 +229,10 @@ object TunnelConfig {
         val upstreamProxyHost: String = DEFAULT_PROXY_HOST,
         val upstreamProxyPort: Int = DEFAULT_UPSTREAM_PROXY_PORT,
         val localBridgePort: Int = DEFAULT_LOCAL_BRIDGE_PORT,
-        val autoStartLocalBridge: Boolean = false
+        val autoStartLocalBridge: Boolean = false,
+        val upstreamProxyChain: String = "",
+        val aiStudioProxyChain: String = "",
+        val flowProxyChain: String = ""
     ) {
         fun parsedEndpoint(): VlessEndpoint? = parseVlessUri(vlessUri)
     }
@@ -231,7 +259,10 @@ object TunnelConfig {
             upstreamProxyHost = sanitizeProxyHost(prefs.getString(KEY_UPSTREAM_PROXY_HOST, DEFAULT_PROXY_HOST)),
             upstreamProxyPort = clampPort(prefs.getInt(KEY_UPSTREAM_PROXY_PORT, DEFAULT_UPSTREAM_PROXY_PORT), DEFAULT_UPSTREAM_PROXY_PORT, min = 1),
             localBridgePort = clampPort(prefs.getInt(KEY_LOCAL_BRIDGE_PORT, DEFAULT_LOCAL_BRIDGE_PORT), DEFAULT_LOCAL_BRIDGE_PORT, min = MIN_LOCAL_PORT),
-            autoStartLocalBridge = prefs.getBoolean(KEY_AUTO_START_LOCAL_BRIDGE, false)
+            autoStartLocalBridge = prefs.getBoolean(KEY_AUTO_START_LOCAL_BRIDGE, false),
+            upstreamProxyChain = (prefs.getString(KEY_UPSTREAM_PROXY_CHAIN, "") ?: "").trim(),
+            aiStudioProxyChain = (prefs.getString(KEY_AISTUDIO_PROXY_CHAIN, "") ?: "").trim(),
+            flowProxyChain = (prefs.getString(KEY_FLOW_PROXY_CHAIN, "") ?: "").trim()
         )
     }
 
@@ -256,6 +287,9 @@ object TunnelConfig {
             .putInt(KEY_UPSTREAM_PROXY_PORT, clampPort(settings.upstreamProxyPort, DEFAULT_UPSTREAM_PROXY_PORT, min = 1))
             .putInt(KEY_LOCAL_BRIDGE_PORT, clampPort(settings.localBridgePort, DEFAULT_LOCAL_BRIDGE_PORT, min = MIN_LOCAL_PORT))
             .putBoolean(KEY_AUTO_START_LOCAL_BRIDGE, settings.autoStartLocalBridge)
+            .putString(KEY_UPSTREAM_PROXY_CHAIN, settings.upstreamProxyChain.trim())
+            .putString(KEY_AISTUDIO_PROXY_CHAIN, settings.aiStudioProxyChain.trim())
+            .putString(KEY_FLOW_PROXY_CHAIN, settings.flowProxyChain.trim())
             .apply()
     }
 
@@ -266,20 +300,66 @@ object TunnelConfig {
         host: String,
         port: Int,
         localBridgePort: Int = load(context).localBridgePort,
-        autoStartBridge: Boolean = load(context).autoStartLocalBridge
+        autoStartBridge: Boolean = load(context).autoStartLocalBridge,
+        upstreamProxyChain: String? = null
     ) {
         val current = load(context)
+        val cleanHost = sanitizeProxyHost(host)
+        val cleanPort = clampPort(port, DEFAULT_UPSTREAM_PROXY_PORT, min = 1)
+        val resolvedChain = upstreamProxyChain?.trim() ?: if (scheme == ProxyScheme.DIRECT) {
+            ""
+        } else {
+            ProxyHop(scheme, cleanHost, cleanPort).toUriString()
+        }
         save(
             context,
             current.copy(
                 googleAccessMode = accessMode,
                 upstreamProxyScheme = scheme,
-                upstreamProxyHost = sanitizeProxyHost(host),
-                upstreamProxyPort = clampPort(port, DEFAULT_UPSTREAM_PROXY_PORT, min = 1),
+                upstreamProxyHost = cleanHost,
+                upstreamProxyPort = cleanPort,
                 localBridgePort = clampPort(localBridgePort, DEFAULT_LOCAL_BRIDGE_PORT, min = MIN_LOCAL_PORT),
-                autoStartLocalBridge = autoStartBridge
+                autoStartLocalBridge = autoStartBridge,
+                upstreamProxyChain = resolvedChain
             )
         )
+    }
+
+    fun saveServiceProxyChain(
+        context: Context,
+        targetServiceKey: String,
+        hops: List<ProxyHop>,
+        preserveExternalVpn: Boolean = true
+    ) {
+        val current = load(context)
+        val formatted = formatProxyChain(hops)
+        val first = hops.firstOrNull()
+        val nextAccessMode = when {
+            preserveExternalVpn && current.googleAccessMode == GoogleAccessMode.AUTO_SMART -> GoogleAccessMode.AUTO_SMART
+            hops.isNotEmpty() -> GoogleAccessMode.IN_APP_PROXY
+            else -> current.googleAccessMode
+        }
+        val updated = when (targetServiceKey.lowercase()) {
+            "flow" -> current.copy(
+                flowProxyChain = formatted,
+                googleAccessMode = nextAccessMode,
+                autoStartLocalBridge = current.autoStartLocalBridge || hops.size > 1 || first?.scheme == ProxyScheme.SOCKS5
+            )
+            "aistudio" -> current.copy(
+                aiStudioProxyChain = formatted,
+                googleAccessMode = nextAccessMode,
+                autoStartLocalBridge = current.autoStartLocalBridge || hops.size > 1 || first?.scheme == ProxyScheme.SOCKS5
+            )
+            else -> current.copy(
+                upstreamProxyChain = formatted,
+                upstreamProxyScheme = first?.scheme ?: ProxyScheme.DIRECT,
+                upstreamProxyHost = first?.host ?: current.upstreamProxyHost,
+                upstreamProxyPort = first?.port ?: current.upstreamProxyPort,
+                googleAccessMode = nextAccessMode,
+                autoStartLocalBridge = hops.size > 1 || first?.scheme == ProxyScheme.SOCKS5
+            )
+        }
+        save(context, updated)
     }
 
     fun saveMode(context: Context, mode: Mode) {
@@ -414,6 +494,156 @@ object TunnelConfig {
         } catch (_: Exception) {
             null
         }
+    }
+
+    /** Parses a single hop token such as `socks5://user:pass@1.2.3.4:1080`, `http://127.0.0.1:10809`, or `tg://socks?...`. */
+    fun parseProxyHop(rawToken: String?): ProxyHop? {
+        val trimmed = rawToken?.trim().orEmpty()
+        if (trimmed.isEmpty() || trimmed.equals("direct", ignoreCase = true)) return null
+
+        if (trimmed.startsWith("tg://socks", ignoreCase = true) ||
+            Regex("^https?://(?:t\\.me|telegram\\.me)/socks\\?", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
+        ) {
+            val query = trimmed.substringAfter('?', "")
+            val params = mutableMapOf<String, String>()
+            query.split('&').forEach { pair ->
+                val idx = pair.indexOf('=')
+                if (idx > 0) {
+                    params[pair.substring(0, idx).lowercase()] = decodePercent(pair.substring(idx + 1))
+                }
+            }
+            val server = params["server"]?.trim().orEmpty()
+            val port = params["port"]?.trim()?.toIntOrNull() ?: return null
+            if (server.isEmpty() || server.any { it.isWhitespace() || it == '/' } || port !in 1..MAX_PORT) return null
+            return ProxyHop(
+                scheme = ProxyScheme.SOCKS5,
+                host = server,
+                port = port,
+                username = params["user"]?.trim().orEmpty(),
+                password = params["pass"]?.trim().orEmpty()
+            )
+        }
+
+        val scheme: ProxyScheme
+        val rest: String
+        when {
+            trimmed.startsWith("socks5://", ignoreCase = true) -> {
+                scheme = ProxyScheme.SOCKS5
+                rest = trimmed.substring(9)
+            }
+            trimmed.startsWith("socks://", ignoreCase = true) -> {
+                scheme = ProxyScheme.SOCKS5
+                rest = trimmed.substring(8)
+            }
+            trimmed.startsWith("http://", ignoreCase = true) -> {
+                scheme = ProxyScheme.HTTP
+                rest = trimmed.substring(7)
+            }
+            else -> {
+                // Allow bare host:port tokens in chain strings
+                val hp = LocalProxyServer.parseHostPort(trimmed.substringBefore('#'), -1) ?: return null
+                val inferred = if (hp.second in listOf(10808, 2080, 9050, 1080)) ProxyScheme.SOCKS5 else ProxyScheme.HTTP
+                return ProxyHop(inferred, hp.first, hp.second)
+            }
+        }
+
+        val cleanAuthority = rest.substringBefore('#').substringBefore('/').substringBefore('?').trim()
+        if (cleanAuthority.isEmpty()) return null
+        var username = ""
+        var password = ""
+        val hostPortStr = if (cleanAuthority.contains('@')) {
+            val userInfo = cleanAuthority.substringBeforeLast('@')
+            if (userInfo.contains(':')) {
+                username = decodePercent(userInfo.substringBefore(':'))
+                password = decodePercent(userInfo.substringAfter(':'))
+            } else {
+                username = decodePercent(userInfo)
+            }
+            cleanAuthority.substringAfterLast('@')
+        } else {
+            cleanAuthority
+        }
+        val hp = LocalProxyServer.parseHostPort(hostPortStr, -1) ?: return null
+        val host = hp.first.trim()
+        if (host.isEmpty() || host.any { it.isWhitespace() || it == '/' }) return null
+        return ProxyHop(scheme, host, hp.second, username, password)
+    }
+
+    /** Parses a multi-hop proxy chain string separated by `,`, `->`, `;`, or newlines, dropping self-loops. */
+    fun parseProxyChain(raw: String?, selfBridgePort: Int? = null, maxHops: Int = 6): List<ProxyHop> {
+        val text = raw?.trim().orEmpty()
+        if (text.isEmpty()) return emptyList()
+        val tokens = text.split(Regex("""\s*(?:->|[,;\n|])\s*"""))
+        val out = mutableListOf<ProxyHop>()
+        for (tok in tokens) {
+            val hop = parseProxyHop(tok) ?: continue
+            val isSelfLoop = selfBridgePort != null && selfBridgePort > 0 &&
+                (hop.host == "127.0.0.1" || hop.host.equals("localhost", ignoreCase = true)) &&
+                hop.port == selfBridgePort
+            if (!isSelfLoop) {
+                out.add(hop)
+                if (out.size >= maxHops) break
+            }
+        }
+        return out
+    }
+
+    fun formatProxyChain(hops: List<ProxyHop>): String =
+        hops.filter { it.scheme != ProxyScheme.DIRECT && it.port in 1..MAX_PORT }
+            .joinToString(", ") { it.toUriString() }
+
+    /**
+     * Resolves effective upstream hops for the requested service (`"aistudio"`, `"flow"`, or `null`).
+     * Service-specific chains take precedence over the global chain, which takes precedence over
+     * legacy single-hop upstream fields.
+     */
+    fun effectiveUpstreamHops(
+        settings: Settings,
+        targetServiceKey: String? = null,
+        selfBridgePort: Int? = null
+    ): List<ProxyHop> {
+        val specificRaw = when (targetServiceKey?.lowercase()) {
+            "flow" -> settings.flowProxyChain
+            "aistudio" -> settings.aiStudioProxyChain
+            else -> ""
+        }
+        if (specificRaw.isNotBlank()) {
+            val parsed = parseProxyChain(specificRaw, selfBridgePort)
+            if (parsed.isNotEmpty()) return parsed
+        }
+        if (settings.upstreamProxyChain.isNotBlank()) {
+            val parsed = parseProxyChain(settings.upstreamProxyChain, selfBridgePort)
+            if (parsed.isNotEmpty()) return parsed
+        }
+        if (settings.upstreamProxyScheme != ProxyScheme.DIRECT && settings.upstreamProxyPort in 1..MAX_PORT) {
+            val host = sanitizeProxyHost(settings.upstreamProxyHost)
+            val isSelf = selfBridgePort != null && selfBridgePort > 0 &&
+                (host == "127.0.0.1" || host.equals("localhost", ignoreCase = true)) &&
+                settings.upstreamProxyPort == selfBridgePort
+            if (!isSelf) {
+                return listOf(ProxyHop(settings.upstreamProxyScheme, host, settings.upstreamProxyPort))
+            }
+        }
+        return emptyList()
+    }
+
+    fun toLocalProxyUpstream(hops: List<ProxyHop>, selfBridgePort: Int? = null): LocalProxyServer.Upstream {
+        val filtered = hops.filterNot { hop ->
+            hop.scheme == ProxyScheme.DIRECT ||
+                hop.port !in 1..MAX_PORT ||
+                (selfBridgePort != null && selfBridgePort > 0 &&
+                    (hop.host == "127.0.0.1" || hop.host.equals("localhost", ignoreCase = true)) &&
+                    hop.port == selfBridgePort)
+        }
+        if (filtered.isEmpty()) return LocalProxyServer.Upstream.Direct
+        val mapped = filtered.map { hop ->
+            when (hop.scheme) {
+                ProxyScheme.HTTP -> LocalProxyServer.Upstream.Http(hop.host, hop.port, hop.username, hop.password)
+                ProxyScheme.SOCKS5 -> LocalProxyServer.Upstream.Socks5(hop.host, hop.port, hop.username, hop.password)
+                ProxyScheme.DIRECT -> LocalProxyServer.Upstream.Direct
+            }
+        }
+        return if (mapped.size == 1) mapped[0] else LocalProxyServer.Upstream.Chain(mapped)
     }
 
     private fun decodePercent(value: String): String {
