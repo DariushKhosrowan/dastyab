@@ -1196,28 +1196,36 @@ object GeoBypassEngine {
         // Stage 5: Five-hop & Six-hop deep cascades combining local bridges + diverse relays + exits
         val combinedPool = LinkedHashMap<String, TunnelConfig.ProxyHop>().apply {
             for (h in listenHops + entriesPool + exitsPool) {
-                putIfAbsent("${h.scheme.name}:${h.host}:${h.port}", h)
+                putIfAbsent("${h.host}:${h.port}", h)
             }
         }.values.toList()
         if (combinedPool.size >= 5) {
-            for (targetDepth in 5..6) {
-                if (combinedPool.size < targetDepth) continue
-                for (shift in 0 until combinedPool.size.coerceAtMost(6)) {
-                    val forward = (0 until targetDepth).map { k -> combinedPool[(shift + k) % combinedPool.size] }
-                    addTo(stage5, forward, 10)
-                    addTo(stage5, forward.reversed(), 10)
+            for (shift in 0 until combinedPool.size.coerceAtMost(6)) {
+                val deep5 = (0 until 5).map { k -> combinedPool[(shift + k) % combinedPool.size] }
+                addTo(stage5, deep5, 10)
+                if (combinedPool.size >= 6) {
+                    val deep6 = (0 until 6).map { k -> combinedPool[(shift + k) % combinedPool.size] }
+                    addTo(stage5, deep6, 10)
+                    addTo(stage5, deep5.reversed(), 10)
+                    addTo(stage5, deep6.reversed(), 10)
+                } else {
+                    addTo(stage5, deep5.reversed(), 10)
                 }
             }
         }
 
         // Stage 6: Seven-hop & Eight-hop ultra-deep cascades for extreme geo-censorship firewalls
         if (combinedPool.size >= 7) {
-            for (targetDepth in 7..8) {
-                if (combinedPool.size < targetDepth) continue
-                for (shift in 0 until combinedPool.size.coerceAtMost(4)) {
-                    val deep = (0 until targetDepth).map { k -> combinedPool[(shift + k) % combinedPool.size] }
-                    addTo(stage6, deep, 8)
-                    addTo(stage6, deep.reversed(), 8)
+            for (shift in 0 until combinedPool.size.coerceAtMost(4)) {
+                val deep7 = (0 until 7).map { k -> combinedPool[(shift + k) % combinedPool.size] }
+                addTo(stage6, deep7, 8)
+                if (combinedPool.size >= 8) {
+                    val deep8 = (0 until 8).map { k -> combinedPool[(shift + k) % combinedPool.size] }
+                    addTo(stage6, deep8, 8)
+                    addTo(stage6, deep7.reversed(), 8)
+                    addTo(stage6, deep8.reversed(), 8)
+                } else {
+                    addTo(stage6, deep7.reversed(), 8)
                 }
             }
         }

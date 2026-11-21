@@ -1059,6 +1059,17 @@ pub fn mutate_hop_fingerprint(hop: &ChainHop, fingerprint: &str) -> ChainHop {
     cloned
 }
 
+fn push_brutal_plan(
+    plans: &mut Vec<BrutalChainPlan>,
+    seen: &mut HashSet<String>,
+    budget: usize,
+    plan: BrutalChainPlan,
+) {
+    if plans.len() < budget && seen.insert(plan.arm_id()) {
+        plans.push(plan);
+    }
+}
+
 /// Generate brutal multi-layer routes (1-hop, fragment DPI, uTLS mutations,
 /// cross-`/16` 2-hop bidirectional swaps, 3-hop & 4-hop cascades, plus deep
 /// 5..=8-hop multi-relay cascades + local proxy bridges).
@@ -1102,29 +1113,34 @@ pub fn generate_brutal_chains(
 
     let mut plans = Vec::new();
     let mut seen = HashSet::new();
-    let mut push_plan = |plan: BrutalChainPlan| {
-        if plans.len() < budget && seen.insert(plan.arm_id()) {
-            plans.push(plan);
-        }
-    };
 
     // Stage 0: Fast diverse 1-hop routes.
     for exit in ordered_exits.iter().take(budget) {
-        push_plan(BrutalChainPlan {
-            hops: vec![(*exit).clone()],
-            fragment_dpi: false,
-            stage_label: "stage0-1hop".to_string(),
-        });
+        push_brutal_plan(
+            &mut plans,
+            &mut seen,
+            budget,
+            BrutalChainPlan {
+                hops: vec![(*exit).clone()],
+                fragment_dpi: false,
+                stage_label: "stage0-1hop".to_string(),
+            },
+        );
     }
 
     // Stage 1: DPI-fragmented + uTLS-mutated 1-hop routes.
     for exit in ordered_exits.iter().take((budget / 3).max(4)) {
         if !exit.is_local_bridge && !exit.is_socks_or_http() {
-            push_plan(BrutalChainPlan {
-                hops: vec![mutate_hop_fingerprint(exit, "firefox")],
-                fragment_dpi: true,
-                stage_label: "stage1-fragment".to_string(),
-            });
+            push_brutal_plan(
+                &mut plans,
+                &mut seen,
+                budget,
+                BrutalChainPlan {
+                    hops: vec![mutate_hop_fingerprint(exit, "firefox")],
+                    fragment_dpi: true,
+                    stage_label: "stage1-fragment".to_string(),
+                },
+            );
         }
     }
 
@@ -1145,11 +1161,16 @@ pub fn generate_brutal_chains(
         for exit in ordered_exits.iter().take(8) {
             for local in local_proxies {
                 if local.key() != exit.key() {
-                    push_plan(BrutalChainPlan {
-                        hops: vec![(*exit).clone(), local.clone()],
-                        fragment_dpi: false,
-                        stage_label: "stage2-local-bridge".to_string(),
-                    });
+                    push_brutal_plan(
+                        &mut plans,
+                        &mut seen,
+                        budget,
+                        BrutalChainPlan {
+                            hops: vec![(*exit).clone(), local.clone()],
+                            fragment_dpi: false,
+                            stage_label: "stage2-local-bridge".to_string(),
+                        },
+                    );
                 }
             }
         }
@@ -1164,19 +1185,29 @@ pub fn generate_brutal_chains(
                 if entry.key() == exit.key() || entry.subnet_prefix16() == ex_net {
                     continue;
                 }
-                push_plan(BrutalChainPlan {
-                    hops: vec![(*exit).clone(), (*entry).clone()],
-                    fragment_dpi: false,
-                    stage_label: "stage2-2hop-cross16".to_string(),
-                });
+                push_brutal_plan(
+                    &mut plans,
+                    &mut seen,
+                    budget,
+                    BrutalChainPlan {
+                        hops: vec![(*exit).clone(), (*entry).clone()],
+                        fragment_dpi: false,
+                        stage_label: "stage2-2hop-cross16".to_string(),
+                    },
+                );
                 if plans.len() >= stage2b_cap {
                     break 'stage2b;
                 }
-                push_plan(BrutalChainPlan {
-                    hops: vec![(*exit).clone(), mutate_hop_fingerprint(entry, "random")],
-                    fragment_dpi: true,
-                    stage_label: "stage2-2hop-frag".to_string(),
-                });
+                push_brutal_plan(
+                    &mut plans,
+                    &mut seen,
+                    budget,
+                    BrutalChainPlan {
+                        hops: vec![(*exit).clone(), mutate_hop_fingerprint(entry, "random")],
+                        fragment_dpi: true,
+                        stage_label: "stage2-2hop-frag".to_string(),
+                    },
+                );
             }
         }
     }
@@ -1198,11 +1229,16 @@ pub fn generate_brutal_chains(
                     {
                         continue;
                     }
-                    push_plan(BrutalChainPlan {
-                        hops: vec![(*exit).clone(), (*r1).clone(), (*entry).clone()],
-                        fragment_dpi: true,
-                        stage_label: "stage3-3hop-brutal".to_string(),
-                    });
+                    push_brutal_plan(
+                        &mut plans,
+                        &mut seen,
+                        budget,
+                        BrutalChainPlan {
+                            hops: vec![(*exit).clone(), (*r1).clone(), (*entry).clone()],
+                            fragment_dpi: true,
+                            stage_label: "stage3-3hop-brutal".to_string(),
+                        },
+                    );
                 }
             }
         }
@@ -1244,11 +1280,16 @@ pub fn generate_brutal_chains(
                 }
                 if chain.len() >= target_depth {
                     chain.truncate(target_depth);
-                    push_plan(BrutalChainPlan {
-                        hops: chain,
-                        fragment_dpi: true,
-                        stage_label: format!("stage4-{target_depth}hop-max"),
-                    });
+                    push_brutal_plan(
+                        &mut plans,
+                        &mut seen,
+                        budget,
+                        BrutalChainPlan {
+                            hops: chain,
+                            fragment_dpi: true,
+                            stage_label: format!("stage4-{target_depth}hop-max"),
+                        },
+                    );
                 }
             }
         }

@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::store::{mem_dir, profiles_dir};
+use crate::store::mem_dir;
 
 /// Severity of a finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,7 +98,7 @@ fn check_dir_permissions(report: &mut AuditReport) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        for d in [mem_dir(), profiles_dir()] {
+        for d in [mem_dir(), crate::store::profiles_dir()] {
             if let Ok(meta) = std::fs::metadata(&d) {
                 let mode = meta.permissions().mode() & 0o777;
                 if mode & 0o077 != 0 {
@@ -147,6 +147,8 @@ fn check_token_files(report: &mut AuditReport) {
             }
         }
     }
+    #[cfg(not(unix))]
+    let _ = report;
 }
 
 /// Scan all JSON files under the memory dir for accidental token leaks.
