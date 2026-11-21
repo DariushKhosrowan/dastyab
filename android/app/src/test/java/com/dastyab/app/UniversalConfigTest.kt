@@ -324,4 +324,19 @@ class UniversalConfigTest {
             UniversalConfig.subnet16Of(filtered.first().host) != "198.51"
         )
     }
+
+    @Test
+    fun extractChainableProxyHops_honorsLimitAndDeduplicates() {
+        val configs = listOf(
+            "socks5://198.51.100.1:1080",
+            "socks5://198.51.100.1:1080",
+            "http://198.51.100.2:8080",
+            "socks5://198.51.100.3:1080",
+            "vless://11111111-1111-1111-1111-111111111111@203.0.113.1:443?security=tls"
+        )
+        val unlimited = UniversalConfig.extractChainableProxyHops(configs)
+        assertEquals(3, unlimited.size)
+        val capped = UniversalConfig.extractChainableProxyHops(configs, limit = 2)
+        assertEquals(2, capped.size)
+    }
 }

@@ -69,8 +69,13 @@ jobs:
             find "$SDK/cmdline-tools" -maxdepth 3 -name sdkmanager -print 2>/dev/null || true
             exit 1
           fi
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-34" "platform-tools" "build-tools;34.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
+          printf 'y\n%.0s' {1..40} | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --verbose \
+            "platforms;android-34" \
+            "platform-tools" \
+            "build-tools;34.0.0" \
+            "emulator" \
+            "system-images;android-35;google_apis;x86_64"
 
       - name: Install Android NDK
         run: |

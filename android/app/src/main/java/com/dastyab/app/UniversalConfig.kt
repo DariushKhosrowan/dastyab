@@ -594,9 +594,13 @@ object UniversalConfig {
     }
 
     /** Extracts chainable SOCKS5 / HTTP proxy hops from harvested URIs for multi-layer stacking. */
-    fun extractChainableProxyHops(configs: Collection<String>): List<TunnelConfig.ProxyHop> {
+    fun extractChainableProxyHops(
+        configs: Collection<String>,
+        limit: Int = Int.MAX_VALUE
+    ): List<TunnelConfig.ProxyHop> {
         val out = LinkedHashMap<String, TunnelConfig.ProxyHop>()
         for (raw in configs) {
+            if (out.size >= limit) break
             val proto = protocolOf(raw)
             if (proto in setOf("socks5", "socks", "http")) {
                 val hop = TunnelConfig.parseProxyHop(raw) ?: continue

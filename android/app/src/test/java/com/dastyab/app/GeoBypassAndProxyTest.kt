@@ -716,7 +716,7 @@ class GeoBypassAndProxyTest {
             maxTotalCandidates = 90
         )
 
-        assertEquals(5, stages.size)
+        assertEquals(7, stages.size)
         assertTrue(stages[0].all { it.isEmpty() })
         assertTrue(stages[1].isNotEmpty() && stages[1].all { it.size == 1 })
         assertTrue(stages[2].isNotEmpty() && stages[2].all { it.size == 2 })
