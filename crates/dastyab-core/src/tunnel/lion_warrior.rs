@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use base64::Engine as _;
@@ -397,21 +397,15 @@ pub fn parse_chain_hop(raw: &str) -> Result<ChainHop, CFError> {
     match parsed.scheme.as_str() {
         "vless" => {
             let vp = VlessProfile::parse(trimmed)?;
-            params
-                .entry("security".to_string())
-                .or_insert_with(|| vp.security.clone());
-            params
-                .entry("type".to_string())
-                .or_insert_with(|| vp.transport.clone());
+            params.entry("security".to_string()).or_insert_with(|| vp.security.clone());
+            params.entry("type".to_string()).or_insert_with(|| vp.transport.clone());
             if let Some(sni) = &vp.sni {
                 params.entry("sni".to_string()).or_insert_with(|| sni.clone());
             }
             if let Some(hh) = &vp.header_host {
                 params.entry("host".to_string()).or_insert_with(|| hh.clone());
             }
-            params
-                .entry("path".to_string())
-                .or_insert_with(|| vp.canonical_path());
+            params.entry("path".to_string()).or_insert_with(|| vp.canonical_path());
             if let Some(pbk) = &vp.pbk {
                 params.entry("pbk".to_string()).or_insert_with(|| pbk.clone());
             }
@@ -497,12 +491,8 @@ pub fn parse_chain_hop(raw: &str) -> Result<ChainHop, CFError> {
             })
         }
         "trojan" => {
-            params
-                .entry("security".to_string())
-                .or_insert_with(|| "tls".to_string());
-            params
-                .entry("type".to_string())
-                .or_insert_with(|| "tcp".to_string());
+            params.entry("security".to_string()).or_insert_with(|| "tls".to_string());
+            params.entry("type".to_string()).or_insert_with(|| "tcp".to_string());
             Ok(ChainHop {
                 scheme: HopScheme::Trojan,
                 host: parsed.host,
@@ -588,11 +578,7 @@ pub fn parse_chain_hop(raw: &str) -> Result<ChainHop, CFError> {
 /// `.ovpn`/`.openvpn`, `.conf`/`.wg` (WireGuard INI), `.json`, `.yaml`, or
 /// base64 `.sub`/`.txt` config files.
 pub fn parse_configs_from_blob(filename: &str, bytes: &[u8]) -> Vec<ChainHop> {
-    let ext = filename
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase();
+    let ext = filename.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     let mut hops = Vec::new();
     let mut seen = HashSet::new();
     let mut push_hop = |h: ChainHop| {
@@ -657,7 +643,7 @@ pub fn parse_configs_from_blob(filename: &str, bytes: &[u8]) -> Vec<ChainHop> {
     }
 
     // 3. Extract standard share URIs + WireGuard [Interface]/[Peer] + OpenVPN inline.
-    for link in crate::discovery::harvest::extract_links(&scan_corpus) {
+    for link in crate::discovery::harvest::extract_proxy_links(&scan_corpus) {
         if let Ok(h) = parse_chain_hop(&link) {
             push_hop(h);
         }
@@ -687,10 +673,8 @@ pub fn parse_configs_from_blob(filename: &str, bytes: &[u8]) -> Vec<ChainHop> {
     let trimmed_corpus = scan_corpus.trim_start();
     if ext == "json" || trimmed_corpus.starts_with('{') || trimmed_corpus.starts_with('[') {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&scan_corpus) {
-            let outs = val
-                .get("outbounds")
-                .and_then(|o| o.as_array())
-                .or_else(|| val.as_array());
+            let outs = val.get("outbounds").and_then(|o| o.as_array());
+            let outs = outs.or_else(|| val.as_array());
             if let Some(arr) = outs {
                 for ob in arr {
                     let proto = ob
@@ -804,7 +788,7 @@ pub fn build_xray_chain_config(
         outbounds.push(hop_to_xray_outbound(hop, &tag, next_tag.as_deref()));
     }
 
-    if opts.fragment_dpi && !hops.last().map(|h| h.is_local_bridge).unwrap_or(true) {
+    if opts.fragment_dpi && hops.last().is_some_and(|h| !h.is_local_bridge) {
         outbounds.push(serde_json::json!({
             "tag": "frag-dialer",
             "protocol": "freedom",
@@ -855,11 +839,7 @@ fn hop_to_xray_outbound(hop: &ChainHop, tag: &str, dialer: Option<&str>) -> serd
                 "id": hop.auth_id,
                 "encryption": "none"
             });
-            let sec = hop
-                .params
-                .get("security")
-                .map(|s| s.as_str())
-                .unwrap_or("none");
+            let sec = hop.params.get("security").map(|s| s.as_str()).unwrap_or("none");
             if matches!(sec, "tls" | "reality") {
                 if let Some(flow) = hop.params.get("flow").filter(|f| !f.is_empty()) {
                     user["flow"] = serde_json::json!(flow);
@@ -918,11 +898,8 @@ fn hop_to_xray_outbound(hop: &ChainHop, tag: &str, dialer: Option<&str>) -> serd
                 .filter(|s| !s.is_empty())
                 .map(|s| s.split(',').map(|x| x.trim().to_string()).collect::<Vec<_>>())
                 .unwrap_or_else(|| vec!["172.16.0.2/32".to_string()]);
-            let mtu = hop
-                .params
-                .get("mtu")
-                .and_then(|s| s.parse::<u16>().ok())
-                .unwrap_or(1280);
+            let mtu_raw = hop.params.get("mtu").and_then(|s| s.parse::<u16>().ok());
+            let mtu = mtu_raw.unwrap_or(1280);
             serde_json::json!({
                 "tag": tag,
                 "protocol": "wireguard",
@@ -974,11 +951,7 @@ fn hop_to_xray_outbound(hop: &ChainHop, tag: &str, dialer: Option<&str>) -> serd
     };
 
     if !hop.is_socks_or_http() && hop.scheme != HopScheme::WireGuard {
-        let sec = hop
-            .params
-            .get("security")
-            .map(|s| s.as_str())
-            .unwrap_or("none");
+        let sec = hop.params.get("security").map(|s| s.as_str()).unwrap_or("none");
         let net = hop.params.get("type").map(|s| s.as_str()).unwrap_or("tcp");
         let sni = hop
             .params
@@ -1044,13 +1017,8 @@ fn hop_to_xray_outbound(hop: &ChainHop, tag: &str, dialer: Option<&str>) -> serd
                 });
             }
             "grpc" => {
-                ss["grpcSettings"] = serde_json::json!({
-                    "serviceName": hop
-                        .params
-                        .get("serviceName")
-                        .map(|s| s.as_str())
-                        .unwrap_or("")
-                });
+                let svc = hop.params.get("serviceName").map(|s| s.as_str()).unwrap_or("");
+                ss["grpcSettings"] = serde_json::json!({ "serviceName": svc });
             }
             _ => {}
         }
@@ -1074,12 +1042,7 @@ pub struct BrutalChainPlan {
 
 impl BrutalChainPlan {
     pub fn arm_id(&self) -> String {
-        let hops_id = self
-            .hops
-            .iter()
-            .map(|h| h.key())
-            .collect::<Vec<_>>()
-            .join("<-");
+        let hops_id = self.hops.iter().map(|h| h.key()).collect::<Vec<_>>().join("<-");
         if self.fragment_dpi {
             format!("{hops_id}+frag")
         } else {
@@ -1092,9 +1055,7 @@ impl BrutalChainPlan {
 /// strict TLS-ClientHello JA3/JA4 classifiers without changing the upstream node.
 pub fn mutate_hop_fingerprint(hop: &ChainHop, fingerprint: &str) -> ChainHop {
     let mut cloned = hop.clone();
-    cloned
-        .params
-        .insert("fp".to_string(), fingerprint.to_string());
+    cloned.params.insert("fp".to_string(), fingerprint.to_string());
     cloned
 }
 
@@ -1167,6 +1128,18 @@ pub fn generate_brutal_chains(
         }
     }
 
+    let stage4_reserve = if max_hops >= 4 {
+        ((max_hops - 3) * 3).min(budget / 3)
+    } else {
+        0
+    };
+    let pre_stage4_cap = budget.saturating_sub(stage4_reserve);
+    let stage2b_cap = if max_hops >= 4 {
+        (pre_stage4_cap * 3) / 4
+    } else {
+        budget
+    };
+
     if max_hops >= 2 {
         // Stage 2: Local proxy bridge -> Clean Exit (WARP/Tor/OpenVPN/SingBox -> Exit).
         for exit in ordered_exits.iter().take(8) {
@@ -1182,9 +1155,12 @@ pub fn generate_brutal_chains(
         }
 
         // Stage 2b: Cross-/16 subnet 2-hop + bidirectional swaps [Exit <- Entry].
-        for exit in ordered_exits.iter().take(8) {
+        'stage2b: for exit in ordered_exits.iter().take(8) {
             let ex_net = exit.subnet_prefix16();
             for entry in &relay_pool {
+                if plans.len() >= stage2b_cap {
+                    break 'stage2b;
+                }
                 if entry.key() == exit.key() || entry.subnet_prefix16() == ex_net {
                     continue;
                 }
@@ -1193,26 +1169,29 @@ pub fn generate_brutal_chains(
                     fragment_dpi: false,
                     stage_label: "stage2-2hop-cross16".to_string(),
                 });
+                if plans.len() >= stage2b_cap {
+                    break 'stage2b;
+                }
                 push_plan(BrutalChainPlan {
                     hops: vec![(*exit).clone(), mutate_hop_fingerprint(entry, "random")],
                     fragment_dpi: true,
                     stage_label: "stage2-2hop-frag".to_string(),
                 });
-                if plans.len() >= budget {
-                    break;
-                }
             }
         }
     }
 
     if max_hops >= 3 && relay_pool.len() >= 2 {
         // Stage 3: 3-hop & 4-hop cascades forcing protocol & subnet diversity.
-        for exit in ordered_exits.iter().take(5) {
+        'stage3: for exit in ordered_exits.iter().take(5) {
             for r1 in relay_pool.iter().take(5) {
                 if r1.key() == exit.key() {
                     continue;
                 }
                 for entry in relay_pool.iter().take(5) {
+                    if plans.len() >= pre_stage4_cap {
+                        break 'stage3;
+                    }
                     if entry.key() == exit.key()
                         || entry.key() == r1.key()
                         || entry.subnet_prefix16() == r1.subnet_prefix16()
@@ -1301,9 +1280,7 @@ pub fn record_blocked_exit(profile_id: &str, persona: ServicePersona, key: &str)
     let path = blacklist_path(profile_id, persona);
     let mut store: PersonaBlacklist = read_opt(&path).unwrap_or_default();
     let now = crate::store::now_ts();
-    store
-        .blocked_exits
-        .retain(|_, ts| now - *ts < EXIT_BLACKLIST_TTL_SECS);
+    store.blocked_exits.retain(|_, ts| now - *ts < EXIT_BLACKLIST_TTL_SECS);
     store.blocked_exits.insert(key.to_string(), now);
     let _ = write_json(&path, &store);
 }
@@ -1314,11 +1291,7 @@ pub fn is_exit_blacklisted(profile_id: &str, persona: ServicePersona, key: &str)
         return false;
     };
     let now = crate::store::now_ts();
-    store
-        .blocked_exits
-        .get(key)
-        .map(|ts| now - *ts < EXIT_BLACKLIST_TTL_SECS)
-        .unwrap_or(false)
+    store.blocked_exits.get(key).is_some_and(|ts| now - *ts < EXIT_BLACKLIST_TTL_SECS)
 }
 
 // ---------------------------------------------------------------------------
@@ -1657,10 +1630,7 @@ async fn fetch_geo_asn(client: &reqwest::Client, ip: &str) -> Option<GeoAsnRepor
     {
         if let Ok(v) = r.json::<serde_json::Value>().await {
             if v.get("status").and_then(|x| x.as_str()) == Some("success") {
-                let cc = v["countryCode"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_ascii_uppercase();
+                let cc = v["countryCode"].as_str().unwrap_or("").to_ascii_uppercase();
                 let org = format!(
                     "{} {}",
                     v["isp"].as_str().unwrap_or(""),
@@ -1694,10 +1664,7 @@ async fn fetch_geo_asn(client: &reqwest::Client, ip: &str) -> Option<GeoAsnRepor
     if let Ok(r) = client.get("https://ipwho.is/").send().await {
         if let Ok(v) = r.json::<serde_json::Value>().await {
             if v["success"].as_bool() == Some(true) {
-                let cc = v["country_code"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_ascii_uppercase();
+                let cc = v["country_code"].as_str().unwrap_or("").to_ascii_uppercase();
                 let org = v["connection"]["isp"]
                     .as_str()
                     .or_else(|| v["connection"]["org"].as_str())
@@ -1734,12 +1701,8 @@ async fn fetch_geo_asn(client: &reqwest::Client, ip: &str) -> Option<GeoAsnRepor
 // ---------------------------------------------------------------------------
 
 pub fn country_to_locale_tz(country: Option<&str>) -> (&'static str, &'static str) {
-    match country
-        .unwrap_or("")
-        .trim()
-        .to_ascii_uppercase()
-        .as_str()
-    {
+    let up = country.unwrap_or("").trim().to_ascii_uppercase();
+    match up.as_str() {
         "DE" => ("de-DE", "Europe/Berlin"),
         "GB" => ("en-GB", "Europe/London"),
         "FR" => ("fr-FR", "Europe/Paris"),
@@ -1755,7 +1718,7 @@ pub fn country_to_locale_tz(country: Option<&str>) -> (&'static str, &'static st
 
 pub fn hardened_chrome_args(
     socks_port: u16,
-    profile_dir_path: &PathBuf,
+    profile_dir_path: &Path,
     target_url: &str,
     country: Option<&str>,
 ) -> Vec<String> {
@@ -1856,9 +1819,7 @@ async fn handle_socks_client(
     let mut req = [0u8; 4];
     client.read_exact(&mut req).await?;
     if req[1] != 0x01 {
-        let _ = client
-            .write_all(&[0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
-            .await;
+        let _ = client.write_all(&[0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0]).await;
         return Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "only CONNECT",
@@ -1883,9 +1844,7 @@ async fn handle_socks_client(
             std::net::Ipv6Addr::from(ip).to_string()
         }
         _ => {
-            let _ = client
-                .write_all(&[0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
-                .await;
+            let _ = client.write_all(&[0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0]).await;
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "bad atyp",
@@ -1902,18 +1861,15 @@ async fn handle_socks_client(
         TcpStream::connect((target_host.as_str(), target_port)).await?
     };
 
-    for idx in 0..hops.len() {
-        let (next_host, next_port) = if idx + 1 < hops.len() {
-            (hops[idx + 1].host.as_str(), hops[idx + 1].port)
-        } else {
-            (target_host.as_str(), target_port)
+    for (idx, hop) in hops.iter().enumerate() {
+        let (next_host, next_port) = match hops.get(idx + 1) {
+            Some(next) => (next.host.as_str(), next.port),
+            None => (target_host.as_str(), target_port),
         };
-        dial_through_proxy(&mut stream, &hops[idx], next_host, next_port).await?;
+        dial_through_proxy(&mut stream, hop, next_host, next_port).await?;
     }
 
-    client
-        .write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
-        .await?;
+    client.write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]).await?;
     let _ = tokio::io::copy_bidirectional(&mut client, &mut stream).await;
     Ok(())
 }
@@ -2198,9 +2154,7 @@ mod tests {
         let outer = start_cascade_socks_proxy(0, vec![h1, h2]).await.unwrap();
 
         // Connect through outer 2-hop cascade to dummy target.
-        let mut client = TcpStream::connect(("127.0.0.1", outer.port()))
-            .await
-            .unwrap();
+        let mut client = TcpStream::connect(("127.0.0.1", outer.port())).await.unwrap();
         client.write_all(&[0x05, 0x01, 0x00]).await.unwrap();
         let mut g = [0u8; 2];
         client.read_exact(&mut g).await.unwrap();
@@ -2256,10 +2210,8 @@ mod tests {
             "http-proxy 192.0.2.9 8080\nremote 203.0.113.77 1194\n"
         );
         let ovpn_hops = parse_configs_from_blob("exit.ovpn", ovpn.as_bytes());
-        let has_http = ovpn_hops
-            .iter()
-            .any(|h| h.scheme == HopScheme::Http && h.port == 8080);
-        assert!(has_http);
+        let is_http_8080 = |h: &ChainHop| h.scheme == HopScheme::Http && h.port == 8080;
+        assert!(ovpn_hops.iter().any(is_http_8080));
 
         let cands = vec![
             sample_vless("10.1.1.1"),

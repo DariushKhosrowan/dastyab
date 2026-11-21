@@ -669,9 +669,8 @@ pub fn ai_studio_chrome_profile() -> PathBuf {
 
 /// Path to the persisted Google Flow Chrome profile.
 pub fn flow_chrome_profile() -> PathBuf {
-    crate::store::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".dastyab-flow-profile")
+    let base = crate::store::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.join(".dastyab-flow-profile")
 }
 
 /// Launch the xray proxy rooted at the final server (plus optional relays/DPI
@@ -800,10 +799,9 @@ pub async fn start_tunnel_mode_for_persona(
                     target_url,
                     country,
                 );
-                let _ = std::process::Command::new(chrome)
-                    .env("TZ", tz)
-                    .args(&args)
-                    .spawn();
+                let mut cmd = std::process::Command::new(chrome);
+                cmd.env("TZ", tz).args(&args);
+                let _ = cmd.spawn();
                 Ok(format!(
                     "Tunnel on (mode=chrome, {}, socks5 127.0.0.1:{socks_port}). \
                      Opened in anti-leak Chrome (persist={chrome_persist}).",
@@ -872,6 +870,7 @@ mod tests {
         assert!(is_chain_configured(&pid));
         clear_final_server(&pid).unwrap();
         assert!(!is_chain_configured(&pid));
+        crate::store::clear_mem_dir_override();
     }
 
     #[test]
@@ -993,7 +992,14 @@ mod tests {
         assert_eq!(obs[1]["sockopt"]["dialerProxy"], "entry");
         assert_eq!(obs[2]["tag"], "entry");
         assert_eq!(obs[2]["protocol"], "socks");
-        assert!(obs.iter().any(|o| o["tag"] == "frag-dialer"));
+        assert!(!obs.iter().any(|o| o["tag"] == "frag-dialer"));
+
+        let mut ext_remote = loaded;
+        ext_remote.relay_links[1] = "socks5://192.0.2.9:1080".into();
+        let json_remote = build_chain_xray_json(&cfg, &ext_remote, 10862).unwrap();
+        let vr: serde_json::Value = serde_json::from_str(&json_remote).unwrap();
+        let obsr = vr["outbounds"].as_array().unwrap();
+        assert!(obsr.iter().any(|o| o["tag"] == "frag-dialer"));
         crate::store::clear_mem_dir_override();
     }
 }
