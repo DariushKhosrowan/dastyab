@@ -699,22 +699,20 @@ pub fn parse_configs_from_blob(filename: &str, bytes: &[u8]) -> Vec<ChainHop> {
                         .and_then(|x| x.as_str())
                         .unwrap_or("");
                     if let Some(server) = ob.get("server").and_then(|x| x.as_str()) {
-                        let raw_port = ob
-                            .get("server_port")
-                            .and_then(|x| x.as_u64())
-                            .unwrap_or(0);
-                        let port = raw_port as u16;
+                        let raw_port = ob.get("server_port").and_then(|x| x.as_u64());
+                        let port = raw_port.unwrap_or(0) as u16;
                         if port > 0 {
-                            let uri = match proto {
-                                "vless" => ob
-                                    .get("uuid")
-                                    .and_then(|x| x.as_str())
-                                    .map(|u| format!("vless://{u}@{server}:{port}?security=tls")),
-                                "trojan" => ob.get("password").and_then(|x| x.as_str()).map(|pw| {
-                                    format!("trojan://{pw}@{server}:{port}?security=tls")
-                                }),
-                                "socks" => Some(format!("socks5://{server}:{port}")),
-                                "http" => Some(format!("http://{server}:{port}")),
+                            let uuid = ob.get("uuid").and_then(|x| x.as_str());
+                            let pass = ob.get("password").and_then(|x| x.as_str());
+                            let uri = match (proto, uuid, pass) {
+                                ("vless", Some(u), _) => {
+                                    Some(format!("vless://{u}@{server}:{port}?security=tls"))
+                                }
+                                ("trojan", _, Some(pw)) => {
+                                    Some(format!("trojan://{pw}@{server}:{port}?security=tls"))
+                                }
+                                ("socks", _, _) => Some(format!("socks5://{server}:{port}")),
+                                ("http", _, _) => Some(format!("http://{server}:{port}")),
                                 _ => None,
                             };
                             if let Some(u) = uri {
@@ -2233,7 +2231,9 @@ mod tests {
             "vless://11111111-1111-1111-1111-111111111111",
             "@203.0.113.44:443?security=tls"
         );
-        let npv_bytes = format!("\x00\x01NPVT\x02{embedded_vless}\x00\xff").into_bytes();
+        let mut npv_bytes = b"\x00\x01NPVT\x02".to_vec();
+        npv_bytes.extend_from_slice(embedded_vless.as_bytes());
+        npv_bytes.extend_from_slice(b"\x00\xff");
         let npv_hops = parse_configs_from_blob("free.npvt", &npv_bytes);
         assert_eq!(npv_hops.len(), 1);
         assert_eq!(npv_hops[0].host, "203.0.113.44");
@@ -2256,9 +2256,10 @@ mod tests {
             "http-proxy 192.0.2.9 8080\nremote 203.0.113.77 1194\n"
         );
         let ovpn_hops = parse_configs_from_blob("exit.ovpn", ovpn.as_bytes());
-        assert!(ovpn_hops
+        let has_http = ovpn_hops
             .iter()
-            .any(|h| h.scheme == HopScheme::Http && h.port == 8080));
+            .any(|h| h.scheme == HopScheme::Http && h.port == 8080);
+        assert!(has_http);
 
         let cands = vec![
             sample_vless("10.1.1.1"),

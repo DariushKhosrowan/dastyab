@@ -6205,7 +6205,8 @@ async fn cmd_multilayer(profile: &str, action: crate::MultilayerAction) -> Resul
             let report = ml::probe_flow_access(profile).await?;
             for c in &report.checks {
                 let mark = if c.passed { "✓ pass" } else { "✗ fail" };
-                println!("  {:<16} {mark}  HTTP {} ({})", c.target, c.status, c.detail);
+                let (t, s, d) = (&c.target, c.status, &c.detail);
+                println!("  {t:<16} {mark}  HTTP {s} ({d})");
             }
             println!("Verdict: {}", report.reason);
             Ok(())
