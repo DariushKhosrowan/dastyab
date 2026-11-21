@@ -7,12 +7,12 @@
 //! is the pure, testable seam for that execution:
 //!
 //! - [`TunnelOpener`] — an abstraction over "try this endpoint now". The real
-//!   opener dispatches on [`CarrierKind`](crate::egress::carrier_pool::CarrierKind) to the existing probe/connect code;
-//!   tests inject a scripted opener. `open` is a *pure attempt* that returns
-//!   a result; it does NOT bind the active tunnel — the caller binds the
-//!   winner. This is required for parallel execution (multiple `open` calls
-//!   can be in flight at once, so openers must be `Send + Sync` and free of
-//!   shared mutable state).
+//!   opener dispatches on [`CarrierKind`](crate::egress::carrier_pool::CarrierKind)
+//!   to the existing probe/connect code; tests inject a scripted opener.
+//!   `open` is a *pure attempt* that returns a result; it does NOT bind the
+//!   active tunnel — the caller binds the winner. This is required for
+//!   parallel execution (multiple `open` calls can be in flight at once,
+//!   so openers must be `Send + Sync` and free of shared mutable state).
 //! - [`execute_reselection`] — serial: try each candidate in order, return the
 //!   first that opens. Preserves index-order priority.
 //! - [`execute_reselection_parallel`] — parallel: a bounded worker pool probes

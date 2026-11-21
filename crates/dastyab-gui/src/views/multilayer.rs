@@ -25,8 +25,10 @@ pub enum MultilayerAction {
     Clear,
     /// Store the Gemini API key.
     SaveGeminiKey,
-    /// Spawn a probe of AI Studio + Gemini through the chain.
+    /// Spawn a probe of AI Studio + Gemini through the chain (Lion).
     ProbeAi,
+    /// Spawn a strict Warrior probe of Google Flow through the chain.
+    ProbeFlow,
     /// Spawn a real Gemini generateContent call through the chain.
     Gemini,
     /// Start the tunnel in the selected mode.
@@ -112,7 +114,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut DastYabApp) -> Option<MultilayerAction>
                     (
                         "device",
                         "Whole device",
-                        "Route the whole device via the environment proxy (best-effort system-wide).",
+                        concat!(
+                            "Route the whole device via the environment proxy ",
+                            "(best-effort system-wide)."
+                        ),
                     ),
                 ];
                 for (id, label, desc) in modes {
@@ -164,13 +169,16 @@ pub fn show(ui: &mut egui::Ui, app: &mut DastYabApp) -> Option<MultilayerAction>
         });
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            if ui.button("🛰 Probe AI Studio + Gemini").clicked() {
+            if ui.button("🦁 Probe AI Studio (Lion)").clicked() {
                 action = Some(MultilayerAction::ProbeAi);
+            }
+            if ui.button("⚔ Probe Google Flow (Warrior)").clicked() {
+                action = Some(MultilayerAction::ProbeFlow);
             }
             ui.label(egui::RichText::new("Prompt").color(GOLD_DIM));
             ui.add(
                 egui::TextEdit::singleline(&mut app.ml_prompt)
-                    .desired_width(280.0)
+                    .desired_width(240.0)
                     .hint_text("Ask Gemini through the tunnel…"),
             );
             if ui.button("🪐 Call Gemini").clicked() {

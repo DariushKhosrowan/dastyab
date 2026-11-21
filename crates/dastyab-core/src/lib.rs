@@ -141,6 +141,7 @@ pub use tunnel::dnstunnel;
 pub use tunnel::dnstunnel_arq;
 pub use tunnel::dnstunnel_auth;
 pub use tunnel::iblt;
+pub use tunnel::lion_warrior;
 pub use tunnel::multilayer;
 pub use tunnel::multipath_bond;
 pub use tunnel::tunnel_lifeline;

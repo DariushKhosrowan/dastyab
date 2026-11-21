@@ -4293,10 +4293,26 @@ impl DastYabApp {
                         out.push('\n');
                     }
                     out.push_str(if report.ok {
-                        "Verdict: AI services reachable through the chain."
+                        "Verdict (Lion): AI services reachable through chain."
                     } else {
-                        "Verdict: not reachable — check your final server."
+                        "Verdict (Lion): blocked or unreachable."
                     });
+                    Ok::<String, CFError>(out)
+                });
+            }
+            Some(crate::views::multilayer::MultilayerAction::ProbeFlow) => {
+                let pid = self.state.active_profile_id.clone();
+                self.spawn_ml_task("ml-probe-flow", async move {
+                    let report = dastyab_core::multilayer::probe_flow_access(&pid).await?;
+                    let mut out = String::new();
+                    for c in &report.checks {
+                        let status = if c.passed { "✓ pass" } else { "✗ fail" };
+                        out.push_str(&format!(
+                            "{:<15} {status}  HTTP {} ({})\n",
+                            c.target, c.status, c.detail
+                        ));
+                    }
+                    out.push_str(&format!("Verdict (Warrior): {}", report.reason));
                     Ok::<String, CFError>(out)
                 });
             }

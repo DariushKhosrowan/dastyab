@@ -107,9 +107,57 @@ pub fn clear_final_server(profile_id: &str) -> Result<(), CFError> {
     Ok(())
 }
 
+/// Optional brutal multi-hop relay + DPI-fragment settings layered under the
+/// profile's final server (exit).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChainExtConfig {
+    /// Entry / intermediate hops ordered `[relay_close_to_exit, ..., entry]`.
+    #[serde(default)]
+    pub relay_links: Vec<String>,
+    /// Wrap entry hop with xray TLS-Hello packet fragmentation (`freedom`).
+    #[serde(default)]
+    pub fragment_dpi: bool,
+}
+
+fn chain_ext_path(profile_id: &str) -> PathBuf {
+    crate::store::profiles::profile_dir(profile_id).join("final-chain-ext.json")
+}
+
+pub fn save_chain_ext(profile_id: &str, ext: &ChainExtConfig) -> Result<(), CFError> {
+    crate::store::write_json(&chain_ext_path(profile_id), ext)
+}
+
+pub fn load_chain_ext(profile_id: &str) -> ChainExtConfig {
+    crate::store::read_opt(&chain_ext_path(profile_id)).unwrap_or_default()
+}
+
 /// Parse the user's vless link into a VlessProfile.
 pub fn parse_final_server(cfg: &FinalServerConfig) -> Result<VlessProfile, CFError> {
     VlessProfile::parse(&cfg.vless_link)
+}
+
+/// Compile full 1..=4 hop xray JSON for `cfg` + optional `ext` relays/fragment.
+pub fn build_chain_xray_json(
+    cfg: &FinalServerConfig,
+    ext: &ChainExtConfig,
+    socks_port: u16,
+) -> Result<String, CFError> {
+    if !ext.relay_links.is_empty() || ext.fragment_dpi || !cfg.vless_link.starts_with("vless://") {
+        let mut hops = vec![crate::tunnel::lion_warrior::parse_chain_hop(&cfg.vless_link)?];
+        for link in &ext.relay_links {
+            let trimmed = link.trim();
+            if !trimmed.is_empty() {
+                hops.push(crate::tunnel::lion_warrior::parse_chain_hop(trimmed)?);
+            }
+        }
+        let opts = crate::tunnel::lion_warrior::ChainDialOptions {
+            socks_port,
+            fragment_dpi: ext.fragment_dpi,
+            ..Default::default()
+        };
+        return crate::tunnel::lion_warrior::build_xray_chain_config(&hops, &opts);
+    }
+    parse_final_server(cfg)?.xray_client_json_at_port(socks_port)
 }
 
 // --- Access probe ----------------------------------------------------------
@@ -221,15 +269,9 @@ pub const PROXY_SOCKS_PORT: u16 = 10850;
 
 // Probes.
 const AI_STUDIO_URL: &str = "https://aistudio.google.com/";
-const GEMINI_URL: &str = "https://generativelanguage.googleapis.com/";
-const IPIFY_URL: &str = "https://api.ipify.org";
 
-/// Probe AI Studio + Gemini through the final-server chain.
-///
-/// Spawns a local xray proxy rooted at the user's final server, then issues
-/// real HTTPS requests through it. A target is "reachable" when we get any
-/// HTTP response (even a redirect / 4xx proves the chain egress works) — a
-/// timeout or connection failure means the chain does not reach that target.
+/// Probe AI Studio + Gemini through the final-server chain (uses any configured
+/// relay hops & DPI fragmentation for this profile).
 pub async fn probe_ai_access(profile_id: &str) -> Result<AiAccessReport, CFError> {
     let cfg = load_final_server(profile_id).ok_or_else(|| {
         CFError::new(
@@ -238,12 +280,88 @@ pub async fn probe_ai_access(profile_id: &str) -> Result<AiAccessReport, CFError
             "Paste a vless:// link on the Multi-Layer Tunnel panel first.",
         )
     })?;
-    probe_ai_access_cfg(&cfg).await
+    let ext = load_chain_ext(profile_id);
+    probe_ai_access_with_ext(&cfg, &ext).await
 }
 
 /// Inner probe that takes the config directly (testable without the store).
 pub async fn probe_ai_access_cfg(cfg: &FinalServerConfig) -> Result<AiAccessReport, CFError> {
-    let profile = parse_final_server(cfg)?;
+    probe_ai_access_with_ext(cfg, &ChainExtConfig::default()).await
+}
+
+/// Strict Warrior probe for Google Flow through the profile's multi-layer chain.
+pub async fn probe_flow_access(
+    profile_id: &str,
+) -> Result<crate::tunnel::lion_warrior::PersonaAccessReport, CFError> {
+    let cfg = load_final_server(profile_id).ok_or_else(|| {
+        CFError::new(
+            "multilayer",
+            "no final server configured",
+            "Paste a proxy link on the Multi-Layer Tunnel panel first.",
+        )
+    })?;
+    let ext = load_chain_ext(profile_id);
+    probe_flow_access_with_ext(&cfg, &ext).await
+}
+
+pub async fn probe_flow_access_with_ext(
+    cfg: &FinalServerConfig,
+    ext: &ChainExtConfig,
+) -> Result<crate::tunnel::lion_warrior::PersonaAccessReport, CFError> {
+    let xray = find_xray_binary().ok_or_else(|| {
+        CFError::new(
+            "multilayer",
+            "xray binary not found",
+            "Install xray and put it on PATH, or set DASTYAB_XRAY=/path/to/xray.",
+        )
+    })?;
+    let flow_port = PROXY_SOCKS_PORT + 10;
+    let cfg_json = build_chain_xray_json(cfg, ext, flow_port)?;
+    let cfg_path =
+        std::env::temp_dir().join(format!("dyb-warrior-{}.json", crate::store::new_id()));
+    std::fs::write(&cfg_path, &cfg_json)
+        .map_err(|e| CFError::new("multilayer", format!("write xray cfg: {e}"), ""))?;
+
+    let mut child = tokio::process::Command::new(&xray)
+        .arg("run")
+        .arg("-c")
+        .arg(&cfg_path)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| CFError::new("multilayer", format!("spawn xray: {e}"), ""))?;
+
+    let ready = wait_for_port(flow_port, Duration::from_secs(15)).await;
+    if !ready {
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+        let _ = std::fs::remove_file(&cfg_path);
+        return Err(CFError::new(
+            "multilayer",
+            "xray proxy did not open the socks port",
+            "Check relay/exit configs are reachable.",
+        ));
+    }
+
+    let hint = (!cfg.country_hint.trim().is_empty()).then_some(cfg.country_hint.as_str());
+    let report = crate::tunnel::lion_warrior::verify_persona_through_socks(
+        flow_port,
+        crate::tunnel::lion_warrior::ServicePersona::WarriorFlow,
+        hint,
+        false,
+    )
+    .await;
+
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+    let _ = std::fs::remove_file(&cfg_path);
+    report
+}
+
+async fn probe_ai_access_with_ext(
+    cfg: &FinalServerConfig,
+    ext: &ChainExtConfig,
+) -> Result<AiAccessReport, CFError> {
     let xray = find_xray_binary().ok_or_else(|| {
         CFError::new(
             "multilayer",
@@ -252,7 +370,7 @@ pub async fn probe_ai_access_cfg(cfg: &FinalServerConfig) -> Result<AiAccessRepo
         )
     })?;
 
-    let cfg_json = profile.xray_client_json_at_port(PROXY_SOCKS_PORT)?;
+    let cfg_json = build_chain_xray_json(cfg, ext, PROXY_SOCKS_PORT)?;
     let cfg_path =
         std::env::temp_dir().join(format!("dyb-multilayer-{}.json", crate::store::new_id()));
     std::fs::write(&cfg_path, &cfg_json)
@@ -273,6 +391,8 @@ pub async fn probe_ai_access_cfg(cfg: &FinalServerConfig) -> Result<AiAccessRepo
     let ready = wait_for_port(PROXY_SOCKS_PORT, deadline).await;
     if !ready {
         let _ = child.kill().await;
+        let _ = child.wait().await;
+        let _ = std::fs::remove_file(&cfg_path);
         return Err(CFError::new(
             "multilayer",
             "xray proxy did not open the socks port",
@@ -280,91 +400,44 @@ pub async fn probe_ai_access_cfg(cfg: &FinalServerConfig) -> Result<AiAccessRepo
         ));
     }
 
-    // Build a socks5h client.
-    let proxy = reqwest::Proxy::all(format!("socks5h://127.0.0.1:{PROXY_SOCKS_PORT}"))
-        .map_err(|e| CFError::new("multilayer", format!("proxy cfg: {e}"), ""))?;
-    let client = reqwest::Client::builder()
-        .proxy(proxy)
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|e| CFError::new("multilayer", format!("http client: {e}"), ""))?;
-
-    let mut probes = Vec::new();
-
-    // Probe AI Studio.
-    probes.push(probe_target(&client, "AI Studio", AI_STUDIO_URL).await);
-
-    // Probe Gemini.
-    probes.push(probe_target(&client, "Gemini", GEMINI_URL).await);
-
-    // Egress IP.
-    let egress = egress_ip(&client).await;
-
-    // Show egress on the first reachable probe.
-    if let Some(ip) = &egress {
-        if let Some(first) = probes.iter_mut().find(|p| p.reachable) {
-            first.egress_ip = Some(ip.clone());
-        }
-    }
+    let hint = (!cfg.country_hint.trim().is_empty()).then_some(cfg.country_hint.as_str());
+    let res = crate::tunnel::lion_warrior::verify_persona_through_socks(
+        PROXY_SOCKS_PORT,
+        crate::tunnel::lion_warrior::ServicePersona::LionAiStudio,
+        hint,
+        false,
+    )
+    .await;
 
     // Cleanup.
     let _ = child.kill().await;
     let _ = child.wait().await;
     let _ = std::fs::remove_file(&cfg_path);
 
-    let any_reachable = probes.iter().any(|p| p.reachable);
+    let report = res?;
+    let mut probes: Vec<TargetProbe> = report
+        .checks
+        .into_iter()
+        .map(|c| TargetProbe {
+            target: c.target,
+            reachable: c.passed,
+            egress_ip: report.egress_ip.clone(),
+            note: c.detail,
+        })
+        .collect();
+    if probes.is_empty() {
+        probes.push(TargetProbe {
+            target: "Lion Gate".to_string(),
+            reachable: false,
+            egress_ip: report.egress_ip.clone(),
+            note: report.reason.clone(),
+        });
+    }
     Ok(AiAccessReport {
         probes,
         final_server: cfg.name.clone(),
-        ok: any_reachable,
+        ok: report.ok,
     })
-}
-
-async fn probe_target(client: &reqwest::Client, target: &str, url: &str) -> TargetProbe {
-    match client.get(url).send().await {
-        Ok(resp) => {
-            let status = resp.status().as_u16();
-            let final_url = resp.url().as_str().to_lowercase();
-            let body = resp.text().await.unwrap_or_default();
-            let body_lower = body.to_lowercase();
-            let geo_blocked = status == 403
-                || status == 451
-                || final_url.contains("unsupported-country")
-                || final_url.contains("available-regions")
-                || final_url.contains("/sorry/")
-                || body_lower.contains("not available in your country")
-                || body_lower.contains("isn't available in your country")
-                || body_lower.contains("unsupported-country-title");
-            TargetProbe {
-                target: target.to_string(),
-                reachable: !geo_blocked && (200..400).contains(&status),
-                egress_ip: None,
-                note: if geo_blocked {
-                    format!("HTTP {status} (geo-blocked)")
-                } else {
-                    format!("HTTP {status}")
-                },
-            }
-        }
-        Err(e) => TargetProbe {
-            target: target.to_string(),
-            reachable: false,
-            egress_ip: None,
-            note: format!("{e}"),
-        },
-    }
-}
-
-async fn egress_ip(client: &reqwest::Client) -> Option<String> {
-    client
-        .get(IPIFY_URL)
-        .send()
-        .await
-        .ok()?
-        .text()
-        .await
-        .ok()
-        .map(|s| s.trim().to_string())
 }
 
 /// Wait until a TCP port accepts connections.
@@ -594,13 +667,20 @@ pub fn ai_studio_chrome_profile() -> PathBuf {
         .join(".dastyab-aistudio-profile")
 }
 
-/// Launch the xray proxy rooted at the final server. Returns the child handle.
-/// `socks_port` is the local SOCKS5 port xray binds.
-pub fn launch_xray(
+/// Path to the persisted Google Flow Chrome profile.
+pub fn flow_chrome_profile() -> PathBuf {
+    crate::store::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".dastyab-flow-profile")
+}
+
+/// Launch the xray proxy rooted at the final server (plus optional relays/DPI
+/// fragmentation). Returns the child handle.
+pub fn launch_xray_with_ext(
     cfg: &FinalServerConfig,
+    ext: &ChainExtConfig,
     socks_port: u16,
 ) -> Result<tokio::process::Child, CFError> {
-    let profile = parse_final_server(cfg)?;
     let xray = find_xray_binary().ok_or_else(|| {
         CFError::new(
             "multilayer",
@@ -608,8 +688,7 @@ pub fn launch_xray(
             "Install xray and put it on PATH, or set DASTYAB_XRAY=/path/to/xray.",
         )
     })?;
-    // Write a config with the requested socks port.
-    let cfg_json = profile.xray_client_json_at_port(socks_port)?;
+    let cfg_json = build_chain_xray_json(cfg, ext, socks_port)?;
     let cfg_path = std::env::temp_dir().join(format!("dyb-tunnel-{}.json", crate::store::new_id()));
     std::fs::write(&cfg_path, &cfg_json)
         .map_err(|e| CFError::new("multilayer", format!("write xray cfg: {e}"), ""))?;
@@ -624,16 +703,37 @@ pub fn launch_xray(
     Ok(child)
 }
 
-/// Start the tunnel in the chosen mode. Returns a human summary.
-///
-/// This is intentionally simple and user-visible: for `Chrome` and `Proxy`
-/// it just spawns xray and (for Chrome) opens a dedicated Chrome pointed at
-/// the local SOCKS5 proxy, reusing a persisted profile so logins persist.
-/// For `Device` it reports that a system-level proxy must be configured
-/// (the app sets the environment proxy, which the desktop honors on
-/// restart), and offers the local proxy as the practical route.
+/// Launch the xray proxy rooted at the final server. Returns the child handle.
+/// `socks_port` is the local SOCKS5 port xray binds.
+pub fn launch_xray(
+    cfg: &FinalServerConfig,
+    socks_port: u16,
+) -> Result<tokio::process::Child, CFError> {
+    launch_xray_with_ext(cfg, &ChainExtConfig::default(), socks_port)
+}
+
+/// Start the tunnel in the chosen mode (defaults to AI Studio Chrome target).
 pub async fn start_tunnel_mode(
     profile_id: &str,
+    mode: TunnelMode,
+    socks_port: u16,
+    chrome_persist: bool,
+) -> Result<String, CFError> {
+    start_tunnel_mode_for_persona(
+        profile_id,
+        crate::tunnel::lion_warrior::ServicePersona::LionAiStudio,
+        mode,
+        socks_port,
+        chrome_persist,
+    )
+    .await
+}
+
+/// Start the multi-layer tunnel for a chosen persona (Lion AI Studio or Warrior
+/// Google Flow) with hardened DNS/WebRTC anti-leak Chrome launch flags.
+pub async fn start_tunnel_mode_for_persona(
+    profile_id: &str,
+    persona: crate::tunnel::lion_warrior::ServicePersona,
     mode: TunnelMode,
     socks_port: u16,
     chrome_persist: bool,
@@ -645,7 +745,8 @@ pub async fn start_tunnel_mode(
             "Paste a vless:// link on the Multi-Layer Tunnel panel first.",
         )
     })?;
-    let mut child = launch_xray(&cfg, socks_port)?;
+    let ext = load_chain_ext(profile_id);
+    let mut child = launch_xray_with_ext(&cfg, &ext, socks_port)?;
     let ready = wait_for_port(socks_port, Duration::from_secs(15)).await;
     if !ready {
         let _ = child.kill().await;
@@ -660,7 +761,14 @@ pub async fn start_tunnel_mode(
     match mode {
         TunnelMode::Chrome => {
             let prof_dir = if chrome_persist {
-                ai_studio_chrome_profile()
+                match persona {
+                    crate::tunnel::lion_warrior::ServicePersona::LionAiStudio => {
+                        ai_studio_chrome_profile()
+                    }
+                    crate::tunnel::lion_warrior::ServicePersona::WarriorFlow => {
+                        flow_chrome_profile()
+                    }
+                }
             } else {
                 std::env::temp_dir()
                     .join(format!("dyb-chrome-ephemeral-{}", crate::store::new_id()))
@@ -668,20 +776,38 @@ pub async fn start_tunnel_mode(
             std::fs::create_dir_all(&prof_dir).ok();
             let chrome = [
                 "/opt/google/chrome/google-chrome",
+                "/usr/bin/google-chrome",
+                "/usr/bin/google-chrome-stable",
+                "/usr/bin/chromium",
                 "google-chrome",
                 "google-chrome-stable",
             ]
             .iter()
             .find(|c| std::path::Path::new(c).exists());
+            let target_url = match persona {
+                crate::tunnel::lion_warrior::ServicePersona::LionAiStudio => AI_STUDIO_URL,
+                crate::tunnel::lion_warrior::ServicePersona::WarriorFlow => {
+                    "https://flow.google.com/"
+                }
+            };
             if let Some(chrome) = chrome {
+                let country = (!cfg.country_hint.trim().is_empty())
+                    .then_some(cfg.country_hint.as_str());
+                let (_, tz) = crate::tunnel::lion_warrior::country_to_locale_tz(country);
+                let args = crate::tunnel::lion_warrior::hardened_chrome_args(
+                    socks_port,
+                    &prof_dir,
+                    target_url,
+                    country,
+                );
                 let _ = std::process::Command::new(chrome)
-                    .arg("--ozone-platform=x11")
-                    .arg(format!("--proxy-server=socks5://127.0.0.1:{socks_port}"))
-                    .arg(format!("--user-data-dir={}", prof_dir.display()))
-                    .arg("https://aistudio.google.com/")
+                    .env("TZ", tz)
+                    .args(&args)
                     .spawn();
                 Ok(format!(
-                    "Tunnel on (mode=chrome, socks5 127.0.0.1:{socks_port}). AI Studio opened in dedicated Chrome (session persisted: {chrome_persist})."
+                    "Tunnel on (mode=chrome, {}, socks5 127.0.0.1:{socks_port}). \
+                     Opened in anti-leak Chrome (persist={chrome_persist}).",
+                    persona.display_title()
                 ))
             } else {
                 let _ = child.kill().await;
@@ -693,20 +819,19 @@ pub async fn start_tunnel_mode(
             }
         }
         TunnelMode::Proxy => {
-            // Keep the child alive; the proxy stays up for the app session.
-            // We detach by spawned the child and returning the port.
-            let _ = child; // child stays in scope until fn returns — we spawn it detached below.
+            let _ = child;
             Ok(format!(
-                "Tunnel on (mode=proxy). Local SOCKS5 proxy: 127.0.0.1:{socks_port} — point any app at it."
+                "Tunnel on (mode=proxy, {}). Local SOCKS5: 127.0.0.1:{socks_port}.",
+                persona.display_title()
             ))
         }
         TunnelMode::Device => {
-            // Best-effort: set the session env proxy so new processes inherit it.
             std::env::set_var("http_proxy", format!("socks5h://127.0.0.1:{socks_port}"));
             std::env::set_var("https_proxy", format!("socks5h://127.0.0.1:{socks_port}"));
             let _ = child;
             Ok(format!(
-                "Tunnel on (mode=device). Environment proxy set to socks5h://127.0.0.1:{socks_port}. New processes will route through the tunnel. (For full system-wide routing, configure the network proxy in your desktop settings.)"
+                "Tunnel on (mode=device). Env proxy set to \
+                 socks5h://127.0.0.1:{socks_port}."
             ))
         }
     }
@@ -834,5 +959,41 @@ mod tests {
         assert!(!is_executable_file(&f));
         std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o755)).unwrap();
         assert!(is_executable_file(&f));
+    }
+
+    #[test]
+    fn chain_ext_and_multihop_xray_json_build_properly() {
+        let dir = tempfile::tempdir().unwrap();
+        crate::store::set_mem_dir_override(dir.path().to_path_buf());
+        let cfg = FinalServerConfig {
+            name: "trojan-exit".into(),
+            vless_link: "trojan://secretpass@203.0.113.50:443?security=tls&sni=cdn.example".into(),
+            country_hint: "DE".into(),
+        };
+        let ext = ChainExtConfig {
+            relay_links: vec![
+                "vless://11111111-1111-1111-1111-111111111111@198.51.100.20:443?security=tls"
+                    .into(),
+                "socks5://127.0.0.1:9050".into(),
+            ],
+            fragment_dpi: true,
+        };
+        save_chain_ext("test-prof", &ext).unwrap();
+        let loaded = load_chain_ext("test-prof");
+        assert_eq!(loaded.relay_links.len(), 2);
+        assert!(loaded.fragment_dpi);
+
+        let json_str = build_chain_xray_json(&cfg, &loaded, 10861).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        let obs = v["outbounds"].as_array().unwrap();
+        assert_eq!(obs[0]["tag"], "exit");
+        assert_eq!(obs[0]["protocol"], "trojan");
+        assert_eq!(obs[0]["sockopt"]["dialerProxy"], "relay-1");
+        assert_eq!(obs[1]["tag"], "relay-1");
+        assert_eq!(obs[1]["sockopt"]["dialerProxy"], "entry");
+        assert_eq!(obs[2]["tag"], "entry");
+        assert_eq!(obs[2]["protocol"], "socks");
+        assert!(obs.iter().any(|o| o["tag"] == "frag-dialer"));
+        crate::store::clear_mem_dir_override();
     }
 }

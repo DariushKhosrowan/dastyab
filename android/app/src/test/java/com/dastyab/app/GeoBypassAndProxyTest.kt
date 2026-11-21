@@ -943,4 +943,26 @@ class GeoBypassAndProxyTest {
         assertFalse("Single unauthenticated loopback HTTP hop should not start redundant bridge", loopbackPlan.shouldStartLocalBridge)
         assertEquals(10809, loopbackPlan.webViewHttpProxyPort)
     }
+
+    @Test
+    fun buildProgressiveLayerStages_buildsUpToEightHopDeepCascades() {
+        val hops = (1..8).map { i ->
+            TunnelConfig.ProxyHop(
+                if (i % 2 == 0) TunnelConfig.ProxyScheme.SOCKS5 else TunnelConfig.ProxyScheme.HTTP,
+                "198.51.100.$i",
+                1080 + i
+            )
+        }
+        val stages = GeoBypassEngine.buildProgressiveLayerStages(
+            existingHops = emptyList(),
+            listening = emptyList(),
+            harvestedHops = hops,
+            maxTotalCandidates = 120
+        )
+        assertEquals("Expected stages 0..6 (up to 8-hop cascades)", 7, stages.size)
+        val flat = stages.flatten()
+        assertTrue("Expected 5-hop or 6-hop cascade in Stage 5", stages[5].any { it.size in 5..6 })
+        assertTrue("Expected 7-hop or 8-hop cascade in Stage 6", stages[6].any { it.size in 7..8 })
+        assertTrue("Expected at least one 8-hop cascade", flat.any { it.size == 8 })
+    }
 }

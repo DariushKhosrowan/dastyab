@@ -341,3 +341,124 @@ def test_dead_pool_advice_uses_the_cli_not_a_loose_file(ai, tmp_path, monkeypatc
     out = capsys.readouterr().out
     assert "dastyab aistudio build-pool" in out
     assert "dastyab-aistudio.py build-pool" not in out
+
+
+# --- Lion brutal multi-layer extensions -----------------------------------
+
+def test_lion_multihop_and_tls_fragment_config(ai):
+    hops = [
+        {"proto": "trojan", "addr": "203.0.113.10", "port": 443,
+         "password": "pw1", "q": {"security": "tls", "type": "tcp"}},
+        {"proto": "vless", "addr": "198.51.100.20", "port": 443,
+         "uuid": "uid-r1", "q": {"security": "none", "type": "tcp"}},
+        {"proto": "vless", "addr": "192.0.2.30", "port": 443,
+         "uuid": "uid-en", "q": {"security": "tls", "type": "ws"}},
+    ]
+    cfg = ai.build_lion_cfg(hops, port=10855, fragment=True)
+    obs = cfg["outbounds"]
+    tags = [o["tag"] for o in obs]
+    assert tags[:3] == ["exit", "relay-1", "entry"]
+    assert "frag-dialer" in tags
+    assert obs[0]["sockopt"]["dialerProxy"] == "relay-1"
+    assert obs[1]["sockopt"]["dialerProxy"] == "entry"
+    assert obs[2]["sockopt"]["dialerProxy"] == "frag-dialer"
+    frag_ob = next(o for o in obs if o["tag"] == "frag-dialer")
+    assert frag_ob["settings"]["fragment"]["packets"] == "tlshello"
+
+
+def test_lion_parse_multi_protocol_uris(ai):
+    import base64
+    vm = base64.b64encode(json.dumps({
+        "add": "2.2.2.2", "port": 443, "id": "vm-id", "net": "ws", "tls": "tls"
+    }).encode()).decode()
+    assert ai.parse_node_uri(f"vmess://{vm}")["proto"] == "vmess"
+    assert ai.parse_node_uri("trojan://pw@3.3.3.3:443?sni=a.b")["proto"] == "trojan"
+    ss_cred = base64.b64encode(b"aes-256-gcm:secret").decode()
+    assert ai.parse_node_uri(f"ss://{ss_cred}@4.4.4.4:8388")["proto"] == "ss"
+    assert ai.parse_node_uri("socks5://127.0.0.1:9050")["local"] is True
+
+
+def test_lion_asn_reputation_and_strict_warp_rejection(ai, monkeypatch):
+    rep_res, s_res = ai.classify_asn_reputation("Deutsche Telekom AG", False, False, False)
+    rep_dc, s_dc = ai.classify_asn_reputation("Hetzner Online GmbH", True, True, False)
+    rep_warp, s_warp = ai.classify_asn_reputation("Cloudflare", False, False, True)
+    assert rep_res == "residential-isp" and s_res > s_dc
+    assert rep_dc == "hosting-high-risk"
+    assert rep_warp == "warp-or-tor" and s_warp < 0
+
+    def fake_curl(args, timeout=15):
+        url = args[-1]
+        if "ipify" in url:
+            return type("R", (), {"stdout": "104.28.1.5"})()
+        if "cdn-cgi/trace" in url:
+            return type("R", (), {"stdout": "ip=104.28.1.5\nloc=DE\nwarp=on\n"})()
+        if "ip-api" in url:
+            return type("R", (), {"stdout": json.dumps(
+                {"status": "success", "country": "Germany", "countryCode": "DE",
+                 "isp": "Cloudflare", "org": "Cloudflare", "proxy": False, "hosting": False})})()
+        return type("R", (), {"stdout": "\n__DYB_META__:200:" + url})()
+
+    monkeypatch.setattr(ai, "_curl", fake_curl)
+    g = ai.probe_lion_gates(strict=True)
+    assert g["verdict"] is False
+    assert "WARP egress rejected" in g["reason"]
+
+
+def test_lion_hardened_browser_args_and_isolated_blacklist(ai, tmp_path, monkeypatch):
+    args = ai.hardened_browser_args("/usr/bin/chrome", "/tmp/p", "https://aistudio.google.com/", "DE")
+    joined = " ".join(args)
+    assert "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1" in joined
+    assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" in joined
+    assert "--lang=de-DE" in joined
+
+    bl = tmp_path / "lion_blacklist.json"
+    monkeypatch.setattr(ai, "BLACKLIST_PATH", str(bl))
+    ai._remember_blocked_exit("vless:9.9.9.9:443")
+    assert ai._is_blacklisted("vless:9.9.9.9:443") is True
+
+
+def test_lion_unpacks_npv_ovpn_wireguard_and_clash_yaml(ai):
+    vless = "vless://11111111-1111-1111-1111-111111111111@203.0.113.44:443?security=tls"
+    npv_bytes = b"\x00\x01NPVT\x02" + vless.encode() + b"\x00\xff"
+    npv_nodes = ai.parse_config_file_bytes("free.npvt", npv_bytes)
+    assert any(n["addr"] == "203.0.113.44" and n["proto"] == "vless" for n in npv_nodes)
+
+    wg_conf = (
+        b"[Interface]\nPrivateKey = privkey123=\nAddress = 10.7.0.2/32\nMTU = 1280\n"
+        b"[Peer]\nPublicKey = pubkey456=\nEndpoint = 198.51.100.88:51820\n"
+    )
+    wg_nodes = ai.parse_config_file_bytes("warp.conf", wg_conf)
+    assert len(wg_nodes) == 1
+    assert wg_nodes[0]["proto"] == "wireguard"
+    assert wg_nodes[0]["q"]["publickey"] == "pubkey456="
+
+    ovpn = b"client\ndev tun\nhttp-proxy 192.0.2.9 8080\n"
+    ovpn_nodes = ai.parse_config_file_bytes("exit.ovpn", ovpn)
+    assert any(n["proto"] == "http" and n["port"] == 8080 for n in ovpn_nodes)
+
+    clash = b"proxies:\n  - {name: n1, type: hy2, server: 198.51.100.77, port: 443, password: pw}\n"
+    clash_nodes = ai.parse_config_file_bytes("clash.yaml", clash)
+    assert any(n["proto"] == "hy2" and n["addr"] == "198.51.100.77" for n in clash_nodes)
+
+
+def test_lion_eight_hop_and_wireguard_outbound(ai):
+    wg_hop = {
+        "proto": "wireguard", "addr": "198.51.100.88", "port": 51820,
+        "secret": "priv", "q": {"publickey": "pub", "address": "10.7.0.2/32", "mtu": "1280"},
+    }
+    chain = [
+        ai.mutate_fp({"proto": "vless", "addr": f"203.0.113.{i}", "port": 443,
+                      "uuid": f"u{i}", "q": {"security": "tls"}}, "firefox")
+        for i in range(1, 8)
+    ] + [wg_hop]
+    cfg = ai.build_lion_cfg(chain, port=10855, fragment=True)
+    obs = cfg["outbounds"]
+    tags = [o["tag"] for o in obs]
+    assert len(chain) == 8
+    assert tags[:8] == ["exit", "relay-1", "relay-2", "relay-3", "relay-4", "relay-5", "relay-6", "entry"]
+    assert obs[0]["sockopt"]["dialerProxy"] == "relay-1"
+    assert obs[6]["sockopt"]["dialerProxy"] == "entry"
+    assert obs[7]["protocol"] == "wireguard"
+    assert obs[7]["settings"]["secretKey"] == "priv"
+    assert obs[0]["streamSettings"]["tlsSettings"]["fingerprint"] == "firefox"
+

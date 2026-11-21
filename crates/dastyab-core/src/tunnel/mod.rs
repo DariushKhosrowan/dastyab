@@ -11,6 +11,7 @@ pub mod dnstunnel;
 pub mod dnstunnel_arq;
 pub mod dnstunnel_auth;
 pub mod iblt;
+pub mod lion_warrior;
 pub mod multilayer;
 pub mod multipath_bond;
 pub mod tunnel_lifeline;

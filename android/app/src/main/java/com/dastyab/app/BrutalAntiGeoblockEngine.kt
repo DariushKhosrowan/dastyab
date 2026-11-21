@@ -330,14 +330,15 @@ object BrutalAntiGeoblockEngine {
             onStep = onStep
         )
 
-        val winnerIp = result.report.egress?.ip
-        if (result.success && !winnerIp.isNullOrBlank()) {
+        val winnerEgress = result.report.egress
+        val winnerIp = winnerEgress?.ip
+        if (result.success && winnerEgress != null && !winnerIp.isNullOrBlank()) {
             val chainSpec = TunnelConfig.formatProxyChain(result.bestHops)
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().putString(KEY_LAST_CLEAN_CHAIN, chainSpec).apply()
             AutopilotBrain.ensureLoaded(context)
             AutopilotBrain.recordOutcome(
-                contextKey = vallionNetKey,
+                contextKey = lionNetKey,
                 armId = "lion:$winnerIp",
                 protocolFamily = "lion-${result.bestHops.size}hop",
                 success = true,
@@ -345,9 +346,19 @@ object BrutalAntiGeoblockEngine {
                 geoMaskObserved = AutopilotBrain.GEO_CLEAR_AISTUDIO,
                 persistContext = context
             )
-            onStep("🦁 [$LION_BADGE_PREFIX VICTORY] AI Studio unlocked via ${result.bestChainLabel} (${result.report.egress.countryCode} · $winnerIp)")
+            onStep("🦁 [$LION_BADGE_PREFIX VICTORY] AI Studio unlocked via ${result.bestChainLabel} (${winnerEgress.countryCode} · $winnerIp)")
         } else if (!winnerIp.isNullOrBlank()) {
             blacklistLionIp(context, winnerIp)
+            AutopilotBrain.ensureLoaded(context)
+            AutopilotBrain.recordOutcome(
+                contextKey = lionNetKey,
+                armId = "lion:$winnerIp",
+                protocolFamily = "lion-${result.bestHops.size.coerceAtLeast(1)}hop",
+                success = false,
+                rttMs = null,
+                geoMaskObserved = 0,
+                persistContext = context
+            )
         }
         return result
     }

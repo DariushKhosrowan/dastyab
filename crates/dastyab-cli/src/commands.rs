@@ -211,14 +211,40 @@ pub async fn run(
         Command::Journal { action } => cmd_journal(&profile, action),
         Command::Autonomy { action } => cmd_autonomy(&profile, action).await,
         Command::Onboard { action } => cmd_onboard(&profile, action),
-        Command::Aistudio { action, arg } => cmd_aistudio(&action, arg.as_deref()),
+        Command::Aistudio {
+            action,
+            arg,
+            hops,
+            country,
+            try_n,
+            brutal,
+            strict,
+        } => cmd_aistudio(
+            &action,
+            arg.as_deref(),
+            hops,
+            country.as_deref(),
+            try_n,
+            brutal,
+            strict,
+        ),
         Command::Flow {
             action,
             arg,
             hops,
             country,
             try_n,
-        } => cmd_flow(&action, arg.as_deref(), hops, country.as_deref(), try_n),
+            brutal,
+            strict,
+        } => cmd_flow(
+            &action,
+            arg.as_deref(),
+            hops,
+            country.as_deref(),
+            try_n,
+            brutal,
+            strict,
+        ),
         Command::Platform {
             action,
             dry_run,
@@ -4409,9 +4435,16 @@ fn find_aistudio_script() -> Option<std::path::PathBuf> {
     candidates.into_iter().find(|p| p.is_file())
 }
 
-fn cmd_aistudio(action: &str, arg: Option<&str>) -> Result<(), CFError> {
-    // Delegate to the verified, self-healing Python bridge (project-local).
-    // The Python tool owns the xray tunnel + watchdog; this is a thin wrapper.
+fn cmd_aistudio(
+    action: &str,
+    arg: Option<&str>,
+    hops: Option<u8>,
+    country: Option<&str>,
+    try_n: Option<u32>,
+    brutal: bool,
+    strict: bool,
+) -> Result<(), CFError> {
+    // Delegate to the verified, self-healing Python Lion bridge (project-local).
     let script = find_aistudio_script().ok_or_else(|| {
         CFError::new(
             "AI Studio bridge not found",
@@ -4427,18 +4460,31 @@ fn cmd_aistudio(action: &str, arg: Option<&str>) -> Result<(), CFError> {
         "start" | "on" | "up" | "open" => "start".to_string(),
         "stop" | "off" | "down" => "stop".to_string(),
         "watch" | "watchdog" | "guard" => "watch".to_string(),
-        "verify" | "status" => "verify".to_string(),
+        "verify" => "verify".to_string(),
         other => other.to_string(),
     };
 
     let mut cmd = std::process::Command::new("python3");
     cmd.arg(&script).arg(&action);
-    // Forward the action argument (pool index for `start`, seconds for
-    // `watch`, the URI file for `build-pool`). Dropping it here made
-    // `dastyab aistudio build-pool uris.txt` fail with "build-pool needs
-    // a file" even though the user supplied one.
     if let Some(a) = arg {
         cmd.arg(a);
+    }
+    if let Some(h) = hops {
+        cmd.arg("--hops").arg(h.to_string());
+    }
+    if let Some(c) = country {
+        cmd.arg("--country").arg(c);
+    }
+    if matches!(action.as_str(), "best" | "prove") {
+        if let Some(n) = try_n {
+            cmd.arg("--try").arg(n.to_string());
+        }
+    }
+    if brutal && matches!(action.as_str(), "start" | "next" | "best" | "prove") {
+        cmd.arg("--brutal");
+    }
+    if strict && matches!(action.as_str(), "best" | "prove" | "status") {
+        cmd.arg("--strict");
     }
     let out = cmd.output().map_err(|e| {
         CFError::new(
@@ -4539,6 +4585,8 @@ fn cmd_flow(
     hops: Option<u8>,
     country: Option<&str>,
     try_n: Option<u32>,
+    brutal: bool,
+    strict: bool,
 ) -> Result<(), CFError> {
     let script = find_flow_script().ok_or_else(|| {
         CFError::new(
@@ -4572,10 +4620,23 @@ fn cmd_flow(
         if let Some(c) = country {
             cmd.arg("--country").arg(c);
         }
+        if brutal {
+            cmd.arg("--brutal");
+        }
+        if strict {
+            cmd.arg("--strict");
+        }
     } else {
-        // verify / best also accept --country and --try.
         if let Some(c) = country {
             cmd.arg("--country").arg(c);
+        }
+        if action == "best" {
+            if let Some(h) = hops {
+                cmd.arg("--hops").arg(h.to_string());
+            }
+            if strict {
+                cmd.arg("--strict");
+            }
         }
         if action == "best" || action == "prove" {
             if let Some(n) = try_n {
@@ -6130,6 +6191,56 @@ async fn cmd_multilayer(profile: &str, action: crate::MultilayerAction) -> Resul
                     "not reachable — check your final server"
                 }
             );
+            Ok(())
+        }
+        crate::MultilayerAction::ProbeFlow => {
+            if ml::load_final_server(profile).is_none() {
+                return Err(CFError::new(
+                    "multilayer",
+                    "no final server configured",
+                    "Run `dastyab multilayer set --link <vless://…>` first.",
+                ));
+            }
+            println!("Running strict Warrior Google Flow probe through chain…");
+            let report = ml::probe_flow_access(profile).await?;
+            for c in &report.checks {
+                let mark = if c.passed { "✓ pass" } else { "✗ fail" };
+                println!("  {:<16} {mark}  HTTP {} ({})", c.target, c.status, c.detail);
+            }
+            println!("Verdict: {}", report.reason);
+            Ok(())
+        }
+        crate::MultilayerAction::SetRelays { links, fragment } => {
+            for link in &links {
+                dastyab_core::lion_warrior::parse_chain_hop(link)?;
+            }
+            let ext = ml::ChainExtConfig {
+                relay_links: links,
+                fragment_dpi: fragment,
+            };
+            ml::save_chain_ext(profile, &ext)?;
+            println!(
+                "Saved {} relay hop(s) + fragment_dpi={} for profile '{profile}'.",
+                ext.relay_links.len(),
+                ext.fragment_dpi
+            );
+            Ok(())
+        }
+        crate::MultilayerAction::Start {
+            mode,
+            port,
+            persona,
+        } => {
+            let p = if persona.eq_ignore_ascii_case("warrior")
+                || persona.eq_ignore_ascii_case("flow")
+            {
+                dastyab_core::lion_warrior::ServicePersona::WarriorFlow
+            } else {
+                dastyab_core::lion_warrior::ServicePersona::LionAiStudio
+            };
+            let m = ml::TunnelMode::parse_mode(&mode);
+            let msg = ml::start_tunnel_mode_for_persona(profile, p, m, port, true).await?;
+            println!("{msg}");
             Ok(())
         }
         crate::MultilayerAction::Gemini { prompt } => {

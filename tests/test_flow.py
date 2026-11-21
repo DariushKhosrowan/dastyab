@@ -575,3 +575,112 @@ def test_probe_gates_forwards_the_profile(fl, monkeypatch):
             else "<html>AiSandboxAngularFrontend</html>")})())
     fl.probe_gates(browser_profile="/tmp/p")
     assert seen.get("profile_dir") == "/tmp/p"
+
+
+# --- Warrior brutal multi-layer extensions --------------------------------
+
+def test_warrior_four_hop_and_tls_fragment_topology(fl):
+    n_exit = _vless("203.0.113.10", security="tls")
+    n_r1 = _vless("198.51.100.20", security="tls")
+    n_r2 = {"proto": "trojan", "addr": "192.0.2.30", "port": 443,
+            "password": "pw", "q": {"security": "tls", "type": "tcp"}}
+    n_en = {"proto": "socks", "addr": "127.0.0.1", "port": 9050, "local": True, "q": {}}
+    cfg4 = fl.build_config([n_exit, n_r1, n_r2, n_en], 10860, fragment=True)
+    assert [o["tag"] for o in cfg4["outbounds"]] == ["exit", "relay-1", "relay-2", "entry"]
+    assert cfg4["outbounds"][0]["sockopt"]["dialerProxy"] == "relay-1"
+    assert cfg4["outbounds"][1]["sockopt"]["dialerProxy"] == "relay-2"
+    assert cfg4["outbounds"][2]["sockopt"]["dialerProxy"] == "entry"
+
+    cfg3 = fl.build_config([n_exit, n_r1, n_r2], 10860, fragment=True)
+    tags3 = [o["tag"] for o in cfg3["outbounds"]]
+    assert tags3 == ["exit", "relay-1", "entry", "frag-dialer"]
+    assert cfg3["outbounds"][2]["sockopt"]["dialerProxy"] == "frag-dialer"
+    assert cfg3["outbounds"][3]["settings"]["fragment"]["packets"] == "tlshello"
+
+
+def test_warrior_rejects_warp_exit_and_labs_region_gate(fl, monkeypatch):
+    def fake_warp_curl(args, timeout):
+        url = args[-1]
+        if "ipify" in url:
+            return type("R", (), {"stdout": "104.28.5.5"})()
+        if "ip-api" in url:
+            return type("R", (), {"stdout": json.dumps(
+                {"status": "success", "country": "United States",
+                 "countryCode": "US", "isp": "Cloudflare", "org": "Cloudflare",
+                 "proxy": False, "hosting": False})})()
+        if "cdn-cgi/trace" in url:
+            return type("R", (), {"stdout": "ip=104.28.5.5\nwarp=on\n"})()
+        return type("R", (), {"stdout": "200"})()
+
+    monkeypatch.setattr(fl, "_curl", fake_warp_curl)
+    _stub_browser(fl, monkeypatch)
+    gw = fl.probe_gates()
+    assert gw["verdict"] is False
+    assert "WARP egress rejected" in gw["reason"]
+
+    def fake_labs_gate_curl(args, timeout):
+        url = args[-1]
+        if "ipify" in url:
+            return type("R", (), {"stdout": "198.51.100.7"})()
+        if "ip-api" in url:
+            return type("R", (), {"stdout": json.dumps(
+                {"status": "success", "country": "Germany",
+                 "countryCode": "DE", "isp": "Deutsche Telekom", "org": "DTAG",
+                 "proxy": False, "hosting": False})})()
+        if url.rstrip("/") == "https://flow.google.com":
+            return type("R", (), {"stdout": "<html>AiSandboxAngularFrontend</html>"})()
+        if "labs.google/fx/tools/flow" in url:
+            return type("R", (), {"stdout": "<h2>Flow is not available in your country yet.</h2>"})()
+        return type("R", (), {"stdout": "200"})()
+
+    monkeypatch.setattr(fl, "_curl", fake_labs_gate_curl)
+    gl = fl.probe_gates()
+    assert gl["verdict"] is False
+    assert "labs.google" in gl["reason"]
+
+
+def test_warrior_hardened_browser_and_blacklist(fl, tmp_path, monkeypatch):
+    args = fl.hardened_browser_args("/usr/bin/chrome", "/tmp/fp", "https://flow.google.com/", "GB")
+    joined = " ".join(args)
+    assert "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1" in joined
+    assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" in joined
+    assert "--lang=en-GB" in joined
+
+    bl = tmp_path / "flow_blacklist.json"
+    monkeypatch.setattr(fl, "WARRIOR_BLACKLIST", str(bl))
+    fl._remember_blocked_exit("vless:8.8.8.8:443")
+    assert fl._is_blacklisted("vless:8.8.8.8:443") is True
+
+
+def test_warrior_unpacks_npv_ovpn_wireguard_and_clash_yaml(fl):
+    vless = "vless://22222222-2222-2222-2222-222222222222@203.0.113.45:443?security=tls"
+    npv_bytes = b"\x00NPV4\x01" + vless.encode() + b"\xff"
+    assert any(n["addr"] == "203.0.113.45" for n in fl.parse_config_file_bytes("w.npv4", npv_bytes))
+
+    wg_conf = (
+        b"[Interface]\nPrivateKey = privkey123=\nAddress = 10.7.0.2/32\nMTU = 1280\n"
+        b"[Peer]\nPublicKey = pubkey456=\nEndpoint = 198.51.100.89:51820\n"
+    )
+    wg_nodes = fl.parse_config_file_bytes("warp.conf", wg_conf)
+    assert len(wg_nodes) == 1 and wg_nodes[0]["proto"] == "wireguard"
+
+    ovpn = b"client\ndev tun\nsocks-proxy 192.0.2.10 1080\n"
+    assert any(n["proto"] == "socks" and n["port"] == 1080
+               for n in fl.parse_config_file_bytes("edge.ovpn", ovpn))
+
+
+def test_warrior_eight_hop_and_wireguard_outbound(fl):
+    wg_hop = {
+        "proto": "wireguard", "addr": "198.51.100.89", "port": 51820,
+        "secret": "wg-priv", "q": {"publickey": "wg-pub", "address": "10.7.0.2/32"},
+    }
+    chain = [fl.mutate_fp(_vless(f"203.0.113.{i}", security="tls"), "random") for i in range(1, 8)] + [wg_hop]
+    cfg8 = fl.build_config(chain, 10860, fragment=True)
+    obs = cfg8["outbounds"]
+    assert [o["tag"] for o in obs] == [
+        "exit", "relay-1", "relay-2", "relay-3", "relay-4", "relay-5", "relay-6", "entry"
+    ]
+    assert obs[7]["protocol"] == "wireguard"
+    assert obs[7]["settings"]["peers"][0]["publicKey"] == "wg-pub"
+    assert obs[0]["streamSettings"]["tlsSettings"]["fingerprint"] == "random"
+

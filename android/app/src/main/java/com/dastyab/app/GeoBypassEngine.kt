@@ -1060,7 +1060,8 @@ object GeoBypassEngine {
     /**
      * Builds progressive multi-layer candidate chains grouped by hop count:
      * Stage 0 (0 extra layers / saved), Stage 1 (1-hop), Stage 2 (2-hop in both [A,B] & [B,A] orders),
-     * Stage 3 (3-hop cascades), and Stage 4 (4-hop deep fallback cascades).
+     * Stage 3 (3-hop cascades), Stage 4 (4-hop cascades), Stage 5 (5..6-hop deep cascades),
+     * and Stage 6 (7..8-hop ultra-deep cascades).
      */
     fun buildProgressiveLayerStages(
         existingHops: List<TunnelConfig.ProxyHop>,
@@ -1068,7 +1069,7 @@ object GeoBypassEngine {
         harvestedHops: List<TunnelConfig.ProxyHop>,
         preferredEntries: List<TunnelConfig.ProxyHop> = emptyList(),
         preferredExits: List<TunnelConfig.ProxyHop> = emptyList(),
-        maxTotalCandidates: Int = 48
+        maxTotalCandidates: Int = 64
     ): List<List<List<TunnelConfig.ProxyHop>>> {
         val seen = HashSet<String>()
         var totalAdded = 0
@@ -1089,6 +1090,8 @@ object GeoBypassEngine {
         val stage2 = ArrayList<List<TunnelConfig.ProxyHop>>()
         val stage3 = ArrayList<List<TunnelConfig.ProxyHop>>()
         val stage4 = ArrayList<List<TunnelConfig.ProxyHop>>()
+        val stage5 = ArrayList<List<TunnelConfig.ProxyHop>>()
+        val stage6 = ArrayList<List<TunnelConfig.ProxyHop>>()
 
         // Stage 0: Layer 0 (Direct / Active External Lantern VPN) + existing saved service chain
         addTo(stage0, emptyList(), 4)
@@ -1190,15 +1193,44 @@ object GeoBypassEngine {
             }
         }
 
-        return listOf(stage0, stage1, stage2, stage3, stage4)
+        // Stage 5: Five-hop & Six-hop deep cascades combining local bridges + diverse relays + exits
+        val combinedPool = LinkedHashMap<String, TunnelConfig.ProxyHop>().apply {
+            for (h in listenHops + entriesPool + exitsPool) {
+                putIfAbsent("${h.scheme.name}:${h.host}:${h.port}", h)
+            }
+        }.values.toList()
+        if (combinedPool.size >= 5) {
+            for (targetDepth in 5..6) {
+                if (combinedPool.size < targetDepth) continue
+                for (shift in 0 until combinedPool.size.coerceAtMost(6)) {
+                    val forward = (0 until targetDepth).map { k -> combinedPool[(shift + k) % combinedPool.size] }
+                    addTo(stage5, forward, 10)
+                    addTo(stage5, forward.reversed(), 10)
+                }
+            }
+        }
+
+        // Stage 6: Seven-hop & Eight-hop ultra-deep cascades for extreme geo-censorship firewalls
+        if (combinedPool.size >= 7) {
+            for (targetDepth in 7..8) {
+                if (combinedPool.size < targetDepth) continue
+                for (shift in 0 until combinedPool.size.coerceAtMost(4)) {
+                    val deep = (0 until targetDepth).map { k -> combinedPool[(shift + k) % combinedPool.size] }
+                    addTo(stage6, deep, 8)
+                    addTo(stage6, deep.reversed(), 8)
+                }
+            }
+        }
+
+        return listOf(stage0, stage1, stage2, stage3, stage4, stage5, stage6)
     }
 
-    /** Flat view of [buildProgressiveLayerStages] ordered 0 -> 1 -> 2 -> 3 -> 4 hops. */
+    /** Flat view of [buildProgressiveLayerStages] ordered 0 -> 1 -> 2 -> 3 -> 4 -> 5..6 -> 7..8 hops. */
     fun buildMultiLayerCandidateChains(
         existingHops: List<TunnelConfig.ProxyHop>,
         listening: List<ListeningProxy>,
         harvestedHops: List<TunnelConfig.ProxyHop>,
-        maxCandidates: Int = 36
+        maxCandidates: Int = 56
     ): List<List<TunnelConfig.ProxyHop>> = buildProgressiveLayerStages(
         existingHops = existingHops,
         listening = listening,
@@ -1247,9 +1279,11 @@ object GeoBypassEngine {
         val extVpn = NetworkUtils.hasActiveExternalVpn(context)
         val existingHops = TunnelConfig.effectiveUpstreamHops(settings, targetService.key, settings.localBridgePort)
 
-        onStep("Scanning local proxy ports (v2rayNG, NekoBox, Hiddify, Clash, Orbot)…")
+        onStep("Scanning local proxy ports & harvested vault files (.npv/.ovpn/.conf/.json/.yaml)…")
         val listening = discoverListeningProxies(timeoutMs = 150)
-        val initialPool = TunnelConfig.loadChainableProxyPool(context)
+        val vaultHops = runCatching { ConfigFileHarvester.extractVaultHops(context) }.getOrDefault(emptyList())
+        val initialPool = (vaultHops + TunnelConfig.loadChainableProxyPool(context))
+            .distinctBy { "${it.scheme.name}:${it.host}:${it.port}" }
 
         val result = discoverBestRouteLoop(
             targetService = targetService,
@@ -1272,23 +1306,26 @@ object GeoBypassEngine {
                 )
             },
             harvester = { round, testedHosts, testedSubnets ->
-                onStep("Round $round/$maxRounds: Harvesting fresh SOCKS5/HTTP proxy feeds (GitHub → Mirror → Telegram)…")
-                runCatching {
+                onStep("Round $round/$maxRounds: Harvesting multi-format feeds & SOCKS5/HTTP pools (GitHub → Mirror → Telegram)…")
+                val freshVault = runCatching { ConfigFileHarvester.extractVaultHops(context) }.getOrDefault(emptyList())
+                val poolHops = runCatching {
                     ConfigHarvester.harvestProxyChainPool(
                         context = context,
                         maxHops = 260,
                         excludedHosts = testedHosts,
                         excludedSubnets16 = testedSubnets
                     ) { msg -> onStep("  $msg") }
-                }.getOrDefault(emptyList()) +
-                    if (round >= 2) {
-                        runCatching {
-                            val r = ConfigHarvester.harvestResilient(context)
-                            UniversalConfig.extractChainableProxyHops(r.configs)
-                        }.getOrDefault(emptyList())
-                    } else {
-                        emptyList()
-                    }
+                }.getOrDefault(emptyList())
+                val resilientHops = if (round >= 2) {
+                    runCatching {
+                        val r = ConfigHarvester.harvestResilient(context)
+                        UniversalConfig.extractChainableProxyHops(r.configs)
+                    }.getOrDefault(emptyList())
+                } else {
+                    emptyList()
+                }
+                (freshVault + poolHops + resilientHops)
+                    .distinctBy { "${it.scheme.name}:${it.host}:${it.port}" }
             },
             routeProber = { hops, label ->
                 if (hops.isEmpty()) {
@@ -1464,7 +1501,7 @@ object GeoBypassEngine {
             }
         }
 
-        val effectiveRounds = maxRounds.coerceIn(1, 5)
+        val effectiveRounds = maxRounds.coerceIn(1, 6)
         for (round in 1..effectiveRounds) {
             if (bestEligibleAttempt != null && bestEligibleAttempt!!.report.egress?.isProxyOrHosting == false) {
                 break
@@ -1528,7 +1565,7 @@ object GeoBypassEngine {
             val roundBudgetLimit = (maxCandidates - reserveForNextRounds).coerceAtLeast(testedCount + 6).coerceAtMost(maxCandidates)
 
             var foundCleanInRound = false
-            // Run Stages 1 -> 2 -> 3 -> 4 for this round (skipping Stage 0 when excludeCurrentRoute or already probed)
+            // Run Stages 1 -> 2 -> 3 -> 4 -> 5 -> 6 (up to 8 hops) for this round
             for (sIdx in 1 until roundStages.size) {
                 if (foundCleanInRound || testedCount >= roundBudgetLimit) break
                 val candidates = roundStages[sIdx]

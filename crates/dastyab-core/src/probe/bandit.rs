@@ -302,7 +302,10 @@ impl ContextualBanditStore {
             .iter()
             .map(|c| (self.score_arm(network_ctx, c, intent, now_unix), c))
             .collect();
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            let score_ord = b.0.total_cmp(&a.0);
+            score_ord.then_with(|| a.1.arm_id.cmp(&b.1.arm_id))
+        });
 
         // Prefer non-quarantined candidates when at least one exists.
         let eligible: Vec<(f64, &CandidateArm)> = if scored.iter().any(|(s, _)| *s >= 0.0) {
@@ -493,9 +496,15 @@ mod tests {
             cand("w1", "wireguard"),
         ];
         let slate = store.select_diverse_slate(net, &pool, AutopilotIntent::BalancedWeb, 3, 10);
-        let families: HashSet<String> =
-            slate.iter().map(|c| c.protocol_family.clone()).collect();
+        let mut families = HashSet::new();
+        for c in &slate {
+            families.insert(c.protocol_family.to_ascii_lowercase());
+        }
+        assert_eq!(slate.len(), 3);
         assert_eq!(slate[0].arm_id, "x1");
+        assert!(families.contains("xray"));
+        assert!(families.contains("quic"));
+        assert!(families.contains("wireguard"));
         assert_eq!(
             families.len(),
             3,

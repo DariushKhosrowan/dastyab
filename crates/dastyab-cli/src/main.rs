@@ -462,18 +462,30 @@ enum Command {
         /// or the URI file for `build-pool`.
         #[arg()]
         arg: Option<String>,
+        /// Chain depth (1..8 hops) for Lion multi-layer routing.
+        #[arg(long)]
+        hops: Option<u8>,
+        /// Require this egress country (ISO code).
+        #[arg(long)]
+        country: Option<String>,
+        /// How many candidates `best` / `prove` should test.
+        #[arg(long = "try", value_name = "N")]
+        try_n: Option<u32>,
+        /// Auto-escalate to multi-layer + DPI fragment hunt if pool is dead.
+        #[arg(long)]
+        brutal: bool,
+        /// Strict mode: reject WARP/high-risk hosting exits.
+        #[arg(long)]
+        strict: bool,
     },
-    /// Launch/stop the multi-layer Google Flow tunnel. Verifies a
-    /// supported-country egress (Google's official Flow list), optional
-    /// two-hop chaining, IP-quality ranking, and a dedicated pinned
-    /// browser — then keeps it alive with a watchdog.
+    /// Launch/stop the brutal Warrior multi-layer Google Flow tunnel.
     ///
     /// Simple usage:
     ///   dastyab flow start           # tunnel + open Flow in Chrome
     ///   dastyab flow status          # egress + gate verdict
     ///   dastyab flow next            # rotate to the next ranked route
     ///   dastyab flow stop            # stop the tool and the tunnel
-    ///   dastyab flow best            # scan wider, re-rank the pool
+    ///   dastyab flow best            # brutal multi-layer scan & re-rank
     ///   dastyab flow watch           # self-healing watchdog
     Flow {
         #[arg()]
@@ -482,7 +494,7 @@ enum Command {
         /// or the URI file for `build-pool`.
         #[arg()]
         arg: Option<String>,
-        /// Hops for `start`: 1 = direct node, 2 = entry->exit chain.
+        /// Chain hops (1..8: 1=direct, 2=entry->exit, 3..8=deep cascades).
         #[arg(long)]
         hops: Option<u8>,
         /// Require this egress country (ISO code) for start/verify/best.
@@ -491,6 +503,12 @@ enum Command {
         /// How many candidates `best` should test before giving up.
         #[arg(long = "try", value_name = "N")]
         try_n: Option<u32>,
+        /// Auto-escalate to multi-layer + DPI fragment hunt if pool is dead.
+        #[arg(long)]
+        brutal: bool,
+        /// Strict Warrior mode: reject proxy/high-risk hosting exits.
+        #[arg(long)]
+        strict: bool,
     },
     /// Apply / teardown the doctrine A+D platform network rules (anti-loop
     /// fwmark routing + TCP MSS clamp). Use `--dry-run` to preview commands.
@@ -1052,6 +1070,26 @@ pub enum MultilayerAction {
     },
     /// Probe AI Studio + Gemini reachability through the final-server chain.
     ProbeAi,
+    /// Strict Warrior probe of Google Flow reachability through the chain.
+    ProbeFlow,
+    /// Configure optional intermediate/entry relay links and DPI fragmentation.
+    SetRelays {
+        /// Relay/entry proxy URIs ordered closest-to-exit first, entry last.
+        #[arg(long = "relay")]
+        links: Vec<String>,
+        /// Enable xray TLS-Hello packet fragmentation under the entry hop.
+        #[arg(long)]
+        fragment: bool,
+    },
+    /// Start the multi-layer tunnel (`lion` for AI Studio, `warrior` for Flow).
+    Start {
+        #[arg(long, default_value = "chrome")]
+        mode: String,
+        #[arg(long, default_value_t = 10850)]
+        port: u16,
+        #[arg(long, default_value = "lion")]
+        persona: String,
+    },
     /// Make one real Gemini generateContent call through the chain.
     Gemini {
         /// The prompt to send.

@@ -1095,8 +1095,9 @@ mod tests {
 
     #[test]
     fn blacklist_persists_and_dedups() {
+        let dir = tempfile::tempdir().unwrap();
+        crate::store::set_mem_dir_override(dir.path().join(".dastyab"));
         let profile = "lifeline-test-blacklist";
-        // Clean slate.
         let _ = std::fs::remove_file(bad_lifeline_path(profile));
         remember_bad_lifeline(profile, "vless://dead1");
         remember_bad_lifeline(profile, "vless://dead2");
@@ -1109,12 +1110,14 @@ mod tests {
         assert!(is_bad_lifeline(&s, "vless://dead2"));
         assert!(!is_bad_lifeline(&s, "vless://alive"));
 
-        // Cleanup.
         let _ = std::fs::remove_file(bad_lifeline_path(profile));
+        crate::store::clear_mem_dir_override();
     }
 
     #[test]
     fn blacklist_ages_out_after_regen_window() {
+        let dir = tempfile::tempdir().unwrap();
+        crate::store::set_mem_dir_override(dir.path().join(".dastyab"));
         let profile = "lifeline-test-blacklist-age";
         let _ = std::fs::remove_file(bad_lifeline_path(profile));
         let mut s = BadLifelineStore::default();
@@ -1127,6 +1130,7 @@ mod tests {
             .insert("vless://old".into(), now - BAD_LIFELINE_REGEN - 1.0);
         assert!(!is_bad_lifeline(&s, "vless://old"));
         let _ = std::fs::remove_file(bad_lifeline_path(profile));
+        crate::store::clear_mem_dir_override();
     }
 
     #[test]

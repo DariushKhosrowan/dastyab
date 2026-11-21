@@ -270,6 +270,56 @@ object ConfigFileHarvester {
         return found.toList()
     }
 
+    /**
+     * Reads downloaded/imported `.npv*` / `.ovpn` / `.conf` / `.wg` / `.hc` / `.json` / `.yaml` /
+     * `.sub` vault files on disk and extracts all chainable proxy hops for Lion & Warrior layering.
+     */
+    fun extractVaultHops(context: Context, maxFiles: Int = 24): List<TunnelConfig.ProxyHop> {
+        val entries = loadVault(context)
+        if (entries.isEmpty()) return emptyList()
+        val uris = LinkedHashSet<String>()
+        var filesRead = 0
+        for (entry in entries) {
+            if (filesRead >= maxFiles) break
+            val p = entry.localPath.trim()
+            if (p.isEmpty()) continue
+            val f = File(p)
+            if (!f.isFile || f.length() <= 0L || f.length() > MAX_FILE_BYTES) continue
+            filesRead++
+            val bytes = runCatching { f.readBytes() }.getOrNull() ?: continue
+            val utf8 = String(bytes, Charsets.UTF_8)
+            val printable = buildString {
+                val run = StringBuilder()
+                for (b in bytes) {
+                    val u = b.toInt() and 0xFF
+                    if (u in 32..126 || u == 9 || u == 10 || u == 13) {
+                        run.append(u.toChar())
+                    } else {
+                        if (run.length >= 10) appendLine(run)
+                        run.clear()
+                    }
+                }
+                if (run.length >= 10) appendLine(run)
+            }
+            val corpus = if (printable.length > utf8.length / 2) "$utf8\n$printable" else utf8
+            uris.addAll(extractEndpointsFromFileText(entry.fileName, corpus))
+
+            // Explicit OpenVPN http-proxy / socks-proxy upstream relays
+            if (entry.extension in setOf("ovpn", "openvpn") || corpus.contains("http-proxy ")) {
+                for (rawLine in corpus.lineSequence()) {
+                    val clean = rawLine.substringBefore('#').substringBefore(';').trim()
+                    val parts = clean.split(Regex("\\s+"))
+                    if (parts.size >= 3 && (parts[0].equals("http-proxy", true) || parts[0].equals("socks-proxy", true))) {
+                        val port = parts[2].toIntOrNull()?.takeIf { it in 1..65535 } ?: continue
+                        val scheme = if (parts[0].equals("socks-proxy", true)) "socks5" else "http"
+                        uris.add("$scheme://${parts[1]}:$port")
+                    }
+                }
+            }
+        }
+        return UniversalConfig.extractChainableProxyHops(uris.toList(), limit = 180)
+    }
+
     fun mimeTypeForExtension(ext: String): String = when (ext.lowercase()) {
         "ovpn", "openvpn" -> "application/x-openvpn-profile"
         "conf", "wg" -> "text/plain"
