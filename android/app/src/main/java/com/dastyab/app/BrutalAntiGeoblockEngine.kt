@@ -253,7 +253,7 @@ object BrutalAntiGeoblockEngine {
     }
 
     /**
-     * Computes adaptive non-uniform TCP segment slices `[start..end]` for TLS ClientHello packets
+     * Computes adaptive non-uniform TCP segment slices `start..end` for TLS ClientHello packets
      * so DPI SNI extractors and fixed-length packet-size classifiers never see a predictable boundary.
      */
     fun computeAdaptiveClientHelloSlices(

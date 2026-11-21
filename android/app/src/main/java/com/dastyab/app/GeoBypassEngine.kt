@@ -1059,7 +1059,7 @@ object GeoBypassEngine {
 
     /**
      * Builds progressive multi-layer candidate chains grouped by hop count:
-     * Stage 0 (0 extra layers / saved), Stage 1 (1-hop), Stage 2 (2-hop in both [A,B] & [B,A] orders),
+     * Stage 0 (0 extra layers / saved), Stage 1 (1-hop), Stage 2 (2-hop in both `A -> B` & `B -> A` orders),
      * Stage 3 (3-hop cascades), Stage 4 (4-hop cascades), Stage 5 (5..6-hop deep cascades),
      * and Stage 6 (7..8-hop ultra-deep cascades).
      */

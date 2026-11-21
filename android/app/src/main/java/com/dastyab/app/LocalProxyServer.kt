@@ -708,7 +708,7 @@ class LocalProxyServer(
         }
 
         /**
-         * Splits a TLS ClientHello length into micro-TCP segment `[start, end)` ranges that break
+         * Splits a TLS ClientHello length into micro-TCP segment `start until end` ranges that break
          * the TLS record header and SNI hostname across distinct TCP flushes to defeat stateless SNI DPI.
          */
         fun splitTlsClientHelloSlices(length: Int): List<IntRange> {
