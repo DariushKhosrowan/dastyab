@@ -16,16 +16,23 @@ import java.util.concurrent.atomic.AtomicReference
 object FailoverWatchdog {
 
     const val CHECK_INTERVAL_SECONDS = 300L // Default calm baseline (5 minutes)
-    const val SUSPECT_INTERVAL_SECONDS = 15L // Rapid healing interval when stall/failure detected
+    const val SUSPECT_INTERVAL_SECONDS = 15L // Rapid healing interval when stall/failure/high-latency detected
+    const val CONTINUOUS_PROBE_INTERVAL_SECONDS = 20L // Responsive background health cadence during warmup/high-latency watch
     const val WARMUP_INTERVAL_SECONDS = 60L // Initial post-connect cadence
     const val HEALTHY_INTERVAL_SECONDS = 240L // Battery-friendly cadence after >= 3 healthy ticks
     const val HARVEST_EVERY_N_TICKS = 6 // Quiet background harvest cadence
     const val STALL_WINDOW_MS = 4_500L
+    const val LATENCY_SWITCH_THRESHOLD_MS = 300L // Auto-switch SLA threshold requested by user
+    const val SEVERE_LATENCY_SPIKE_MS = 900L // Immediate preempt threshold for severe latency spike
+    const val DEFAULT_HIGH_LATENCY_STREAK_TRIGGER = 2
+    const val BLACKOUT_ESCALATION_TICKS = 2
 
     val FALLBACK_DOH_CHAIN: List<String> = listOf(
         "https://1.1.1.1/dns-query",
         "https://8.8.8.8/dns-query",
         "https://9.9.9.9/dns-query",
+        "https://dns.quad9.net/dns-query",
+        "https://dns.mullvad.net/dns-query",
         "https://dns.google/dns-query",
         "https://cloudflare-dns.com/dns-query"
     )
@@ -42,7 +49,12 @@ object FailoverWatchdog {
         val lastSummary: String = "Watchdog idle",
         val nextIntervalSeconds: Long = WARMUP_INTERVAL_SECONDS,
         val healthyStreak: Int = 0,
-        val suspectState: Boolean = false
+        val suspectState: Boolean = false,
+        val ewmaLatencyMs: Long = -1L,
+        val highLatencyStreak: Int = 0,
+        val healReason: String = "HEALTHY",
+        val autoBlackoutEscalated: Boolean = false,
+        val fastestRegionLabel: String = ""
     )
 
     enum class Action {
@@ -50,11 +62,91 @@ object FailoverWatchdog {
         SWAP_DOH_OR_LAYER
     }
 
+    enum class HealReason {
+        HEALTHY,
+        HEALTH_FAILED,
+        STALLED,
+        LATENCY_EXCEEDED_300MS,
+        SEVERE_BLACKOUT
+    }
+
+    data class HealthEvaluation(
+        val action: Action,
+        val reason: HealReason,
+        val shouldEscalateBlackout: Boolean,
+        val observedLatencyMs: Long,
+        val ewmaLatencyMs: Long,
+        val highLatencyStreak: Int
+    )
+
     enum class SentinelVerdict {
         IDLE,
         HEALTHY,
         STALLED
     }
+
+    /**
+     * Pure-Kotlin rolling latency tracker enforcing the 300ms auto-switch SLA with anti-flapping
+     * hysteresis (triggers after [requiredConsecutiveHigh] readings > 300ms or an instant
+     * severe spike >= [severeSpikeMs]).
+     */
+    class LatencyHealthTracker(
+        val thresholdMs: Long = LATENCY_SWITCH_THRESHOLD_MS,
+        val requiredConsecutiveHigh: Int = DEFAULT_HIGH_LATENCY_STREAK_TRIGGER,
+        val severeSpikeMs: Long = SEVERE_LATENCY_SPIKE_MS
+    ) {
+        private var ewmaMs: Double = -1.0
+        private var highLatencyStreak: Int = 0
+        private var lastLatencyMs: Long = -1L
+
+        @Synchronized
+        fun reset() {
+            ewmaMs = -1.0
+            highLatencyStreak = 0
+            lastLatencyMs = -1L
+        }
+
+        @Synchronized
+        fun record(latencyMs: Long): LatencyStatus {
+            if (latencyMs <= 0L) {
+                return LatencyStatus(
+                    lastLatencyMs = lastLatencyMs,
+                    ewmaMs = currentEwmaMs(),
+                    highLatencyStreak = highLatencyStreak,
+                    shouldSwitch = false
+                )
+            }
+            lastLatencyMs = latencyMs
+            ewmaMs = if (ewmaMs < 0.0) latencyMs.toDouble() else (0.35 * latencyMs + 0.65 * ewmaMs)
+            if (latencyMs > thresholdMs) {
+                highLatencyStreak++
+            } else {
+                highLatencyStreak = 0
+            }
+            val switch = highLatencyStreak >= requiredConsecutiveHigh ||
+                latencyMs >= severeSpikeMs ||
+                (ewmaMs > thresholdMs.toDouble() && highLatencyStreak >= 1 && latencyMs > thresholdMs)
+            return LatencyStatus(
+                lastLatencyMs = latencyMs,
+                ewmaMs = currentEwmaMs(),
+                highLatencyStreak = highLatencyStreak,
+                shouldSwitch = switch
+            )
+        }
+
+        @Synchronized
+        fun currentEwmaMs(): Long = if (ewmaMs < 0.0) -1L else ewmaMs.toLong()
+
+        @Synchronized
+        fun currentStreak(): Int = highLatencyStreak
+    }
+
+    data class LatencyStatus(
+        val lastLatencyMs: Long,
+        val ewmaMs: Long,
+        val highLatencyStreak: Int,
+        val shouldSwitch: Boolean
+    )
 
     /**
      * Pure-Kotlin half-open blackhole detector (Android counterpart to Rust `LivenessSentinel`).
@@ -119,6 +211,7 @@ object FailoverWatchdog {
     }
 
     val passiveSentinel = PassiveLivenessSentinel()
+    val latencyTracker = LatencyHealthTracker()
     private val current = AtomicReference(Snapshot())
 
     fun getSnapshot(): Snapshot = current.get()
@@ -129,13 +222,14 @@ object FailoverWatchdog {
 
     fun reset(active: Boolean = false, dohUrl: String = TunnelConfig.DEFAULT_DOH_URL) {
         passiveSentinel.reset()
+        latencyTracker.reset()
         current.set(
             Snapshot(
                 active = active,
                 healthy = true,
                 activeDohUrl = dohUrl,
-                lastSummary = if (active) "Adaptive Auto-Heal active" else "Watchdog idle",
-                nextIntervalSeconds = if (active) WARMUP_INTERVAL_SECONDS else CHECK_INTERVAL_SECONDS,
+                lastSummary = if (active) "Adaptive Auto-Heal active (300ms SLA)" else "Watchdog idle",
+                nextIntervalSeconds = if (active) CONTINUOUS_PROBE_INTERVAL_SECONDS else CHECK_INTERVAL_SECONDS,
                 healthyStreak = 0,
                 suspectState = false
             )
@@ -145,6 +239,17 @@ object FailoverWatchdog {
     /** Computes the next adaptive probe delay in seconds based on health & suspect status. */
     fun recommendedDelaySeconds(healthyStreak: Int, suspect: Boolean): Long = when {
         suspect -> SUSPECT_INTERVAL_SECONDS
+        healthyStreak >= 3 -> HEALTHY_INTERVAL_SECONDS
+        else -> WARMUP_INTERVAL_SECONDS
+    }
+
+    /**
+     * Latency-aware adaptive cadence: keeps background probes responsive (`20s`) whenever live RTT
+     * approaches or exceeds the 300ms SLA threshold so slow nodes are swapped before stalling.
+     */
+    fun recommendedDelaySeconds(healthyStreak: Int, suspect: Boolean, observedLatencyMs: Long): Long = when {
+        suspect -> SUSPECT_INTERVAL_SECONDS
+        observedLatencyMs > LATENCY_SWITCH_THRESHOLD_MS -> CONTINUOUS_PROBE_INTERVAL_SECONDS
         healthyStreak >= 3 -> HEALTHY_INTERVAL_SECONDS
         else -> WARMUP_INTERVAL_SECONDS
     }
@@ -163,6 +268,94 @@ object FailoverWatchdog {
         } else {
             Action.SWAP_DOH_OR_LAYER
         }
+    }
+
+    /**
+     * Full pure-Kotlin evaluator combining:
+     *  - General web + AI target reachability
+     *  - Passive Liveness Sentinel stall detection
+     *  - >300ms latency SLA breach (sustained or severe spike)
+     *  - Severe blackout detection for automatic [TunnelConfig.Mode.DNS_BLACKOUT] fallback
+     */
+    fun evaluateHealthAndLatency(
+        internetOk: Boolean,
+        aiStudioOk: Boolean,
+        flowOk: Boolean,
+        latencyMs: Long,
+        sentinelStalled: Boolean = false,
+        consecutiveBlackoutTicks: Int = 0,
+        highLatencyStreak: Int = 0,
+        ewmaLatencyMs: Long = latencyMs,
+        currentMode: TunnelConfig.Mode = TunnelConfig.Mode.SMART,
+        thresholdMs: Long = LATENCY_SWITCH_THRESHOLD_MS
+    ): HealthEvaluation {
+        val blackout = shouldEscalateToDnsBlackout(internetOk, consecutiveBlackoutTicks, currentMode)
+        if (!internetOk && blackout) {
+            return HealthEvaluation(
+                action = Action.SWAP_DOH_OR_LAYER,
+                reason = HealReason.SEVERE_BLACKOUT,
+                shouldEscalateBlackout = true,
+                observedLatencyMs = latencyMs,
+                ewmaLatencyMs = ewmaLatencyMs,
+                highLatencyStreak = highLatencyStreak
+            )
+        }
+        if (sentinelStalled && !internetOk) {
+            return HealthEvaluation(
+                action = Action.SWAP_DOH_OR_LAYER,
+                reason = HealReason.STALLED,
+                shouldEscalateBlackout = !internetOk && consecutiveBlackoutTicks >= BLACKOUT_ESCALATION_TICKS,
+                observedLatencyMs = latencyMs,
+                ewmaLatencyMs = ewmaLatencyMs,
+                highLatencyStreak = highLatencyStreak
+            )
+        }
+        val baseAction = evaluateAction(internetOk, aiStudioOk, flowOk)
+        if (baseAction == Action.SWAP_DOH_OR_LAYER) {
+            return HealthEvaluation(
+                action = Action.SWAP_DOH_OR_LAYER,
+                reason = HealReason.HEALTH_FAILED,
+                shouldEscalateBlackout = blackout,
+                observedLatencyMs = latencyMs,
+                ewmaLatencyMs = ewmaLatencyMs,
+                highLatencyStreak = highLatencyStreak
+            )
+        }
+        val latencyBreached = latencyMs > thresholdMs && (
+            highLatencyStreak >= DEFAULT_HIGH_LATENCY_STREAK_TRIGGER ||
+                latencyMs >= SEVERE_LATENCY_SPIKE_MS ||
+                (ewmaLatencyMs > thresholdMs && highLatencyStreak >= 1)
+            )
+        return if (latencyBreached) {
+            HealthEvaluation(
+                action = Action.SWAP_DOH_OR_LAYER,
+                reason = HealReason.LATENCY_EXCEEDED_300MS,
+                shouldEscalateBlackout = false,
+                observedLatencyMs = latencyMs,
+                ewmaLatencyMs = ewmaLatencyMs,
+                highLatencyStreak = highLatencyStreak
+            )
+        } else {
+            HealthEvaluation(
+                action = Action.KEEP_CURRENT,
+                reason = HealReason.HEALTHY,
+                shouldEscalateBlackout = false,
+                observedLatencyMs = latencyMs,
+                ewmaLatencyMs = ewmaLatencyMs,
+                highLatencyStreak = highLatencyStreak
+            )
+        }
+    }
+
+    /** Returns true when sustained web blackout warrants auto-escalation to Emergency DNS Blackout VPN. */
+    fun shouldEscalateToDnsBlackout(
+        internetOk: Boolean,
+        consecutiveBlackoutTicks: Int,
+        currentMode: TunnelConfig.Mode
+    ): Boolean {
+        if (internetOk) return false
+        if (currentMode == TunnelConfig.Mode.DNS_BLACKOUT) return false
+        return consecutiveBlackoutTicks >= BLACKOUT_ESCALATION_TICKS
     }
 
     /** Picks the next DoH endpoint in the failover ring different from [currentDoh]. */

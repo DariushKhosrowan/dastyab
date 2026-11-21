@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.telephony.TelephonyManager
 import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
@@ -41,6 +42,8 @@ object AutopilotBrain {
     const val CIRCUIT_BASE_COOLDOWN_MS = 30_000L
     const val CIRCUIT_MAX_COOLDOWN_MS = 1_800_000L
     const val HYSTERESIS_PREEMPT_RATIO = 1.25
+    const val TARGET_LATENCY_SLA_MS = 300L
+    const val PREDICTIVE_GRACE_WINDOW_MS = 120L
 
     const val GEO_CLEAR_WEB = 1 shl 0
     const val GEO_CLEAR_AISTUDIO = 1 shl 1
@@ -424,6 +427,151 @@ object AutopilotBrain {
         if (!activeHealthy) return true
         if (activeScore <= 0.0) return challengerScore > 0.0
         return challengerLeadStreak >= 2 && challengerScore >= activeScore * HYSTERESIS_PREEMPT_RATIO
+    }
+
+    /** Predicts expected upper-envelope RTT (`ewma + 0.5 * jitter`) for an arm. */
+    fun predictedRttMs(stats: ArmStats?): Double {
+        if (stats == null || stats.ewmaMs <= 0.0) return 220.0
+        return stats.ewmaMs + 0.5 * stats.jitterMs
+    }
+
+    /**
+     * Predictive SLA scorer enforcing the 300ms latency budget:
+     * boosts healthy paths consistently operating under 300ms and penalizes >300ms congestion.
+     */
+    fun scorePredictivePath(
+        contextKey: String,
+        candidate: CandidateArm,
+        intent: AutopilotIntent,
+        latencyThresholdMs: Long = TARGET_LATENCY_SLA_MS,
+        nowMs: Long = System.currentTimeMillis()
+    ): Double {
+        val base = scoreArm(contextKey, candidate, intent, nowMs)
+        if (base < 0.0) return base
+        val st = synchronized(lock) { armsMap["$contextKey||${candidate.armId}"] } ?: return base + 0.05
+        if (st.ewmaMs <= 0.0) return base
+        val predicted = predictedRttMs(st)
+        val slaAdjustment = if (predicted <= latencyThresholdMs.toDouble()) {
+            0.30 * (1.0 - (predicted / (latencyThresholdMs * 2.0)).coerceIn(0.0, 0.5))
+        } else {
+            -((predicted - latencyThresholdMs.toDouble()) / 900.0).coerceIn(0.05, 0.45)
+        }
+        return max(0.0, base + slaAdjustment)
+    }
+
+    /** Builds a protocol-diverse slate ranked by sub-300ms predictive SLA scores. */
+    fun selectPredictiveSlate(
+        contextKey: String,
+        candidates: List<CandidateArm>,
+        intent: AutopilotIntent,
+        maxSlots: Int = 6,
+        latencyThresholdMs: Long = TARGET_LATENCY_SLA_MS,
+        nowMs: Long = System.currentTimeMillis()
+    ): List<ScoredArm> {
+        if (candidates.isEmpty() || maxSlots <= 0) return emptyList()
+        val scored = candidates.map { cand ->
+            val st = synchronized(lock) { armsMap["$contextKey||${cand.armId}"] }
+            ScoredArm(cand, scorePredictivePath(contextKey, cand, intent, latencyThresholdMs, nowMs), st)
+        }.sortedByDescending { it.score }
+
+        val eligible = if (scored.any { it.score >= 0.0 }) scored.filter { it.score >= 0.0 } else scored
+        val selected = ArrayList<ScoredArm>(maxSlots)
+        val seenIds = HashSet<String>()
+        val seenFamilies = HashSet<String>()
+
+        for (item in eligible) {
+            if (selected.size >= maxSlots) break
+            val fam = item.candidate.protocolFamily.lowercase()
+            if (item.candidate.armId !in seenIds && fam !in seenFamilies) {
+                selected.add(item)
+                seenIds.add(item.candidate.armId)
+                seenFamilies.add(fam)
+            }
+        }
+        for (item in eligible) {
+            if (selected.size >= maxSlots) break
+            if (seenIds.add(item.candidate.armId)) {
+                selected.add(item)
+            }
+        }
+        return selected
+    }
+
+    /**
+     * Predictive Parallel Multi-Path Racer:
+     * Launches all paths in [slate] concurrently via [ExecutorCompletionService].
+     *  - Immediately accepts the first valid path completing with latency <= [latencyThresholdMs] (300ms).
+     *  - If the first valid responder exceeds [latencyThresholdMs], holds up to [graceWindowMs]
+     *    so a faster in-flight sub-300ms path can overtake it, then cancels remaining futures.
+     */
+    fun <T> raceMultiPathPredictive(
+        slate: List<CandidateArm>,
+        latencyThresholdMs: Long = TARGET_LATENCY_SLA_MS,
+        graceWindowMs: Long = PREDICTIVE_GRACE_WINDOW_MS,
+        probeTimeoutMs: Long = 2600L,
+        measureLatencyMs: (T) -> Long,
+        attempt: (CandidateArm) -> T?
+    ): StaggeredRaceResult<T>? {
+        if (slate.isEmpty()) return null
+        val startNs = System.nanoTime()
+        val pool = Executors.newFixedThreadPool(slate.size.coerceIn(2, 8)) { r ->
+            Thread(r, "dastyab-multipath-race").apply { isDaemon = true }
+        }
+        val completion = ExecutorCompletionService<Pair<Int, T?>>(pool)
+        val futures = ArrayList<Future<Pair<Int, T?>>>(slate.size)
+        try {
+            for (i in slate.indices) {
+                val arm = slate[i]
+                futures.add(completion.submit(Callable { i to runCatching { attempt(arm) }.getOrNull() }))
+            }
+            var bestIdx = -1
+            var bestPayload: T? = null
+            var bestLatency = Long.MAX_VALUE
+            var slowWinnerDeadlineNs = Long.MAX_VALUE
+            val overallDeadlineNs = startNs + TimeUnit.MILLISECONDS.toNanos(probeTimeoutMs)
+            var completed = 0
+
+            while (completed < slate.size) {
+                val nowNs = System.nanoTime()
+                val effectiveDeadlineNs = min(overallDeadlineNs, slowWinnerDeadlineNs)
+                val remainingNs = effectiveDeadlineNs - nowNs
+                if (remainingNs <= 0L) break
+
+                val doneFuture = completion.poll(remainingNs, TimeUnit.NANOSECONDS) ?: break
+                completed++
+                val pair = runCatching { doneFuture.get() }.getOrNull()
+                val idx = pair?.first ?: continue
+                val payload = pair.second ?: continue
+                val rtt = measureLatencyMs(payload).let { if (it <= 0L) 1L else it }
+
+                if (rtt < bestLatency) {
+                    bestIdx = idx
+                    bestPayload = payload
+                    bestLatency = rtt
+                }
+                if (rtt <= latencyThresholdMs) {
+                    break // Fast sub-300ms winner found — short-circuit immediately
+                }
+                if (bestPayload != null && slowWinnerDeadlineNs == Long.MAX_VALUE) {
+                    slowWinnerDeadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(graceWindowMs)
+                }
+            }
+
+            if (bestIdx < 0 || bestPayload == null) return null
+            val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs).coerceAtLeast(1L)
+            val standby = slate.filterIndexed { i, _ -> i != bestIdx }
+            return StaggeredRaceResult(
+                winnerIndex = bestIdx,
+                winnerArm = slate[bestIdx],
+                payload = bestPayload,
+                elapsedMs = elapsedMs,
+                standbyArms = standby,
+                attemptsLaunched = futures.size
+            )
+        } finally {
+            futures.forEach { it.cancel(true) }
+            pool.shutdownNow()
+        }
     }
 
     /**

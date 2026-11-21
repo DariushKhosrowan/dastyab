@@ -54,6 +54,7 @@ class DastyabVpnService : VpnService() {
     private var watchdogScheduler: ScheduledExecutorService? = null
     private val watchdogTickCount = AtomicInteger(0)
     private val watchdogHealthyStreak = AtomicInteger(0)
+    private val consecutiveBlackoutTicks = AtomicInteger(0)
     private val lastNetworkTriggerMs = java.util.concurrent.atomic.AtomicLong(0L)
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     @Volatile private var activeDohUrl: String = TunnelConfig.DEFAULT_DOH_URL
@@ -443,6 +444,7 @@ class DastyabVpnService : VpnService() {
         watchdogScheduler = null
         watchdogTickCount.set(0)
         watchdogHealthyStreak.set(0)
+        consecutiveBlackoutTicks.set(0)
         if (!settings.watchdogEnabled) {
             FailoverWatchdog.reset(active = false, dohUrl = activeDohUrl)
             return
@@ -468,7 +470,7 @@ class DastyabVpnService : VpnService() {
             TimeUnit.SECONDS
         )
 
-        scheduleNextWatchdogTick(sched, FailoverWatchdog.WARMUP_INTERVAL_SECONDS)
+        scheduleNextWatchdogTick(sched, FailoverWatchdog.CONTINUOUS_PROBE_INTERVAL_SECONDS)
     }
 
     private fun scheduleNextWatchdogTick(sched: ScheduledExecutorService, delaySeconds: Long) {
@@ -527,21 +529,38 @@ class DastyabVpnService : VpnService() {
     private fun runWatchdogTick(sched: ScheduledExecutorService, reschedule: Boolean = true) {
         val tick = watchdogTickCount.incrementAndGet()
         val prev = FailoverWatchdog.getSnapshot()
-        var nextDelay = FailoverWatchdog.WARMUP_INTERVAL_SECONDS
+        var nextDelay = FailoverWatchdog.CONTINUOUS_PROBE_INTERVAL_SECONDS
         try {
             val check = ReachabilityVerifier.verifyAll(timeoutMs = 2800)
             val sentinelStalled = FailoverWatchdog.passiveSentinel.evaluate() == FailoverWatchdog.SentinelVerdict.STALLED
-            val action = if (sentinelStalled && !check.internet.isOk) {
-                FailoverWatchdog.Action.SWAP_DOH_OR_LAYER
+            val currentSettings = loadSettingsSafely()
+            val blackoutStreak = if (check.internet.isOk) {
+                consecutiveBlackoutTicks.set(0)
+                0
             } else {
-                FailoverWatchdog.evaluateAction(
-                    internetOk = check.internet.isOk,
-                    aiStudioOk = check.aiStudio.isOk,
-                    flowOk = check.flow.isOk
-                )
+                consecutiveBlackoutTicks.incrementAndGet()
             }
+
+            val rawObservedMs = check.aiStudio.latencyMs.takeIf { it >= 0 } ?: check.internet.latencyMs
+            val latStatus = FailoverWatchdog.latencyTracker.record(rawObservedMs)
+
+            val eval = FailoverWatchdog.evaluateHealthAndLatency(
+                internetOk = check.internet.isOk,
+                aiStudioOk = check.aiStudio.isOk,
+                flowOk = check.flow.isOk,
+                latencyMs = rawObservedMs,
+                sentinelStalled = sentinelStalled,
+                consecutiveBlackoutTicks = blackoutStreak,
+                highLatencyStreak = latStatus.highLatencyStreak,
+                ewmaLatencyMs = latStatus.ewmaMs,
+                currentMode = currentSettings.mode
+            )
+            val action = eval.action
+
             var swaps = prev.swapCount
             var harvests = prev.backgroundHarvestCount
+            var autoBlackoutEscalated = prev.autoBlackoutEscalated
+            var fastestRegionLabel = prev.fastestRegionLabel
             val netKey = runCatching { AutopilotBrain.detectNetworkContextKey(this) }.getOrDefault("default")
             val activeLayer = runCatching { VpnLayerStore.getActiveLayer(this) }.getOrNull()
             val summary: String
@@ -552,33 +571,65 @@ class DastyabVpnService : VpnService() {
 
             val activeArmId = activeLayer?.configUri?.takeIf { it.isNotBlank() } ?: activeDohUrl
             val activeProto = activeLayer?.configUri?.takeIf { it.isNotBlank() }?.let { UniversalConfig.protocolOf(it) } ?: "doh"
-            val rttSample = (check.aiStudio.latencyMs.takeIf { it >= 0 } ?: check.internet.latencyMs).toDouble()
+            val rttSample = rawObservedMs.toDouble()
 
             if (action == FailoverWatchdog.Action.SWAP_DOH_OR_LAYER) {
                 watchdogHealthyStreak.set(0)
+                BrutalAntiGeoblockEngine.recordDpiBlockAndEscalate()
                 runCatching {
                     AutopilotBrain.ensureLoaded(this)
-                    AutopilotBrain.recordOutcome(netKey, activeArmId, activeProto, success = false, rttMs = null, persistContext = this)
+                    AutopilotBrain.recordOutcome(
+                        netKey, activeArmId, activeProto,
+                        success = (eval.reason == FailoverWatchdog.HealReason.LATENCY_EXCEEDED_300MS),
+                        rttMs = if (eval.reason == FailoverWatchdog.HealReason.LATENCY_EXCEEDED_300MS) rttSample.takeIf { it > 0 } else null,
+                        persistContext = this
+                    )
                 }
-                val nextDoh = FailoverWatchdog.nextFallbackDoh(activeDohUrl)
+
+                // Parallel multi-region latency benchmark to pick fastest sub-300ms DoH / edge region
+                val regionBench = runCatching { CleanEndpointScout.benchmarkMultiRegionParallel(timeoutMs = 1500) }.getOrDefault(emptyList())
+                val bestRegion = regionBench.firstOrNull { !it.target.dohUrl.isNullOrBlank() }
+                if (regionBench.isNotEmpty()) {
+                    fastestRegionLabel = CleanEndpointScout.formatRegionBenchmarkSummary(regionBench)
+                }
+
+                val nextDoh = bestRegion?.target?.dohUrl?.takeIf { !it.equals(activeDohUrl, ignoreCase = true) }
+                    ?: FailoverWatchdog.nextFallbackDoh(activeDohUrl)
                 activeDohUrl = nextDoh
                 dnsCache.clear()
                 TunnelConfig.saveDohAndDns(this, dohUrl = nextDoh, primaryDns = null)
                 swaps++
+
+                if (eval.shouldEscalateBlackout) {
+                    TunnelConfig.saveMode(this, TunnelConfig.Mode.DNS_BLACKOUT)
+                    autoBlackoutEscalated = true
+                }
+
                 val currentLayerId = activeLayer?.id.orEmpty()
                 val backup = runCatching { VpnLayerStore.findFastestBackupLayer(this, currentLayerId, timeoutMs = 1500) }.getOrNull()
-                summary = if (backup != null && backup.layer.dohUrl != nextDoh) {
-                    activeDohUrl = backup.layer.dohUrl
-                    VpnLayerStore.activateLayer(this, backup.layer, restartIfConnected = false)
-                    "Auto-healed → ${backup.layer.name} (${backup.latencyMs}ms · #$tick)"
-                } else {
-                    "Auto-swapped DoH → ${nextDoh.removePrefix("https://")} (#$tick)"
+                summary = when {
+                    eval.shouldEscalateBlackout ->
+                        "Blackout Fallback → DNS Blackout VPN (${nextDoh.removePrefix("https://")} · #$tick)"
+                    backup != null && backup.layer.dohUrl != nextDoh &&
+                        (eval.reason != FailoverWatchdog.HealReason.LATENCY_EXCEEDED_300MS || backup.latencyMs < rawObservedMs) -> {
+                        activeDohUrl = backup.layer.dohUrl
+                        VpnLayerStore.activateLayer(this, backup.layer, restartIfConnected = false)
+                        "Auto-healed → ${backup.layer.name} (${backup.latencyMs}ms · #$tick)"
+                    }
+                    eval.reason == FailoverWatchdog.HealReason.LATENCY_EXCEEDED_300MS ->
+                        "300ms SLA Switch (${rawObservedMs}ms) → ${bestRegion?.target?.label ?: nextDoh.removePrefix("https://")} · #$tick"
+                    else ->
+                        "Auto-swapped DoH → ${nextDoh.removePrefix("https://")} (#$tick)"
                 }
                 FailoverWatchdog.passiveSentinel.reset()
-                nextDelay = FailoverWatchdog.recommendedDelaySeconds(0, suspect = true)
-                DastyabLogger.w("Watchdog", "Health degraded — %s", summary)
+                FailoverWatchdog.latencyTracker.reset()
+                nextDelay = FailoverWatchdog.recommendedDelaySeconds(0, suspect = true, observedLatencyMs = rawObservedMs)
+                DastyabLogger.w("Watchdog", "Heal triggered (%s) — %s", eval.reason.name, summary)
             } else {
                 val streak = watchdogHealthyStreak.incrementAndGet()
+                if (rawObservedMs in 1..FailoverWatchdog.LATENCY_SWITCH_THRESHOLD_MS) {
+                    BrutalAntiGeoblockEngine.recordDpiCleanPass()
+                }
                 runCatching {
                     AutopilotBrain.ensureLoaded(this)
                     AutopilotBrain.recordOutcome(
@@ -586,9 +637,8 @@ class DastyabVpnService : VpnService() {
                         rttMs = rttSample.takeIf { it > 0 }, geoMaskObserved = geoMask, persistContext = this
                     )
                 }
-                val ms = check.aiStudio.latencyMs.takeIf { it >= 0 } ?: check.internet.latencyMs
-                summary = "Healthy (${ms}ms) · #$tick · next ${FailoverWatchdog.recommendedDelaySeconds(streak, false)}s"
-                nextDelay = FailoverWatchdog.recommendedDelaySeconds(streak, suspect = false)
+                nextDelay = FailoverWatchdog.recommendedDelaySeconds(streak, suspect = false, observedLatencyMs = rawObservedMs)
+                summary = "Healthy (${rawObservedMs}ms) · #$tick · next ${nextDelay}s"
             }
 
             // Quiet background harvest if pool is empty or every 6 ticks
@@ -608,7 +658,7 @@ class DastyabVpnService : VpnService() {
                     active = true,
                     healthy = action == FailoverWatchdog.Action.KEEP_CURRENT,
                     lastCheckMs = System.currentTimeMillis(),
-                    lastLatencyMs = check.aiStudio.latencyMs.takeIf { it >= 0 } ?: check.internet.latencyMs,
+                    lastLatencyMs = rawObservedMs,
                     checkCount = tick,
                     swapCount = swaps,
                     backgroundHarvestCount = harvests,
@@ -616,7 +666,12 @@ class DastyabVpnService : VpnService() {
                     lastSummary = summary,
                     nextIntervalSeconds = nextDelay,
                     healthyStreak = watchdogHealthyStreak.get(),
-                    suspectState = action == FailoverWatchdog.Action.SWAP_DOH_OR_LAYER
+                    suspectState = action == FailoverWatchdog.Action.SWAP_DOH_OR_LAYER,
+                    ewmaLatencyMs = eval.ewmaLatencyMs,
+                    highLatencyStreak = eval.highLatencyStreak,
+                    healReason = eval.reason.name,
+                    autoBlackoutEscalated = autoBlackoutEscalated,
+                    fastestRegionLabel = fastestRegionLabel
                 )
             )
             val intent = Intent(ACTION_STATE_CHANGED).setPackage(packageName)
@@ -746,29 +801,35 @@ class DastyabVpnService : VpnService() {
         } else {
             listOf(Proxy.NO_PROXY)
         }
+        val (padBlock, padJitter) = BrutalAntiGeoblockEngine.computeAdaptiveDohPaddingTarget()
+        val paddedQuery = DnsPacketCodec.padDnsQueryEdns0(query, blockSize = padBlock, extraJitterBytes = padJitter)
+        val payloads = if (paddedQuery.contentEquals(query)) listOf(query) else listOf(paddedQuery, query)
+
         for (proxy in proxyAttempts) {
-            var conn: HttpURLConnection? = null
-            val res = try {
-                conn = (URL(dohUrl).openConnection(proxy) as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    connectTimeout = 2600
-                    readTimeout = 2600
-                    setRequestProperty("Content-Type", "application/dns-message")
-                    setRequestProperty("Accept", "application/dns-message")
-                }
-                conn.outputStream.use { it.write(query) }
-                if (conn.responseCode == 200) {
-                    conn.inputStream.use { it.readBytes() }.takeIf { it.size >= 12 }
-                } else {
+            for (wireQuery in payloads) {
+                var conn: HttpURLConnection? = null
+                val res = try {
+                    conn = (URL(dohUrl).openConnection(proxy) as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        doOutput = true
+                        connectTimeout = 2600
+                        readTimeout = 2600
+                        setRequestProperty("Content-Type", "application/dns-message")
+                        setRequestProperty("Accept", "application/dns-message")
+                    }
+                    conn.outputStream.use { it.write(wireQuery) }
+                    if (conn.responseCode == 200) {
+                        conn.inputStream.use { it.readBytes() }.takeIf { it.size >= 12 }
+                    } else {
+                        null
+                    }
+                } catch (_: Exception) {
                     null
+                } finally {
+                    conn?.disconnect()
                 }
-            } catch (_: Exception) {
-                null
-            } finally {
-                conn?.disconnect()
+                if (res != null) return res
             }
-            if (res != null) return res
         }
         return null
     }

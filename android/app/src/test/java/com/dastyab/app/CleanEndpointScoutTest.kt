@@ -50,4 +50,31 @@ class CleanEndpointScoutTest {
         assertTrue(neighbors.all { it.startsWith("104.16.") && TunnelConfig.isValidIpv4(it) })
         assertTrue(CleanEndpointScout.sampleNeighborhoodIps(listOf("bad-ip"), 5).isEmpty())
     }
+
+    @Test
+    fun rankRegionalBenchmarks_prioritizesSub300msAndSummarizesRegions() {
+        val usSlow = CleanEndpointScout.RegionalTarget("us1", CleanEndpointScout.EdgeRegion.US, "US Slow", "1.1.1.1", 443)
+        val euFast = CleanEndpointScout.RegionalTarget("eu1", CleanEndpointScout.EdgeRegion.EU, "EU Fast", "9.9.9.9", 443)
+        val asiaDown = CleanEndpointScout.RegionalTarget("as1", CleanEndpointScout.EdgeRegion.ASIA, "Asia Down", "8.8.4.4", 443)
+
+        val ranked = CleanEndpointScout.rankRegionalBenchmarks(
+            listOf(
+                CleanEndpointScout.RegionBenchmarkResult(asiaDown, -1L, reachable = false),
+                CleanEndpointScout.RegionBenchmarkResult(usSlow, 420L, reachable = true),
+                CleanEndpointScout.RegionBenchmarkResult(euFast, 115L, reachable = true)
+            )
+        )
+        assertEquals(2, ranked.size)
+        assertEquals("eu1", ranked[0].target.id)
+        assertTrue(ranked[0].within300Ms)
+        assertEquals("us1", ranked[1].target.id)
+        assertEquals(false, ranked[1].within300Ms)
+
+        val byRegion = CleanEndpointScout.summarizeFastestByRegion(ranked)
+        assertEquals(2, byRegion.size)
+        assertEquals(115L, byRegion[CleanEndpointScout.EdgeRegion.EU]?.latencyMs)
+        val digest = CleanEndpointScout.formatRegionBenchmarkSummary(ranked)
+        assertTrue(digest.contains("EU 115ms✓"))
+        assertTrue(digest.contains("US 420ms!"))
+    }
 }

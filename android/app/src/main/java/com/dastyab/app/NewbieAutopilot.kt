@@ -93,6 +93,42 @@ object NewbieAutopilot {
         else -> ExternalRoutePlan.NEEDS_EXTERNAL_VPN_CONNECT
     }
 
+    /**
+     * Pure-Kotlin blackout escalation gate: when web connectivity fails or DoH/UDP probes fail
+     * and the OS VPN slot is available, automatically escalate to Emergency DNS Blackout VPN.
+     */
+    fun shouldAutoEscalateToDnsBlackout(
+        internetOk: Boolean,
+        dohResultsEmpty: Boolean,
+        externalVpnActive: Boolean,
+        vpnConsentNeeded: Boolean
+    ): Boolean {
+        if (externalVpnActive || vpnConsentNeeded) return false
+        return !internetOk || dohResultsEmpty
+    }
+
+    /**
+     * Pure-Kotlin selector picking the fastest DoH URL + display label across both regional
+     * multi-region benchmarks and general DoH scouting (strongly favoring sub-300ms PoPs).
+     */
+    fun selectPreferredDohCandidate(
+        dnsResults: List<CleanEndpointScout.EndpointResult>,
+        regionBenchmarks: List<CleanEndpointScout.RegionBenchmarkResult>
+    ): Pair<String?, String?> {
+        val fastRegionDoh = regionBenchmarks.firstOrNull {
+            it.reachable && !it.target.dohUrl.isNullOrBlank() && it.within300Ms
+        }
+        val bestScoutDoh = dnsResults.firstOrNull { it.kind == CleanEndpointScout.Kind.DOH && it.reachable }
+        return when {
+            fastRegionDoh != null && (bestScoutDoh == null || fastRegionDoh.latencyMs <= bestScoutDoh.latencyMs + 25L) ->
+                fastRegionDoh.target.dohUrl to "${fastRegionDoh.target.label} (${fastRegionDoh.latencyMs}ms)"
+            bestScoutDoh != null -> bestScoutDoh.address to "${bestScoutDoh.label} (${bestScoutDoh.latencyMs}ms)"
+            else -> regionBenchmarks.firstOrNull { !it.target.dohUrl.isNullOrBlank() && it.reachable }?.let {
+                it.target.dohUrl to "${it.target.label} (${it.latencyMs}ms)"
+            } ?: (null to null)
+        }
+    }
+
     private fun startBridgeForRouteIfNeeded(
         context: Context,
         route: GeoBypassEngine.RouteResolution,
@@ -299,34 +335,44 @@ object NewbieAutopilot {
             )
         }
 
-        // Step 2: Smart DoH/DNS & /24 Clean-IP Neighborhood Scout + Happy Eyeballs v2 Staggered Race
+        // Step 2: Parallel Multi-Region Latency Benchmark + DoH/DNS Scout + Predictive Multi-Path Race
         AutopilotBrain.updateSession {
             it.copy(
                 phase = AutopilotBrain.SessionPhase.RACING,
                 stepIndex = 2,
-                stepHeadline = "Step 2/3 · Happy Eyeballs v2 staggered route race…"
+                stepHeadline = "Step 2/3 · Parallel multi-region benchmark & predictive race…"
             )
         }
-        emit("Step 2/3: Scouting DoH resolvers & Clean-IP /24 neighborhoods…")
-        val dnsResults = CleanEndpointScout.scoutCleanDnsAndDoh(timeoutMs = 2200)
+        emit("Step 2/3: Running parallel multi-region benchmark & DoH/DNS scout…")
+        val dnsResults = CleanEndpointScout.scoutCleanDnsAndDoh(timeoutMs = 2000)
+        val regionBenchmarks = CleanEndpointScout.benchmarkMultiRegionParallel(timeoutMs = 1800)
+        val regionDigest = CleanEndpointScout.formatRegionBenchmarkSummary(regionBenchmarks)
+        if (regionBenchmarks.isNotEmpty()) {
+            emit("  ✓ Multi-Region Latencies: $regionDigest")
+            val prevSnap = FailoverWatchdog.getSnapshot()
+            FailoverWatchdog.update(prevSnap.copy(fastestRegionLabel = regionDigest))
+        }
         val bestDoh = dnsResults.firstOrNull { it.kind == CleanEndpointScout.Kind.DOH }
+        val (preferredDohUrl, preferredDohLabel) = selectPreferredDohCandidate(dnsResults, regionBenchmarks)
         val bestUdp = dnsResults.firstOrNull { it.kind == CleanEndpointScout.Kind.UDP_DNS }
-        if (bestDoh != null || bestUdp != null) {
-            TunnelConfig.saveDohAndDns(context, bestDoh?.address, bestUdp?.address)
-            bestDoh?.let {
+        if (preferredDohUrl != null || bestUdp != null) {
+            TunnelConfig.saveDohAndDns(context, preferredDohUrl ?: bestDoh?.address, bestUdp?.address)
+            val measuredMs = regionBenchmarks.firstOrNull { it.target.dohUrl == preferredDohUrl }?.latencyMs
+                ?: bestDoh?.latencyMs ?: 120L
+            preferredDohUrl?.let { url ->
                 AutopilotBrain.recordOutcome(
                     contextKey = networkKey,
-                    armId = "doh:${it.address}",
+                    armId = "doh:$url",
                     protocolFamily = "doh",
                     success = true,
-                    rttMs = it.latencyMs.toDouble(),
+                    rttMs = measuredMs.toDouble(),
                     geoMaskObserved = AutopilotBrain.GEO_CLEAR_WEB,
                     persistContext = context
                 )
             }
-            emit("  ✓ Best DoH: ${bestDoh?.label ?: "default"} (${bestDoh?.latencyMs ?: -1}ms), UDP DNS: ${bestUdp?.address ?: "1.1.1.1"}")
+            emit("  ✓ Best DoH: ${preferredDohLabel ?: bestDoh?.label ?: "default"}, UDP DNS: ${bestUdp?.address ?: "1.1.1.1"}")
         } else {
-            emit("  ✗ External DoH/DNS probes timed out — switching to resilient DoH / blackout scout.")
+            emit("  ✗ External DoH/DNS probes timed out — engaging Emergency DNS Blackout & Clean-IP scout.")
         }
 
         val knownSeeds = AutopilotBrain.getCleanIpSeeds(networkKey)
@@ -346,6 +392,12 @@ object NewbieAutopilot {
 
         val vpnConsentNeeded = VpnService.prepare(context) != null
         var activeVpnOrExternal = externalVpnActive || DastyabVpnService.isConnected()
+        val autoBlackoutEscalated = shouldAutoEscalateToDnsBlackout(
+            internetOk = check.internet.isOk,
+            dohResultsEmpty = dnsResults.isEmpty() && regionBenchmarks.isEmpty(),
+            externalVpnActive = externalVpnActive,
+            vpnConsentNeeded = vpnConsentNeeded
+        )
         when {
             externalVpnActive || listeningProxies.isNotEmpty() -> {
                 if (externalVpnActive) {
@@ -389,12 +441,16 @@ object NewbieAutopilot {
                 activeVpnOrExternal = true
             }
             !vpnConsentNeeded -> {
-                val targetMode = if (intent == AutopilotBrain.AutopilotIntent.BLACKOUT_SURVIVAL) {
+                val targetMode = if (intent == AutopilotBrain.AutopilotIntent.BLACKOUT_SURVIVAL || autoBlackoutEscalated) {
                     TunnelConfig.Mode.DNS_BLACKOUT
                 } else {
                     TunnelConfig.Mode.SMART
                 }
-                emit("  • Activating DastYab ${targetMode.name} Tunnel…")
+                if (autoBlackoutEscalated && intent != AutopilotBrain.AutopilotIntent.BLACKOUT_SURVIVAL) {
+                    emit("  ⚡ Blackout Fallback: Auto-escalating tunnel to Emergency DNS Blackout VPN (DoH + WhiteDNS)…")
+                } else {
+                    emit("  • Activating DastYab ${targetMode.name} Tunnel…")
+                }
                 TunnelConfig.saveMode(context, targetMode)
                 DastyabVpnService.start(context)
                 try { Thread.sleep(850) } catch (_: InterruptedException) {}
@@ -443,21 +499,22 @@ object NewbieAutopilot {
                     )
                 }
             }
-            val slate = AutopilotBrain.selectDiverseSlate(
+            val slate = AutopilotBrain.selectPredictiveSlate(
                 contextKey = networkKey,
                 candidates = candidates,
                 intent = intent,
-                maxSlots = 4
+                maxSlots = 6
             )
             topSummaryLines = AutopilotBrain.formatTopScoredSummaries(networkKey, candidates, intent, limit = 3)
-            emit("  • Happy Eyeballs v2 slate (${slate.size} diverse protocols): ${topSummaryLines.joinToString(" | ")}")
+            emit("  • Predictive Multi-Path Slate (${slate.size} paths, <300ms SLA): ${topSummaryLines.joinToString(" | ")}")
 
-            val raceResult = AutopilotBrain.raceStaggered(
+            val raceResult = AutopilotBrain.raceMultiPathPredictive(
                 slate = slate.map { it.candidate },
-                staggerScheduleMs = AutopilotBrain.DEFAULT_STAGGER_MS,
-                probeTimeoutMs = 2600L
+                latencyThresholdMs = FailoverWatchdog.LATENCY_SWITCH_THRESHOLD_MS,
+                probeTimeoutMs = 2600L,
+                measureLatencyMs = { res -> res.latencyMs }
             ) { arm ->
-                val ep = HarvestSourceStore.extractHostAndPort(arm.payload) ?: return@raceStaggered null
+                val ep = HarvestSourceStore.extractHostAndPort(arm.payload) ?: return@raceMultiPathPredictive null
                 val ms = CleanEndpointScout.probeTcpLatency(ep.first, ep.second, 1800)
                 if (ms >= 0) {
                     AutopilotBrain.recordOutcome(
@@ -502,14 +559,17 @@ object NewbieAutopilot {
             if (fastest != null) {
                 bestUri = fastest.uri
                 bestMs = fastest.latencyMs
-                emit("  ✓ Happy Eyeballs Winner: [${fastest.protocol.uppercase()}] ${fastest.host}:${fastest.port} (${fastest.latencyMs}ms)")
+                val slaBadge = if (fastest.latencyMs <= FailoverWatchdog.LATENCY_SWITCH_THRESHOLD_MS) "<300ms SLA ✓" else ">300ms"
+                emit("  ✓ Predictive Winner: [${fastest.protocol.uppercase()}] ${fastest.host}:${fastest.port} (${fastest.latencyMs}ms · $slaBadge)")
+                val escalateBlackoutLayer = intent == AutopilotBrain.AutopilotIntent.BLACKOUT_SURVIVAL ||
+                    shouldAutoEscalateToDnsBlackout(check.internet.isOk, dnsResults.isEmpty(), externalVpnActive, vpnConsentNeeded)
                 val layer = VpnLayerStore.VpnLayer(
                     id = "layer-autopilot-best",
                     name = "Autopilot Best (${fastest.host})",
-                    mode = if (intent == AutopilotBrain.AutopilotIntent.BLACKOUT_SURVIVAL) TunnelConfig.Mode.DNS_BLACKOUT else TunnelConfig.Mode.SMART,
+                    mode = if (escalateBlackoutLayer) TunnelConfig.Mode.DNS_BLACKOUT else TunnelConfig.Mode.SMART,
                     configUri = fastest.uri,
                     dnsPrimary = bestUdp?.address ?: TunnelConfig.DEFAULT_DNS_PRIMARY,
-                    dohUrl = bestDoh?.address ?: TunnelConfig.DEFAULT_DOH_URL
+                    dohUrl = preferredDohUrl ?: bestDoh?.address ?: TunnelConfig.DEFAULT_DOH_URL
                 )
                 VpnLayerStore.addOrUpdate(context, layer)
                 VpnLayerStore.activateLayer(
@@ -518,7 +578,7 @@ object NewbieAutopilot {
                     restartIfConnected = !vpnConsentNeeded && !externalVpnActive
                 )
             } else {
-                emit("  ✗ Staggered race arms timed out — keeping Encrypted DoH layer.")
+                emit("  ✗ Multi-path race timed out — keeping Encrypted DoH / Blackout shield.")
             }
         } else {
             emit("  • No harvested configs cached yet (GitHub & Telegram unreachable).")

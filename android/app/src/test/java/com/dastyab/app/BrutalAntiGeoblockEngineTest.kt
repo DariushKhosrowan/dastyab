@@ -94,4 +94,41 @@ class BrutalAntiGeoblockEngineTest {
         }
         assertEquals(clientHello.size, covered)
     }
+
+    @Test
+    fun adaptiveDpiPadding_escalatesAndCoversFullPayloadWithoutGaps() {
+        assertEquals(
+            BrutalAntiGeoblockEngine.DpiPaddingLevel.LIGHT,
+            BrutalAntiGeoblockEngine.selectAdaptiveDpiLevel(consecutiveFailures = 0, lastLatencyMs = 90L)
+        )
+        assertEquals(
+            BrutalAntiGeoblockEngine.DpiPaddingLevel.AGGRESSIVE,
+            BrutalAntiGeoblockEngine.selectAdaptiveDpiLevel(consecutiveFailures = 0, lastLatencyMs = 420L)
+        )
+        assertEquals(
+            BrutalAntiGeoblockEngine.DpiPaddingLevel.STEALTH_BURST,
+            BrutalAntiGeoblockEngine.selectAdaptiveDpiLevel(consecutiveFailures = 3, lastLatencyMs = 150L)
+        )
+
+        val stealthSlices = BrutalAntiGeoblockEngine.computeAdaptiveClientHelloSlices(
+            length = 256,
+            level = BrutalAntiGeoblockEngine.DpiPaddingLevel.STEALTH_BURST,
+            seed = 99L
+        )
+        assertTrue("Stealth Burst must fragment into >= 7 slices", stealthSlices.size >= 7)
+        var expected = 0
+        for (slice in stealthSlices) {
+            assertEquals(expected, slice.first)
+            assertTrue(slice.last >= slice.first)
+            expected = slice.last + 1
+        }
+        assertEquals(256, expected)
+
+        val (blockSize, jitter) = BrutalAntiGeoblockEngine.computeAdaptiveDohPaddingTarget(
+            level = BrutalAntiGeoblockEngine.DpiPaddingLevel.STEALTH_BURST,
+            seed = 7L
+        )
+        assertEquals(256, blockSize)
+        assertTrue(jitter in 16 until 48)
+    }
 }

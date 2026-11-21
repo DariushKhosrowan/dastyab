@@ -27,6 +27,7 @@ object BrutalAntiGeoblockEngine {
     private const val MAX_BLACKLIST_IPS = 64
 
     private val rotationCounter = AtomicInteger(0)
+    private val dpiEscalationLevel = AtomicInteger(1)
 
     const val CHROME_MOBILE_UA =
         "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
@@ -54,6 +55,31 @@ object BrutalAntiGeoblockEngine {
         DATACENTER_LOW_RISK("Datacenter (Low Risk)", true),
         HOSTING_HIGH_RISK("Hosting/VPN Datacenter", true),
         WARP_OR_TOR("WARP/Tor Flagged", true)
+    }
+
+    enum class DpiPaddingLevel(
+        val sliceTargetCount: Int,
+        val minJitterMs: Int,
+        val maxJitterMs: Int,
+        val dohBlockSize: Int
+    ) {
+        LIGHT(sliceTargetCount = 3, minJitterMs = 0, maxJitterMs = 1, dohBlockSize = 128),
+        ADAPTIVE(sliceTargetCount = 5, minJitterMs = 1, maxJitterMs = 3, dohBlockSize = 128),
+        AGGRESSIVE(sliceTargetCount = 7, minJitterMs = 2, maxJitterMs = 5, dohBlockSize = 192),
+        STEALTH_BURST(sliceTargetCount = 9, minJitterMs = 2, maxJitterMs = 7, dohBlockSize = 256);
+
+        // Preserve parameter name clarity via primary constructor below
+        @Suppress("unused")
+        val targetSegments: Int get() = sliceTargetCount
+
+        companion object {
+            fun fromEscalation(level: Int): DpiPaddingLevel = when {
+                level <= 0 -> LIGHT
+                level == 1 -> ADAPTIVE
+                level == 2 -> AGGRESSIVE
+                else -> STEALTH_BURST
+            }
+        }
     }
 
     /** Egress country timezone + locale alignment profile to prevent browser geo-mismatch leaks. */
@@ -202,6 +228,82 @@ object BrutalAntiGeoblockEngine {
             "Pragma" to "no-cache",
             "Upgrade-Insecure-Requests" to "1"
         )
+    }
+
+    /** Records a suspected DPI block/reset and escalates adaptive packet padding up to level 3. */
+    fun recordDpiBlockAndEscalate(): DpiPaddingLevel {
+        val lvl = dpiEscalationLevel.updateAndGet { cur -> (cur + 1).coerceAtMost(3) }
+        return DpiPaddingLevel.fromEscalation(lvl)
+    }
+
+    /** Relaxes DPI escalation gradually once sub-300ms healthy traffic flows cleanly. */
+    fun recordDpiCleanPass(): DpiPaddingLevel {
+        val lvl = dpiEscalationLevel.updateAndGet { cur -> (cur - 1).coerceAtLeast(0) }
+        return DpiPaddingLevel.fromEscalation(lvl)
+    }
+
+    fun currentDpiPaddingLevel(): DpiPaddingLevel = DpiPaddingLevel.fromEscalation(dpiEscalationLevel.get())
+
+    /** Pure-Kotlin adaptive DPI level selector based on recent failures and observed RTT. */
+    fun selectAdaptiveDpiLevel(consecutiveFailures: Int, lastLatencyMs: Long): DpiPaddingLevel = when {
+        consecutiveFailures >= 3 -> DpiPaddingLevel.STEALTH_BURST
+        consecutiveFailures >= 1 || lastLatencyMs > FailoverWatchdog.LATENCY_SWITCH_THRESHOLD_MS -> DpiPaddingLevel.AGGRESSIVE
+        lastLatencyMs in 1..150L -> DpiPaddingLevel.LIGHT
+        else -> DpiPaddingLevel.ADAPTIVE
+    }
+
+    /**
+     * Computes adaptive non-uniform TCP segment slices `[start..end]` for TLS ClientHello packets
+     * so DPI SNI extractors and fixed-length packet-size classifiers never see a predictable boundary.
+     */
+    fun computeAdaptiveClientHelloSlices(
+        length: Int,
+        level: DpiPaddingLevel = currentDpiPaddingLevel(),
+        seed: Long = System.nanoTime()
+    ): List<IntRange> {
+        if (length <= 0) return emptyList()
+        if (length <= 8) return listOf(0 until length)
+
+        val rng = kotlin.random.Random(seed)
+        val cuts = sortedSetOf<Int>()
+        // Always split inside TLS record header (bytes 1..5) and handshake prefix (bytes 6..18)
+        cuts.add(rng.nextInt(1, 4).coerceAtMost(length - 1))
+        if (length > 10) cuts.add(rng.nextInt(5, 10).coerceAtMost(length - 1))
+        if (length > 24) cuts.add(rng.nextInt(12, 24).coerceAtMost(length - 1))
+
+        val desiredSlices = level.sliceTargetCount.coerceIn(3, 12)
+        var attempts = 0
+        while (cuts.size < desiredSlices - 1 && length > 32 && attempts < 24) {
+            val c = rng.nextInt(24, length)
+            cuts.add(c)
+            attempts++
+        }
+
+        val out = ArrayList<IntRange>(cuts.size + 1)
+        var prev = 0
+        for (c in cuts) {
+            if (c in (prev + 1) until length) {
+                out.add(prev until c)
+                prev = c
+            }
+        }
+        if (prev < length) out.add(prev until length)
+        return out
+    }
+
+    /** Picks an RFC 8467 DoH padding block size + small random jitter matching [level]. */
+    fun computeAdaptiveDohPaddingTarget(
+        level: DpiPaddingLevel = currentDpiPaddingLevel(),
+        seed: Long = System.nanoTime()
+    ): Pair<Int, Int> {
+        val rng = kotlin.random.Random(seed)
+        val jitter = when (level) {
+            DpiPaddingLevel.LIGHT -> 0
+            DpiPaddingLevel.ADAPTIVE -> rng.nextInt(0, 16)
+            DpiPaddingLevel.AGGRESSIVE -> rng.nextInt(8, 32)
+            DpiPaddingLevel.STEALTH_BURST -> rng.nextInt(16, 48)
+        }
+        return level.dohBlockSize to jitter
     }
 
     /**

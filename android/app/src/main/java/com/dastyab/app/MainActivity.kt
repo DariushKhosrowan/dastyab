@@ -1244,7 +1244,9 @@ class MainActivity : DastyabActivity() {
         val quarantined = AutopilotBrain.countQuarantined(netKey)
         val standby = AutopilotBrain.loadStandbyUris(this).size
         val topScores = snap.topScoredLines.take(3).joinToString(" | ").ifBlank { getString(R.string.simple_brain_empty) }
-        val activeLabel = snap.activeArmLabel.ifBlank { watchdog.lastSummary }
+        val regionTag = if (watchdog.fastestRegionLabel.isNotBlank()) " · ${watchdog.fastestRegionLabel}" else ""
+        val ewmaTag = if (watchdog.ewmaLatencyMs > 0L) " · EWMA ${watchdog.ewmaLatencyMs}ms" else ""
+        val activeLabel = snap.activeArmLabel.ifBlank { watchdog.lastSummary } + ewmaTag + regionTag
         tvSimpleBrainDetails.text = getString(
             R.string.simple_brain_summary_fmt,
             netKey,
@@ -1496,7 +1498,9 @@ class MainActivity : DastyabActivity() {
         val iranBypassTag = if (DomainDnsRules.load(this).iranBypassEnabled) " · .ir Bypass" else ""
         val watchdogSnap = FailoverWatchdog.getSnapshot()
         val watchdogTag = if (statusObj.state == DastyabVpnService.State.CONNECTED && watchdogSnap.active) {
-            " · ${watchdogSnap.nextIntervalSeconds}s Auto-Heal"
+            val rttNote = if (watchdogSnap.ewmaLatencyMs > 0L) " · ${watchdogSnap.ewmaLatencyMs}ms" else ""
+            val blackoutNote = if (watchdogSnap.autoBlackoutEscalated) " · BlackoutVPN" else ""
+            " · ${watchdogSnap.nextIntervalSeconds}s Auto-Heal$rttNote$blackoutNote"
         } else {
             ""
         }

@@ -8,7 +8,9 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
 import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
@@ -73,6 +75,42 @@ object CleanEndpointScout {
         "172.67.0.0/16",
         "162.159.0.0/16",
         "188.114.96.0/20"
+    )
+
+    enum class EdgeRegion(val code: String, val label: String) {
+        US("US", "North America"),
+        EU("EU", "Europe"),
+        ASIA("ASIA", "Asia-Pacific"),
+        GLOBAL("GLOBAL", "Global Anycast")
+    }
+
+    data class RegionalTarget(
+        val id: String,
+        val region: EdgeRegion,
+        val label: String,
+        val host: String,
+        val port: Int,
+        val dohUrl: String? = null
+    )
+
+    data class RegionBenchmarkResult(
+        val target: RegionalTarget,
+        val latencyMs: Long,
+        val reachable: Boolean,
+        val within300Ms: Boolean = reachable && latencyMs in 1..FailoverWatchdog.LATENCY_SWITCH_THRESHOLD_MS
+    )
+
+    /** Curated multi-region endpoints & DoH relays raced in parallel for sub-300ms route selection. */
+    val MULTI_REGION_BENCHMARK_TARGETS: List<RegionalTarget> = listOf(
+        RegionalTarget("us-cf", EdgeRegion.US, "US · Cloudflare Anycast", "1.1.1.1", 443, "https://1.1.1.1/dns-query"),
+        RegionalTarget("us-google", EdgeRegion.US, "US · Google Edge", "8.8.8.8", 443, "https://8.8.8.8/dns-query"),
+        RegionalTarget("us-opendns", EdgeRegion.US, "US · Cisco Umbrella", "208.67.222.222", 443, "https://doh.opendns.com/dns-query"),
+        RegionalTarget("eu-quad9", EdgeRegion.EU, "EU · Quad9 Zurich", "9.9.9.9", 443, "https://9.9.9.9/dns-query"),
+        RegionalTarget("eu-mullvad", EdgeRegion.EU, "EU · Mullvad Sweden", "194.242.2.2", 443, "https://dns.mullvad.net/dns-query"),
+        RegionalTarget("eu-adguard", EdgeRegion.EU, "EU · AdGuard Cyprus/EU", "94.140.14.140", 443, "https://dns.adguard-dns.com/dns-query"),
+        RegionalTarget("asia-cf", EdgeRegion.ASIA, "ASIA · Cloudflare PoP", "1.0.0.1", 443, "https://1.0.0.1/dns-query"),
+        RegionalTarget("asia-google", EdgeRegion.ASIA, "ASIA · Google Secondary", "8.8.4.4", 443, "https://8.8.4.4/dns-query"),
+        RegionalTarget("global-controld", EdgeRegion.GLOBAL, "GLOBAL · ControlD", "76.76.2.0", 443, "https://freedns.controld.com/p0")
     )
 
     /**
@@ -265,6 +303,84 @@ object CleanEndpointScout {
                 .filter { it.reachable }
                 .sortedBy { it.latencyMs }
         } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    /** Pure-Kotlin sorter ranking reachable multi-region benchmarks: sub-300ms SLA first, then lowest RTT. */
+    fun rankRegionalBenchmarks(
+        results: List<RegionBenchmarkResult>,
+        latencyThresholdMs: Long = FailoverWatchdog.LATENCY_SWITCH_THRESHOLD_MS
+    ): List<RegionBenchmarkResult> {
+        return results
+            .filter { it.reachable && it.latencyMs > 0L }
+            .map { it.copy(within300Ms = it.latencyMs <= latencyThresholdMs) }
+            .sortedWith(compareBy<RegionBenchmarkResult> { !it.within300Ms }.thenBy { it.latencyMs }.thenBy { it.target.region.ordinal })
+    }
+
+    /** Pure-Kotlin per-region fastest benchmark map (for UI / Autopilot multi-region telemetry). */
+    fun summarizeFastestByRegion(results: List<RegionBenchmarkResult>): Map<EdgeRegion, RegionBenchmarkResult> {
+        val ranked = rankRegionalBenchmarks(results)
+        val map = LinkedHashMap<EdgeRegion, RegionBenchmarkResult>()
+        for (res in ranked) {
+            map.putIfAbsent(res.target.region, res)
+        }
+        return map
+    }
+
+    /** Formats a compact multi-region latency digest (e.g. `US 84ms | EU 112ms | ASIA 210ms`). */
+    fun formatRegionBenchmarkSummary(results: List<RegionBenchmarkResult>): String {
+        val byRegion = summarizeFastestByRegion(results)
+        if (byRegion.isEmpty()) return "No reachable regions"
+        return byRegion.entries.joinToString(" | ") { (region, res) ->
+            val mark = if (res.within300Ms) "✓" else "!"
+            "${region.code} ${res.latencyMs}ms$mark"
+        }
+    }
+
+    /**
+     * Races TCP/443 & DoH health probes across multiple global edge regions in parallel
+     * so Autopilot always knows the lowest-latency sub-300ms region & DoH endpoint.
+     */
+    fun benchmarkMultiRegionParallel(
+        targets: List<RegionalTarget> = MULTI_REGION_BENCHMARK_TARGETS,
+        timeoutMs: Int = 1800,
+        latencyThresholdMs: Long = FailoverWatchdog.LATENCY_SWITCH_THRESHOLD_MS
+    ): List<RegionBenchmarkResult> {
+        if (targets.isEmpty()) return emptyList()
+        val pool = Executors.newFixedThreadPool(targets.size.coerceIn(2, 9))
+        val completion = ExecutorCompletionService<RegionBenchmarkResult>(pool)
+        val futures = ArrayList<Future<RegionBenchmarkResult>>(targets.size)
+        return try {
+            for (target in targets) {
+                futures.add(
+                    completion.submit(Callable {
+                        val ms = if (!target.dohUrl.isNullOrBlank()) {
+                            val dohMs = probeDohLatency(target.dohUrl, timeoutMs)
+                            if (dohMs > 0L) dohMs else probeTcpLatency(target.host, target.port, timeoutMs)
+                        } else {
+                            probeTcpLatency(target.host, target.port, timeoutMs)
+                        }
+                        val ok = ms > 0L
+                        RegionBenchmarkResult(
+                            target = target,
+                            latencyMs = ms,
+                            reachable = ok,
+                            within300Ms = ok && ms <= latencyThresholdMs
+                        )
+                    })
+                )
+            }
+            val collected = ArrayList<RegionBenchmarkResult>(targets.size)
+            val deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs + 800L)
+            for (i in targets.indices) {
+                val remNs = (deadlineNs - System.nanoTime()).coerceAtLeast(1L)
+                val done = completion.poll(remNs, TimeUnit.NANOSECONDS) ?: break
+                runCatching { done.get() }.getOrNull()?.let { collected.add(it) }
+            }
+            rankRegionalBenchmarks(collected, latencyThresholdMs)
+        } finally {
+            futures.forEach { it.cancel(true) }
             pool.shutdownNow()
         }
     }

@@ -178,4 +178,60 @@ class ReachabilityAndAutopilotTest {
         assertEquals(ReachabilityVerifier.Status.REACHABLE, flowOkCheck.status)
         assertTrue(aiOkCheck.isOk && flowOkCheck.isOk)
     }
+
+    @Test
+    fun autoBlackoutEscalationAndPreferredDohSelection_favorSub300msAndSurviveBlackouts() {
+        assertTrue(
+            NewbieAutopilot.shouldAutoEscalateToDnsBlackout(
+                internetOk = false,
+                dohResultsEmpty = true,
+                externalVpnActive = false,
+                vpnConsentNeeded = false
+            )
+        )
+        assertFalse(
+            NewbieAutopilot.shouldAutoEscalateToDnsBlackout(
+                internetOk = true,
+                dohResultsEmpty = false,
+                externalVpnActive = false,
+                vpnConsentNeeded = false
+            )
+        )
+        assertFalse(
+            NewbieAutopilot.shouldAutoEscalateToDnsBlackout(
+                internetOk = false,
+                dohResultsEmpty = true,
+                externalVpnActive = true,
+                vpnConsentNeeded = false
+            )
+        )
+
+        val slowScout = listOf(
+            CleanEndpointScout.EndpointResult(
+                address = "https://8.8.8.8/dns-query",
+                label = "Google DoH",
+                latencyMs = 240L,
+                reachable = true,
+                kind = CleanEndpointScout.Kind.DOH
+            )
+        )
+        val fastRegion = listOf(
+            CleanEndpointScout.RegionBenchmarkResult(
+                target = CleanEndpointScout.RegionalTarget(
+                    id = "eu-quad9",
+                    region = CleanEndpointScout.EdgeRegion.EU,
+                    label = "EU · Quad9 Zurich",
+                    host = "9.9.9.9",
+                    port = 443,
+                    dohUrl = "https://9.9.9.9/dns-query"
+                ),
+                latencyMs = 95L,
+                reachable = true,
+                within300Ms = true
+            )
+        )
+        val (pickedUrl, pickedLabel) = NewbieAutopilot.selectPreferredDohCandidate(slowScout, fastRegion)
+        assertEquals("https://9.9.9.9/dns-query", pickedUrl)
+        assertTrue(pickedLabel?.contains("EU · Quad9 Zurich") == true)
+    }
 }

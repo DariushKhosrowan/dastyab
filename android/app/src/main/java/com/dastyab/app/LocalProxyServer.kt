@@ -727,13 +727,28 @@ class LocalProxyServer(
             return out
         }
 
+        /**
+         * Computes randomized, escalation-aware TLS ClientHello slices using [BrutalAntiGeoblockEngine]
+         * so DPI middleboxes cannot fingerprint fixed segment boundaries.
+         */
+        fun splitTlsClientHelloSlicesAdaptive(
+            length: Int,
+            level: BrutalAntiGeoblockEngine.DpiPaddingLevel = BrutalAntiGeoblockEngine.currentDpiPaddingLevel(),
+            seed: Long = System.nanoTime()
+        ): List<IntRange> = BrutalAntiGeoblockEngine.computeAdaptiveClientHelloSlices(length, level, seed)
+
         private fun writeTlsClientHelloFragmented(dst: OutputStream, buf: ByteArray, len: Int) {
-            val slices = splitTlsClientHelloSlices(len)
+            val level = BrutalAntiGeoblockEngine.currentDpiPaddingLevel()
+            val slices = splitTlsClientHelloSlicesAdaptive(len, level)
+            val jitterSpan = (level.maxJitterMs - level.minJitterMs + 1).coerceAtLeast(1)
             for ((idx, range) in slices.withIndex()) {
                 dst.write(buf, range.first, range.last - range.first + 1)
                 dst.flush()
                 if (idx + 1 < slices.size) {
-                    try { Thread.sleep(2) } catch (_: InterruptedException) { break }
+                    val delayMs = (level.minJitterMs + ((idx * 3 + len) % jitterSpan)).toLong()
+                    if (delayMs > 0L) {
+                        try { Thread.sleep(delayMs) } catch (_: InterruptedException) { break }
+                    }
                 }
             }
         }

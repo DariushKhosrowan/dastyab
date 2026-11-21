@@ -17,6 +17,9 @@ object DnsPacketCodec {
     private const val UDP_HEADER_LEN = 8
     const val QTYPE_A = 1
     const val QTYPE_AAAA = 28
+    const val EDNS0_OPT_TYPE = 41
+    const val EDNS0_PADDING_OPTION_CODE = 12
+    const val DEFAULT_DOH_PAD_BLOCK_SIZE = 128
 
     data class DnsRequest(
         val srcIp: ByteArray,
@@ -200,6 +203,61 @@ object DnsPacketCodec {
         writeUInt16(out, 8, 0)             // NSCOUNT = 0
         writeUInt16(out, 10, 0)            // ARCOUNT = 0
         return out
+    }
+
+    /**
+     * Pads a standard DNS wire query with an RFC 6891 + RFC 7830/8467 EDNS0 OPT Padding record
+     * (`OPTION-CODE = 12`) so outbound DoH frames align to [blockSize] boundaries + [extraJitterBytes],
+     * defeating DPI packet-size fingerprinting while staying 100% DNS-compliant.
+     */
+    fun padDnsQueryEdns0(
+        dnsQuery: ByteArray,
+        blockSize: Int = DEFAULT_DOH_PAD_BLOCK_SIZE,
+        extraJitterBytes: Int = 0
+    ): ByteArray {
+        if (dnsQuery.size < 17) return dnsQuery.copyOf()
+        val arCount = readUInt16(dnsQuery, 10)
+        if (arCount != 0) return dnsQuery.copyOf() // Preserve pre-existing EDNS0 / TSIG records cleanly
+
+        val cleanBlock = blockSize.coerceIn(64, 512)
+        val optOverhead = 11 + 4 // Root(1) + TYPE(2) + CLASS(2) + TTL(4) + RDLENGTH(2) + OptCode(2) + OptLen(2)
+        val minTotal = dnsQuery.size + optOverhead
+        val rem = minTotal % cleanBlock
+        val alignedTarget = if (rem == 0) minTotal else minTotal + (cleanBlock - rem)
+        val jitter = extraJitterBytes.coerceIn(0, 64)
+        val targetSize = (alignedTarget + jitter).coerceAtLeast(minTotal)
+        val padLen = (targetSize - minTotal).coerceAtLeast(0)
+        val rdLen = 4 + padLen
+
+        val out = ByteArray(dnsQuery.size + 11 + rdLen)
+        System.arraycopy(dnsQuery, 0, out, 0, dnsQuery.size)
+        writeUInt16(out, 10, 1) // ARCOUNT = 1
+
+        var p = dnsQuery.size
+        out[p++] = 0x00 // Root domain '.'
+        writeUInt16(out, p, EDNS0_OPT_TYPE); p += 2
+        writeUInt16(out, p, 1232); p += 2 // UDP payload size
+        out[p++] = 0x00; out[p++] = 0x00; out[p++] = 0x00; out[p++] = 0x00 // Extended RCODE / Version / Z
+        writeUInt16(out, p, rdLen); p += 2
+        writeUInt16(out, p, EDNS0_PADDING_OPTION_CODE); p += 2
+        writeUInt16(out, p, padLen); p += 2
+        for (i in 0 until padLen) {
+            out[p + i] = ((i * 31 + dnsQuery.size) and 0x00).toByte() // RFC 7830 zeros padding bytes
+        }
+        return out
+    }
+
+    /** Returns true when [dnsPacket] declares at least 1 additional record and carries an EDNS0 OPT tag (`0x0029`). */
+    fun hasEdns0OptRecord(dnsPacket: ByteArray): Boolean {
+        if (dnsPacket.size < 23) return false
+        val arCount = readUInt16(dnsPacket, 10)
+        if (arCount < 1) return false
+        for (i in 12 until dnsPacket.size - 10) {
+            if (dnsPacket[i] == 0x00.toByte() && readUInt16(dnsPacket, i + 1) == EDNS0_OPT_TYPE) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun readUInt16(buf: ByteArray, offset: Int): Int {

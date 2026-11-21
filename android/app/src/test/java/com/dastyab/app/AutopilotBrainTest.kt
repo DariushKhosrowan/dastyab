@@ -189,4 +189,47 @@ class AutopilotBrainTest {
         val rawSeeds = AutopilotBrain.serializeSeeds(seeds)
         assertEquals(seeds, AutopilotBrain.deserializeSeeds(rawSeeds))
     }
+
+    @Test
+    fun scorePredictivePath_stronglyPrefersSub300msOverSlowPath() {
+        AutopilotBrain.recordOutcome("cell:test", "fast-arm", "vless", success = true, rttMs = 140.0)
+        AutopilotBrain.recordOutcome("cell:test", "slow-arm", "trojan", success = true, rttMs = 680.0)
+
+        val fast = AutopilotBrain.CandidateArm("fast-arm", "vless")
+        val slow = AutopilotBrain.CandidateArm("slow-arm", "trojan")
+        val fastScore = AutopilotBrain.scorePredictivePath("cell:test", fast, AutopilotBrain.AutopilotIntent.BALANCED_WEB)
+        val slowScore = AutopilotBrain.scorePredictivePath("cell:test", slow, AutopilotBrain.AutopilotIntent.BALANCED_WEB)
+
+        assertTrue("Sub-300ms path ($fastScore) must outscore slow path ($slowScore)", fastScore > slowScore + 0.15)
+        val slate = AutopilotBrain.selectPredictiveSlate(
+            "cell:test", listOf(slow, fast), AutopilotBrain.AutopilotIntent.BALANCED_WEB, maxSlots = 2
+        )
+        assertEquals("fast-arm", slate.first().candidate.armId)
+    }
+
+    @Test
+    fun raceMultiPathPredictive_allowsFastSub300msArmToOvertakeSlowFirstResponder() {
+        val slate = listOf(
+            AutopilotBrain.CandidateArm("slow-first", "trojan"),
+            AutopilotBrain.CandidateArm("fast-sub300", "vless")
+        )
+        val result = AutopilotBrain.raceMultiPathPredictive(
+            slate = slate,
+            latencyThresholdMs = 300L,
+            graceWindowMs = 200L,
+            probeTimeoutMs = 1500L,
+            measureLatencyMs = { rtt -> rtt }
+        ) { arm ->
+            if (arm.armId == "slow-first") {
+                try { Thread.sleep(15L) } catch (_: InterruptedException) {}
+                480L
+            } else {
+                try { Thread.sleep(60L) } catch (_: InterruptedException) {}
+                95L
+            }
+        }
+        assertNotNull(result)
+        assertEquals("fast-sub300", result!!.winnerArm.armId)
+        assertEquals(95L, result.payload)
+    }
 }

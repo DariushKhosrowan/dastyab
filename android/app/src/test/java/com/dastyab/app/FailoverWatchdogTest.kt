@@ -91,4 +91,62 @@ class FailoverWatchdogTest {
         sentinel.recordInbound(128L, nowMs = 7_600L)
         assertEquals(FailoverWatchdog.SentinelVerdict.HEALTHY, sentinel.evaluate(nowMs = 7_700L))
     }
+
+    @Test
+    fun latencyTrackerAndEvaluator_autoSwitchOnlyAfterSustainedOver300msOrSevereSpike() {
+        val tracker = FailoverWatchdog.LatencyHealthTracker(thresholdMs = 300L, requiredConsecutiveHigh = 2, severeSpikeMs = 900L)
+        val ok1 = tracker.record(180L)
+        assertFalse(ok1.shouldSwitch)
+        assertEquals(0, ok1.highLatencyStreak)
+
+        // Single mild blip above 300ms (EWMA still < 300ms) -> hysteresis avoids flapping
+        val blip = tracker.record(330L)
+        assertFalse(blip.shouldSwitch)
+        assertEquals(1, blip.highLatencyStreak)
+
+        // Second consecutive reading above 300ms -> triggers 300ms SLA switch
+        val sustained = tracker.record(360L)
+        assertTrue(sustained.shouldSwitch)
+        assertEquals(2, sustained.highLatencyStreak)
+
+        val eval = FailoverWatchdog.evaluateHealthAndLatency(
+            internetOk = true,
+            aiStudioOk = true,
+            flowOk = false,
+            latencyMs = 360L,
+            highLatencyStreak = sustained.highLatencyStreak,
+            ewmaLatencyMs = sustained.ewmaMs
+        )
+        assertEquals(FailoverWatchdog.Action.SWAP_DOH_OR_LAYER, eval.action)
+        assertEquals(FailoverWatchdog.HealReason.LATENCY_EXCEEDED_300MS, eval.reason)
+        assertFalse(eval.shouldEscalateBlackout)
+    }
+
+    @Test
+    fun severeBlackoutDetection_escalatesToDnsBlackoutVpnAfterSustainedOutage() {
+        val evalSmart = FailoverWatchdog.evaluateHealthAndLatency(
+            internetOk = false,
+            aiStudioOk = false,
+            flowOk = false,
+            latencyMs = -1L,
+            consecutiveBlackoutTicks = 2,
+            currentMode = TunnelConfig.Mode.SMART
+        )
+        assertEquals(FailoverWatchdog.Action.SWAP_DOH_OR_LAYER, evalSmart.action)
+        assertEquals(FailoverWatchdog.HealReason.SEVERE_BLACKOUT, evalSmart.reason)
+        assertTrue(evalSmart.shouldEscalateBlackout)
+
+        // Already in DNS_BLACKOUT -> does not re-flag escalation unnecessarily
+        assertFalse(
+            FailoverWatchdog.shouldEscalateToDnsBlackout(
+                internetOk = false,
+                consecutiveBlackoutTicks = 3,
+                currentMode = TunnelConfig.Mode.DNS_BLACKOUT
+            )
+        )
+        assertEquals(
+            FailoverWatchdog.CONTINUOUS_PROBE_INTERVAL_SECONDS,
+            FailoverWatchdog.recommendedDelaySeconds(healthyStreak = 4, suspect = false, observedLatencyMs = 350L)
+        )
+    }
 }

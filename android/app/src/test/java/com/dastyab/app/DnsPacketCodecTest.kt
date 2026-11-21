@@ -4,6 +4,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -98,5 +99,21 @@ class DnsPacketCodecTest {
         buf[25] = (udpLen and 0xFF).toByte()
         System.arraycopy(req.dnsPayload, 0, buf, 28, req.dnsPayload.size)
         return buf
+    }
+
+    @Test
+    fun padDnsQueryEdns0_appendsValidEdns0OptPaddingAndPreservesQuery() {
+        val base = CleanEndpointScout.buildMinimalDnsQuery()
+        val padded = DnsPacketCodec.padDnsQueryEdns0(base, blockSize = 128, extraJitterBytes = 12)
+        assertTrue("Padded DNS query should grow to >= 128 bytes", padded.size >= 128)
+        assertTrue(DnsPacketCodec.hasEdns0OptRecord(padded))
+        assertEquals("one.one.one.one", DnsPacketCodec.extractQueryDomain(padded))
+        assertEquals(DnsPacketCodec.QTYPE_A, DnsPacketCodec.extractQueryType(padded))
+        val arCount = ((padded[10].toInt() and 0xFF) shl 8) or (padded[11].toInt() and 0xFF)
+        assertEquals(1, arCount)
+
+        // Calling padDnsQueryEdns0 again on already-EDNS packet leaves it idempotent
+        val alreadyEdns = DnsPacketCodec.padDnsQueryEdns0(padded, blockSize = 128)
+        assertArrayEquals(padded, alreadyEdns)
     }
 }
